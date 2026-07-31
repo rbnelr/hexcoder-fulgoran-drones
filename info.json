@@ -1,0 +1,13 @@
+{
+	"name": "hexcoder-fulgoran-drones",
+	"version": "1.0.0",
+	"title": "Fulgoran Drone Remenant",
+	"author": "Hexcoder",
+	"contact": "rbnelr@gmail.com",
+	"factorio_version": "2.1",
+	"dependencies": [
+		"base >= 2.1.7",
+		"space-age >= 2.1.7"
+	],
+	"description": ""
+}
