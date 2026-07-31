@@ -1,6 +1,7 @@
-local sounds = require("__base__.prototypes.entity.sounds")
 require("common")
 
+--[[
+local sounds = require("__base__.prototypes.entity.sounds")
 data:extend{
 	{
 		type = "capsule",
@@ -57,57 +58,69 @@ data:extend{
 		stack_size = 100,
 		weight = 10 * kg
 	},
-	{
-		type = "projectile",
-		name = "hexcoder-defender-emerge",
-		flags = { "not-on-map" },
-		hidden = true,
-		acceleration = 0.005,
-		max_speed = 0.4 / 60,
-		rotatable = false,
-		action = {
-			type = "direct",
-			action_delivery = {
-				type = "instant",
-				target_effects = {
-					{
-						type = "create-entity",
-						show_in_tooltip = true,
-						entity_name = "defender"
+}
+]]
+
+for name,bot in pairs(data.raw["combat-robot"]) do
+	local animation = bot.idle
+	local animation_shadow = bot.shadow_idle
+
+	data:extend{
+		{
+			type = "projectile",
+			name = "hexcoder-"..name.."-emerge",
+			flags = { "not-on-map" },
+			hidden = true,
+			acceleration = 0.01,
+			max_speed = EMERGE_SPEEDS[name] / 60,
+			rotatable = true, -- Does this allow me to spawn the projectile with an orientation?
+			action = {
+				type = "direct",
+				action_delivery = {
+					type = "instant",
+					target_effects = {
+						{
+							type = "create-entity",
+							show_in_tooltip = true,
+							entity_name = name,
+							trigger_created_entity = true,
+						}
 					}
 				}
-			}
+			},
+			light = { intensity = 0.5, size = 4 },
+			enable_drawing_with_mask = true,
+			animation = animation,
+			shadow = animation_shadow,
+			--animation = {
+			--	layers = {
+			--		{
+			--			filename = "__base__/graphics/entity/combat-robot-capsule/defender-capsule.png",
+			--			flags = { "no-crop" },
+			--			width = 28,
+			--			height = 20,
+			--			priority = "high"
+			--		},
+			--		{
+			--			filename = "__base__/graphics/entity/combat-robot-capsule/defender-capsule-mask.png",
+			--			flags = { "no-crop" },
+			--			width = 28,
+			--			height = 20,
+			--			priority = "high",
+			--			apply_runtime_tint = true
+			--		}
+			--	}
+			--},
+			--shadow = {
+			--	filename = "__base__/graphics/entity/combat-robot-capsule/defender-capsule-shadow.png",
+			--	flags = { "no-crop" },
+			--	width = 26,
+			--	height = 20,
+			--	priority = "high"
+			--},
 		},
-		light = { intensity = 0.5, size = 4 },
-		enable_drawing_with_mask = true,
-		animation = {
-			layers = {
-				{
-					filename = "__base__/graphics/entity/combat-robot-capsule/defender-capsule.png",
-					flags = { "no-crop" },
-					width = 28,
-					height = 20,
-					priority = "high"
-				},
-				{
-					filename = "__base__/graphics/entity/combat-robot-capsule/defender-capsule-mask.png",
-					flags = { "no-crop" },
-					width = 28,
-					height = 20,
-					priority = "high",
-					apply_runtime_tint = true
-				}
-			}
-		},
-		shadow = {
-			filename = "__base__/graphics/entity/combat-robot-capsule/defender-capsule-shadow.png",
-			flags = { "no-crop" },
-			width = 26,
-			height = 20,
-			priority = "high"
-		},
-	},
-}
+	}
+end
 
 data:extend{
 	{

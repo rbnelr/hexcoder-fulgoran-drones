@@ -1,6 +1,8 @@
 
 local dmg = {}
 
+-- TODO: LuaEntity.protected is this relevant?
+
 -- fully damaged -> disable, show status and make non military to stop attacks
 ---@param id unit_number
 ---@param e LuaEntity

@@ -36,8 +36,7 @@ local function make_waypoints(vault)
 		local theta  = math.random() * 6.28318530 -- 2PI
 		
 		local waypoint = vault.entity.surface.create_entity{name=WAYPOINT,
-			position={ x = vault.entity.position.x + r * math.cos(theta),
-			           y = vault.entity.position.y + r * math.sin(theta) }
+			position = random_in_circle(vault.entity.position, r)
 		}
 		waypoint.destructible = false
 		

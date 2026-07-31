@@ -31,9 +31,12 @@ local function choose_next_target(vault, bot)
 		-- reuse rnd
 		
 		-- TODO: avoid building temp list by keeping it around?
+		-- how to cull dead or disabled targets from vault.targets?
+		-- lazily swap with last?
+		-- like: pick random, check if valid, if not swap with last and pick that?
 		local list = {}
 		for _,targ in pairs(vault.targets) do
-			if targ.is_military_target then
+			if targ and targ.valid and targ.is_military_target then
 				table.insert(list, targ)
 			end
 		end

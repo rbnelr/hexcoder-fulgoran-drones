@@ -1,25 +1,55 @@
 local spawning = {}
 
+---@param vault Vault
+function spawn_position(vault)
+	local spawn_r_x = 2.8
+	local spawn_r_y = spawn_r_x * 0.7 -- make it an ellipse, due to fake perspective?
+	
+	local ve = vault.entity
+	local position = random_in_ellipse_center_bias(ve.position, { x=spawn_r_x, y=spawn_r_y })
+	
+	return position
+end
+
 ---@param wave LuaEntity[]
 ---@param vault Vault
 ---@param bot_type string
 ---@param count integer
 function spawn_drones(wave, vault, bot_type, count)
+	local name = "hexcoder-"..bot_type.."-emerge"
+	vault.entity.force = DRONE_FORCE
 	for i = 1,count do
-		local x = (math.random()-0.5) * 3
-		local y = (math.random()-0.5) * 3
-		
-		local ve = vault.entity
-		local bot = ve.surface.create_entity{
-			name=bot_type,
-			position={ ve.position.x+x, ve.position.y+y },
+		local pos = spawn_position(vault)
+		local bot = vault.entity.surface.create_entity{
+			name=name,
+			position = {x=pos.x, y=pos.y + EMERGE_DEPTH}, snap_to_grid = false,
+			target = pos,
 			force=DRONE_FORCE,
+			source = vault.entity,
 		}
-		bot.combat_robot_owner = ve
+		--bot.combat_robot_owner = vault.entity
 		
-		table.insert(wave, bot)
+		--table.insert(wave, bot) -- TODO: track emerging already and make it count as the wave being active
 	end
 end
+
+script.on_event(defines.events.on_trigger_created_entity, function(event)
+	local bot = event.entity
+	local vault = event.source
+	if bot.type == "combat-robot" and vault and vault.name == "fulgoran-ruin-vault" then
+		bot.combat_robot_owner = vault
+		
+		local id = script.register_on_object_destroyed(vault)
+		local vault_data = storage.vaults[id]
+		
+		bot.force = DRONE_FORCE -- force is neutral for some reason
+		
+		vault_data.bot_wave = vault_data.bot_wave or {}
+		table.insert(vault_data.bot_wave, bot)
+	end
+end)
+
+-- TODO: time offset spawns
 
 ---@param vault Vault
 function spawning.start_attack(vault)
