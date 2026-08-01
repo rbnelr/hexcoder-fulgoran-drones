@@ -1,8 +1,7 @@
-local spawning = require("spawning")
-
 local movement = {}
 
 -- choose bot target when it wants to switch
+-- TODO: track how many bots are targeting which target and bias against it, so attacks are more spread out
 ---@param vault Vault
 ---@param bot LuaEntity
 local function choose_next_target(vault, bot)
@@ -61,16 +60,16 @@ end
 
 -- TODO: can be optimized, by only checking bots depending on tick, and reacting to building_fully_damaged()
 ---@param vault Vault
----@param bots LuaEntity[]
-function movement.update(vault, bots)
-	local count = table_size(bots)
+function movement.update(vault)
+	local count = table_size(vault.wave_bots)
+	if count == 0 then return end
+	
 	local tick = game.tick
 	--local j = 1
 	local target = nil
-	
 	local any_bot_alive
 	
-	for idx,bot in pairs(bots) do
+	for idx,bot in pairs(vault.wave_bots) do
 		--- experimental movement logic, should rewrite later!
 		-- move all at once (robotic hivemind feeling)
 		-- or move staggered
@@ -118,19 +117,17 @@ function movement.update(vault, bots)
 			any_bot_alive = true
 		else
 			-- remove dead bots
-			-- TODO: maybe just don't do this and just throw away list after all bots die (attack is over)
+			-- TODO: maybe just don't do this and just throw away list after all bots die (wave is over)
 			-- that way groups also stay consistent
 			--bots[idx] = nil
 		end
 	end
 	
-	-- clear list if all bots dead
-	if any_bot_alive then
-		return bots
+	assert(count > 0)
+	if not any_bot_alive then
+		-- wave over
+		vault:end_wave()
 	end
-	-- wave over
-	spawning.end_attack(vault)
-	return nil
 end
 
 return movement

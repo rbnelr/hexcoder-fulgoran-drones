@@ -61,10 +61,13 @@ data:extend{
 }
 ]]
 
+-- projectiles can be covered up by fulgoran-ruin-vault-near-wall
+-- what was also suggested was rendering manually with LuaRendering (allow for fading in from black etc.)
+-- and using smoke-with-trigger (which has features for fade in, but possibly can't actually move in a line?)
 for name,bot in pairs(data.raw["combat-robot"]) do
 	local animation = bot.idle
 	local animation_shadow = bot.shadow_idle
-
+	
 	data:extend{
 		{
 			type = "projectile",

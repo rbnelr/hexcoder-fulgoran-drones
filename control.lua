@@ -1,8 +1,9 @@
 mod_name = "hexcoder-fulgoran-drones"
 require("common")
 local dmg = require("disable_on_damage")
+require("vault")
+require("spawning")
 local movement = require("bot_movement")
-local spawning = require("spawning")
 
 local TINT = {0.80, 0.05, 0.05}
 local TINT_FILL = {TINT[1]*0.1,TINT[2]*0.1,TINT[3]*0.1,0.1}
@@ -20,75 +21,30 @@ function init()
 	if s.poll_repaired == nil then s.poll_repaired = {} end
 	if s.viz == nil then s.viz = {} end
 	--if s.marked_military == nil then s.marked_military = {} end
-end
-
--- create random invisible waypoints to act as drone movement targets
--- because drones cannot be instructed to move to arbitrary positions
----@param vault Vault
-local function make_waypoints(vault)
-	local count = 30
-	local R = VAULT_DEFENSE_RADIUS()*0.8
 	
-	vault.waypoints = {}
-	for i=1,count do
-		-- random uniform in circle
-		local r = R * math.sqrt(math.random())
-		local theta  = math.random() * 6.28318530 -- 2PI
-		
-		local waypoint = vault.entity.surface.create_entity{name=WAYPOINT,
-			position = random_in_circle(vault.entity.position, r)
-		}
-		waypoint.destructible = false
-		
-		table.insert(vault.waypoints, waypoint)
-	end
-end
-
----@param vault LuaEntity
----@return Vault
-function init_vault(vault)
-	-- simple entity has no unit_number!
-	--local id = vault.unit_number ---@cast id -nil
-	-- workaround, register on_object_destroyed
-	local id = script.register_on_object_destroyed(vault)
-	
-	local data = storage.vaults[id] or { targets={}, waypoints={} }
-	data.entity = vault
-	storage.vaults[id] = data
-	
-	return data
-end
-
----@param vault Vault
-function prepare_vault(vault)
-	
-	-- destroy waypoints
-	if vault.waypoints then
-		for id,e in pairs(vault.waypoints) do
-			e.destroy()
+	-- How to do this in practice?
+	for _,v in pairs(s.vaults) do
+		if v.shaft_near_wall == nil then
+			v.entity.destructible = false
+			
+			v.shaft_near_wall = v.entity.surface.create_entity{
+				name = "fulgoran-ruin-vault-near-wall", position = v.entity.position,
+			}
+			v.shaft_near_wall.destructible = false
 		end
-		vault.waypoints = nil
 	end
-	
-	-- build new list, no cleanup needed for old one
-	vault.targets = {}
-	
-	local R = VAULT_DEFENSE_RADIUS()
-	local p = vault.entity.position
-	for _,e in pairs(vault.entity.surface.find_entities_filtered{
-						position=p, radius=R, type = TARGETS }) do
-		--game.print(serpent.line(e))
-		-- is actually in clircle?
-		if check_distance(e.position, p, R) then
-			if not e.disabled_by_script then
-				e.is_military_target = true
-				vault.targets[e.unit_number] = e
+end
+local function reset()
+	local s = storage
+	if s and s.poll_repaired then
+		for _,e in pairs(s.poll_repaired) do
+			if e and e.valid then
+				dmg.fix_building(e.unit_number, e)
 			end
 		end
 	end
-	
-	-- create new waypoints every attack, takes into account radius changes and ends up more random
-	make_waypoints(vault)
+	rendering.clear(mod_name)
+	storage = {}
 end
 
 ---@param vault Vault
@@ -128,18 +84,23 @@ commands.add_command("fulg-attack", "", function(command)
 	local fulg = game.surfaces["fulgora"]
 	local entity = fulg.find_entity("fulgoran-ruin-vault", TEST_POS)
 	if entity and entity.valid then
-		spawning.start_attack(init_vault(entity))
+		init_vault(entity):start_wave()
 	end
 end)
 
+local _reset = false
+
 script.on_event(defines.events.on_tick, function(event)
+	if not _reset then reset() _reset = true end -- for dev
 	init()
 	
 	dmg.on_tick(event)
 	
 	for id,v in pairs(storage.vaults) do
-		if v.entity.valid and v.bot_wave then
-			v.bot_wave = movement.update(v, v.bot_wave)
+		if v.entity.valid then -- and v:wave_active()
+			v:spawn_all_emerging()
+			
+			movement.update(v)
 		end
 	end
 	--if _bots then
@@ -223,11 +184,20 @@ script.on_init(init)
 
 ---@class Vault
 ---@field entity LuaEntity
----@field prev_attack_ore_amount integer?
+---@field deco_near_wall LuaEntity?
+---@field prev_wave_ore_amount integer?
 ---@field targets LuaEntity[] -- NOTE: entities can end up in two vaults target list!
----@field waypoints LuaEntity[]?
----@field bot_wave LuaEntity[]? -- current attack wave
+---@field waypoints LuaEntity[]
+---@field wave_bots LuaEntity[] -- current attack wave active bots
+-- TODO: track sorted into buckets by tick or somehow sort?
+---@field wave_emerging Emerging[] -- current attack wave emerging bots (queues projectiles, not active projectiles)
 
 ---@class Damaged
 ---@field entity LuaEntity
 ---@field icon LuaRenderObject
+
+---@class Emerging
+---@field name string -- emerging projectile name
+---@field final_pos MapPosition
+---@field tick integer
+

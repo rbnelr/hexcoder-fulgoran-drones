@@ -26,7 +26,13 @@ EMERGE_SPEEDS = {
 	["distractor"] = 2.5,
 	["destroyer"] = 3.0,
 }
-EMERGE_DEPTH = 4
+VAULT_SHAFT_CENTER = {x=-0.25, y=0.25}
+VAULT_SHAFT_RADIUS = 4
+VAULT_SHAFT_ELLIPSE_K = 0.65 -- shaft is an ellipse, due to perspective
+
+BOT_FLOAT_HEIGHT = 0.9 -- bots are rendererd higher than their actual y position, need to account for when spawning
+
+VAULT_SPAWN_RADIUS = 3.75
 
 function check_distance(a, b, r)
 	local x = a.x - b.x
@@ -41,10 +47,31 @@ function random_in_ellipse_center_bias(center, radius)
 	return { x = center.x + radius.x*r * math.cos(theta),
 	         y = center.y + radius.y*r * math.sin(theta) }
 end
+function random_in_ellipse(center, radius)
+	local r = math.sqrt(math.random())
+	local theta  = math.random() * 6.28318530 -- 2PI
+	
+	return { x = center.x + radius.x*r * math.cos(theta),
+	         y = center.y + radius.y*r * math.sin(theta) }
+end
 function random_in_circle(center, radius)
 	radius = radius * math.sqrt(math.random())
 	local theta  = math.random() * 6.28318530 -- 2PI
 	
 	return { x = center.x + radius * math.cos(theta),
 	         y = center.y + radius * math.sin(theta) }
+end
+---@param target ScriptRenderTarget
+---@param surface LuaSurface
+---@param offset Vector
+---@param radius Vector
+function draw_ellipse(target, surface, offset, radius, color)
+	local vertices = {}
+	for i=1,32 do
+		local theta = (i/32) * 6.28318530 -- 2PI
+		local p = { offset.x + radius.x * math.cos(theta),
+		            offset.y + radius.y * math.sin(theta) }
+		table.insert(vertices, p)
+	end
+	rendering.draw_polygon{target=target, surface=surface, vertices=vertices, color=color, time_to_live=1 }
 end

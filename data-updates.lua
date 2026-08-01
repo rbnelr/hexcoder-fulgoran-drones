@@ -52,8 +52,35 @@ meld(data.raw["combat-robot"]["destroyer"], {
 })
 
 meld(data.raw["simple-entity"]["fulgoran-ruin-vault"], {
-	selection_priority = 0,
+	selection_priority = 0, -- doesn't do anything?
+	minable = meld.overwrite{minable=false, mining_time=999999999},
+	max_health = 999999999, healing_per_tick = 999999999,
+	loot = meld.delete(),
 })
+data:extend{
+	{
+		type = "simple-entity", -- use optimized-decorative instead?
+		name = "fulgoran-ruin-vault-near-wall",
+		flags = {"placeable-neutral", "placeable-off-grid"},
+		order = "b[decorative]-l[rock]-d[fulgora]-e[ruin]-g[vault]",
+		hidden = true,
+		selection_priority = 100,
+		minable = {minable=false, mining_time=999999999},
+		max_health = 999999999, healing_per_tick = 999999999,
+		pictures = {
+			{width = 960, height = 640, filename = "__hexcoder-fulgoran-drones__/graphics/fulgoran-ruin-vault-near-wall.png",
+			shift = util.by_pixel( 18.5/2, -6/2), scale = 0.5}
+		},
+		--render_layer = "higher-object-under",
+		render_layer = "air-object",
+		icon = data.raw["simple-entity"]["fulgoran-ruin-vault"].icon,
+		collision_box = nil,
+		collision_mask = { layers = {} },
+		selection_box = {{0,0}, {0,0}},
+		selectable_in_game = false,
+	}
+}
+
 
 --local robot1 = table.deepcopy(data.raw["combat-robot"]["defender"])
 --local robot2 = table.deepcopy(data.raw["combat-robot"]["distractor"])

@@ -1,13 +1,15 @@
 
 local dmg = {}
 
+local RESTORED_HP = 2.0/3 -- 2/3 is where HP bar becomes green
+
 -- TODO: LuaEntity.protected is this relevant?
 
 -- fully damaged -> disable, show status and make non military to stop attacks
 ---@param id unit_number
 ---@param e LuaEntity
 ---@param force LuaForce
-local function building_fully_damaged(id, e, force)
+function dmg.building_fully_damaged(id, e, force)
 	
 	e.is_military_target = false
 	--storage.marked_military[id] = nil
@@ -46,7 +48,7 @@ end
 -- repairing makes building a valid target again
 ---@param id unit_number
 ---@param e LuaEntity
-local function building_partially_repaired(id, e)
+function dmg.building_partially_repaired(id, e)
 	e.is_military_target = true
 	--storage.marked_military[id] = e
 end
@@ -60,7 +62,7 @@ end
 ---@param e LuaEntity?
 ---@param data Damaged?
 ---@param is_military_target boolean?
-local function reset_building(id, e, data, is_military_target)
+function dmg.reset_building(id, e, data, is_military_target)
 	if e and e.valid and e.surface.name == "fulgora" then -- at least restrict to fulgora
 		e.is_military_target = is_military_target or false
 		--storage.marked_military[id] = is_military_target and e or nil
@@ -76,6 +78,26 @@ local function reset_building(id, e, data, is_military_target)
 	end
 	
 	storage.poll_repaired[id] = nil
+end
+
+-- fix stuck disabled_by_script or icons, probably happening only during development
+---@param id unit_number
+---@param e LuaEntity
+function dmg.fix_building(id, e)
+	if e.disabled_by_script and e.health >= e.max_health*RESTORED_HP then -- somehow got stuck disabled despite enough HP
+		local data = storage.poll_repaired[id]
+		dmg.reset_building(id, e, data, false)
+	end
+end
+function dmg.fix_all_icons()
+	for _,r in pairs(rendering.get_all_objects(mod_name)) do
+		if r.type == "sprite" and r.sprite == "virtual-signal/signal-explosion" then
+			local e = r.target.type == "entity" and r.target.entity ---@cast e LuaEntity
+			if not (e.valid and e.disabled_by_script) then
+				r.destroy()
+			end
+		end
+	end
 end
 
 local _filter = {}
@@ -95,7 +117,7 @@ script.on_event(defines.events.on_entity_damaged, function(event)
 	if not (e and e.valid) then return end
 	local id = e.unit_number ---@cast id -nil
 	if force and force.name == DRONE_FORCE then
-		building_fully_damaged(id, e, force)
+		dmg.building_fully_damaged(id, e, force)
 		e.health = 1 -- hp was <=1, setting it to 1 cancels building being killed
 		-- if we want buildings to be disabled at >0 HP already, should use individual thresholds in on_entity_damaged filter
 		--e.health = math.max(1, e.max_health * 0.1)
@@ -119,7 +141,7 @@ for _, event in pairs({
 		---@type LuaEntity
 		init()
 		local e = event.entity or event.destination ---@diagnostic disable-line
-		reset_building(e.unit_number, e, nil, false)
+		dmg.reset_building(e.unit_number, e, nil, false)
 	end, _filter)
 end
 
@@ -138,12 +160,12 @@ function dmg.on_tick(event)
 		local e = data.entity
 		if not e.valid then
 			storage.poll_repaired[id] = nil -- apparently safe to do (?)
-		elseif e.health >= e.max_health*0.666666667 then -- 2/3 is where HP bar becomes green
+		elseif e.health >= e.max_health*RESTORED_HP then
 			-- apparently deleting is safe with next() iteration, not sure if also if inserting inbetween
 			-- but worst case next returns nil, which restarts iteration(?)
-			reset_building(id, e, data, true) -- this has to be the actual LuaEntity, not a new one!
+			dmg.reset_building(id, e, data, true) -- this has to be the actual LuaEntity, not a new one!
 		elseif e.health > 1 then
-			building_partially_repaired(id, e)
+			dmg.building_partially_repaired(id, e)
 		end
 	end
 	storage.poll_prev = id
