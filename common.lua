@@ -1,10 +1,15 @@
 mod_name = "hexcoder-fulgoran-drones"
 
+util = require("util")
+
 ---@type ModStorage
 storage = storage
 
 DRONE_FORCE = "enemy-fulgoran-drones"
 WAYPOINT = mod_name.."-waypoint"
+VAULT_NAME = "fulgoran-ruin-vault"
+VAULT_NEAR_WALL_NAME = "fulgoran-ruin-vault-near-wall"
+
 TARGETS = {
 	"mining-drill",
 	"assembling-machine", "furnace",
@@ -19,7 +24,6 @@ function VAULT_DEFENSE_RADIUS()
 	return settings.global[mod_name.."-vault-defense-radius"].value --[[@as number]]
 end
 RETARGET_DIST = 15
-MAX_POLL = 8 -- rotate through list of damaged buildings, checking MAX_POLL per tick
 
 EMERGE_SPEEDS = {
 	["defender"] = 4.5,
@@ -33,6 +37,8 @@ VAULT_SHAFT_ELLIPSE_K = 0.65 -- shaft is an ellipse, due to perspective
 BOT_FLOAT_HEIGHT = 0.9 -- bots are rendererd higher than their actual y position, need to account for when spawning
 
 VAULT_SPAWN_RADIUS = 3.75
+ORE_POLL_PERIOD = 60*10
+REPAIR_POLL_LIMIT = 8 -- max per tick
 
 function check_distance(a, b, r)
 	local x = a.x - b.x
@@ -42,21 +48,21 @@ end
 
 function random_in_ellipse_center_bias(center, radius)
 	local r = math.random()
-	local theta  = math.random() * 6.28318530 -- 2PI
+	local theta = math.random() * 6.28318530 -- 2PI
 	
 	return { x = center.x + radius.x*r * math.cos(theta),
 	         y = center.y + radius.y*r * math.sin(theta) }
 end
 function random_in_ellipse(center, radius)
 	local r = math.sqrt(math.random())
-	local theta  = math.random() * 6.28318530 -- 2PI
+	local theta = math.random() * 6.2831853 -- 2PI
 	
 	return { x = center.x + radius.x*r * math.cos(theta),
 	         y = center.y + radius.y*r * math.sin(theta) }
 end
 function random_in_circle(center, radius)
 	radius = radius * math.sqrt(math.random())
-	local theta  = math.random() * 6.28318530 -- 2PI
+	local theta = math.random() * 6.2831853 -- 2PI
 	
 	return { x = center.x + radius * math.cos(theta),
 	         y = center.y + radius * math.sin(theta) }
@@ -74,4 +80,37 @@ function draw_ellipse(target, surface, offset, radius, color)
 		table.insert(vertices, p)
 	end
 	rendering.draw_polygon{target=target, surface=surface, vertices=vertices, color=color, time_to_live=1 }
+end
+
+---@param list table
+---@param items table<integer, table>
+---@param period integer
+---@param func fun(item)
+function stagger_tick(list, items, period, func)
+	local ok, val
+	local key = list.prev_key
+	local amount = list.amount or 0
+	local count = list.count
+	if count == nil or (count == 0 and next(items) ~= nil) then -- init count and handle edge case of empty list that fills again
+		count = table_size(items)
+	end
+	-- update count/period items per tick, effectively update each item once every period tick
+	amount = amount + count / period
+	
+	while amount >= 1 do
+		-- get next item based on prev key
+		-- pcall make it safe even after prev_key was deleted from items and items was rehashed (normally an error)
+		ok, key, val = pcall(next, items, key)
+		if not (ok and key ~= nil) then -- key not found (!ok) or end of list reached (key==nil), restart iteration
+			key, val = next(items)
+			-- cache count, and only update once per pass, not every tick
+			count = table_size(items)
+		end
+		if key ~= nil then -- edge case of list being empty but still iterating
+			func(val)
+		end
+		amount = amount - 1
+	end
+	
+	list.prev_key, list.amount, list.count = key, amount, count
 end

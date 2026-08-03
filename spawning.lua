@@ -1,7 +1,7 @@
+---@class Vault
 local Vault = require("vault")
 
----@param vault Vault
-function spawn_position(vault)
+function spawn_position()
 	local spawn_r_x = VAULT_SPAWN_RADIUS
 	local spawn_r_y = spawn_r_x * VAULT_SHAFT_ELLIPSE_K
 	
@@ -22,18 +22,20 @@ end
 ---@param over_time number
 function Vault:queue_spawn_drones(bot_type, count, start_time, over_time)
 	local name = "hexcoder-"..bot_type.."-emerge"
-	self.entity.force = DRONE_FORCE
 	for i = 1,count do
+		--local id = self.next_bot_id ---@cast id -nil
+		--self.next_bot_id = id + 1
 		---@type Emerging
 		local emerging = {
+			tick = game.tick + math.floor((start_time + math.random() * over_time) * 60),
+			--id = id,
 			name = name,
-			final_pos = spawn_position(self),
-			tick = game.tick + math.floor((start_time + math.random() * over_time) * 60)
+			final_pos = spawn_position(),
 		}
 		table.insert(self.wave_emerging, emerging)
 	end
 end
-function Vault:spawn_all_emerging()
+function Vault:update_emerging()
 	--draw_ellipse(self.entity, self.entity.surface,
 	--	VAULT_SHAFT_CENTER, {x=VAULT_SHAFT_RADIUS, y=VAULT_SHAFT_RADIUS*VAULT_SHAFT_ELLIPSE_K},
 	--	{1,1,0, 0.3})
@@ -54,9 +56,19 @@ function Vault:spawn_all_emerging()
 				position = {x=x, y=sy}, target = {x=x, y=y}, snap_to_grid = false,
 				force=DRONE_FORCE,
 				source = self.entity, -- track which vault this came from
-			}
+			} ---@cast projectile - nil
 			self.wave_emerging[id] = nil
-			--self.active_projectiles [projectile.unit_number] = projectile
+			
+			-- projectiles have no unit_number!
+			--local proj_id = script.register_on_object_destroyed(projectile)
+			--self.wave_emerging_projectiles[proj_id] = projectile
+			table.insert(self.wave_emerging_projectiles, projectile)
+		end
+	end
+	
+	for id,e in pairs(self.wave_emerging_projectiles) do
+		if not e.valid then
+			self.wave_emerging_projectiles[id] = nil
 		end
 	end
 end
@@ -64,106 +76,124 @@ end
 script.on_event(defines.events.on_trigger_created_entity, function(event)
 	local bot = event.entity
 	local source = event.source
-	if bot.type == "combat-robot" and source and source.name == "fulgoran-ruin-vault" then
+	-- we are not actually being told the projectile, which makes things harder as I can't associate an id with the spawned bot
+	if bot.type == "combat-robot" and source and source.name == VAULT_NAME then
 		bot.combat_robot_owner = source
 		
 		local id = script.register_on_object_destroyed(source)
 		local vault = storage.vaults[id]
 		
 		bot.force = DRONE_FORCE -- force is neutral for some reason
+		--bot.color = {1,0,0} -- doesn't work
 		
-		--self.wave_emerging[projectile.unit_number] = projectile
-		table.insert(vault.wave_bots, bot)
+		if vault then
+			table.insert(vault.wave_bots, bot)
+		end
 	end
 end)
 
--- TODO: time offset spawns
 
-function Vault:start_wave()
-	self:prepare()
+---@param size number?
+---@param freq number?
+---@return boolean success
+function Vault:spawn_wave(size, freq)
+	size = size or 1
+	freq = freq or 1
 	
-	-- if attack wave already started, just spawn more drones anyway, but this should never happen
-	-- since bots currently die after a minute, and the projectiles trigger after a few seconds
-	-- can failsafe if there are too many bots, nut can't track active projectiles easily right now
-	if table_size(self.wave_bots) < 400 then
-		self:queue_spawn_drones("defender", 44, 1, 8)
-		self:queue_spawn_drones("distractor", 13, 0, 6)
-		self:queue_spawn_drones("destroyer", 14, 1.2, 4)
-	end
+	self:start_wave(size, freq)
 	
-	game.forces["player"].add_custom_alert(self.entity,
-		{type="entity", name="fulgoran-ruin-vault"},
-		{"alert.active-attack"}, true)
-end
-function Vault:end_wave()
-	--self.wave_emerging = {}
-	self.wave_bots = {}
-	game.forces["player"].remove_alert{entity=self.entity}
+	--self.next_bot_id = 1
 	
-	self:delete_waypoints()
+	self:queue_spawn_drones("defender", 44, 1, 15)
+	self:queue_spawn_drones("distractor", 13, 0, 6)
+	self:queue_spawn_drones("destroyer", 14, 1.2, 4)
+	
+	return true
 end
 
----@param vault Vault
-local function check_ore_and_attack(vault)
-	local count = check_ore_depletion(vault)
+---@param mined_ore integer mined ore since last wave
+---@param time_since_last number elapsed time in minutes since last wave started
+---@param time_between number elapsed time in minutes since last wave ended
+---@return number? size, number? freq
+function Vault:should_spawn_wave(mined_ore, time_since_last, time_between)
+	local wave_variation = 0.3 -- percent variation eg 0.2 => 0.8-1.2
 	
-	if vault.prev_wave_ore_amount == nil then
-		vault.prev_wave_ore_amount = count
+	self.wave_rng = self.wave_rng or (math.random()*2-1)
+	self.wave_rng2 = self.wave_rng2 or (math.random()*2-1)
+	local variation = 1 + self.wave_rng * wave_variation
+	local variation2 = 1 + self.wave_rng2 * wave_variation
+	
+	-- vary min and max time too, to avoid waves synching
+	local min_time       = settings.global[mod_name.."-wave-min-time"].value * variation
+	if time_since_last < min_time then
+		return -- not enough time has elapsed, no wave
 	end
 	
-	local diff = count - vault.prev_wave_ore_amount
+	local wave_frequency = settings.global[mod_name.."-wave-freq"].value / variation
+	local max_time       = settings.global[mod_name.."-wave-max-time"].value * variation
+	-- use a second rng to make size and frequency non-correlated
+	local wave_size      = settings.global[mod_name.."-wave-size"].value * variation2
+	local min_size = 0.3
+	local max_size = 10
 	
-	game.print("ore: ".. count .."  (".. (diff or "nil") ..") at ("..vault.entity.position.x..", "..vault.entity.position.y..")")
 	
-	-- TODO: time-based and some sort of evolution?
-	if diff < -2000 then
-		vault.prev_wave_ore_amount = count
-		vault:start_wave()
+	-- 1 wave every 10 minutes if mining 3000 ore/min
+	local base_mining_rate = 3000 -- was 5000 50% resource drain on big miners makes this more forgiving
+	local base_frequency = 1 / 10
+	-- nonlinear, at 4x the mining rate: 2x as often and 2x as big, at 9x the rate 3x as often
+	local nonlinear_exp = 0.5
+	
+	local frequency = wave_frequency * base_frequency
+	
+	local mining_rate = mined_ore / math.max(time_since_last, 0.01)
+	
+	local time_fac = mining_rate / base_mining_rate
+	local nonlinear = time_fac ^ nonlinear_exp
+	local target_freq = frequency * nonlinear
+	local scale_factor = time_fac / math.max(nonlinear, 0.01)
+	
+	--if mining_rate > 0 then
+	--	game.print(serpent.line{ time_fac=time_fac, time=time_since_last, period=1 / target_freq,
+	--		mining_rate=mining_rate, target_freq=target_freq, scale_factor=scale_factor, at=self.entity})
+	--end
+	--if time_since_last < min_time then
+	--	return -- not enough time has elapsed, no wave
+	--end
+	
+	if time_since_last >= 1 / target_freq or time_since_last >= max_time then
+		local size = wave_size * scale_factor
+		if size > max_size then size = max_size end
+		if size < min_size then size = min_size end
+		return size, target_freq
 	end
+	
+	return nil
 end
 
-script.on_nth_tick(60*10, function(event)
-	init()
+function Vault:update_waves()
+	if self:wave_active() then return end
 	
-	for id,v in pairs(storage.vaults) do
-		check_ore_and_attack(v)
+	local count = self:get_ore_depletion()
+	
+	if self.prev_wave_start_ore_amount == nil then
+		-- initially it takes one period for waves to appear
+		self.prev_wave_start_ore_amount = count
+		self.wave_start_tick = game.tick
+		self.wave_end_tick = game.tick
 	end
-end)
-
---_bots = {}
---commands.add_command("fulg-spawn", "", function(command)
---	local commands = {}
---	if command.parameter then
---		for cmd in string.gmatch(command.parameter or "", "%w+") do
---			table.insert(commands, cmd)
---		end
---	end
---	local bot_type = commands and commands[1] or "defender"
---	local count = commands and tonumber(commands[2]) or 5
---
---	local player = game.get_player(command.player_index) ---@cast player -nil
---	
---	local surface = player.surface
---	local selected = player.selected
---	if selected == nil then return end
---	
---	init_vault(selected).prepare()
---	
---	local bots = {}
---	for i = 1,count do
---		local x = (math.random()-0.5) * 3
---		local y = (math.random()-0.5) * 3
---		
---		local bot = surface.create_entity{
---			name=bot_type,
---			position={ selected.position.x+x, selected.position.y+y },
---			force="player",
---		}
---		bot.combat_robot_owner = selected
---		
---		--bot.set_movement({-1,0}, 1)
---		
---		table.insert(bots, bot)
---	end
---	_bots = bots
---end)
+	
+	local mined_ore = self.prev_wave_start_ore_amount - count
+	if mined_ore < 0 then mined_ore = 0 end
+	
+	local time_since_last = (game.tick - (self.wave_start_tick or 0)) / 3600
+	local time_between = (game.tick - (self.wave_end_tick or 0)) / 3600
+	
+	--game.print(serpent.line{ ore=count, diff=diff, --[[id=self.id, tick=game.tick,]] at=self.entity})
+	
+	local size, freq = self:should_spawn_wave(mined_ore, time_since_last, time_between)
+	if size ~= nil then
+		self.prev_wave_start_ore_amount = count
+		
+		self:spawn_wave(size, freq)
+	end
+end

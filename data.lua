@@ -64,9 +64,13 @@ data:extend{
 -- projectiles can be covered up by fulgoran-ruin-vault-near-wall
 -- what was also suggested was rendering manually with LuaRendering (allow for fading in from black etc.)
 -- and using smoke-with-trigger (which has features for fade in, but possibly can't actually move in a line?)
+--- slow projectiles that look like bots and spawn bots on "hit", used to make it look like bots are ascending before actually being spawned
 for name,bot in pairs(data.raw["combat-robot"]) do
-	local animation = bot.idle
-	local animation_shadow = bot.shadow_idle
+	local animation = util.table.deepcopy(bot.idle)
+	local animation_shadow = util.table.deepcopy(bot.shadow_idle)
+	
+	--animation.layers[2].tint = {255,215,0} -- not working
+	--animation.layers[2].apply_runtime_tint = true
 	
 	data:extend{
 		{
@@ -95,40 +99,14 @@ for name,bot in pairs(data.raw["combat-robot"]) do
 			enable_drawing_with_mask = true,
 			animation = animation,
 			shadow = animation_shadow,
-			--animation = {
-			--	layers = {
-			--		{
-			--			filename = "__base__/graphics/entity/combat-robot-capsule/defender-capsule.png",
-			--			flags = { "no-crop" },
-			--			width = 28,
-			--			height = 20,
-			--			priority = "high"
-			--		},
-			--		{
-			--			filename = "__base__/graphics/entity/combat-robot-capsule/defender-capsule-mask.png",
-			--			flags = { "no-crop" },
-			--			width = 28,
-			--			height = 20,
-			--			priority = "high",
-			--			apply_runtime_tint = true
-			--		}
-			--	}
-			--},
-			--shadow = {
-			--	filename = "__base__/graphics/entity/combat-robot-capsule/defender-capsule-shadow.png",
-			--	flags = { "no-crop" },
-			--	width = 26,
-			--	height = 20,
-			--	priority = "high"
-			--},
 		},
 	}
 end
 
 data:extend{
 	{
-		name = mod_name.."-waypoint",
+		name = WAYPOINT,
 		type = "simple-entity",
-		picture = data.raw["container"]["wooden-chest"].picture,
+		--picture = data.raw["container"]["wooden-chest"].picture,
 	}
 }

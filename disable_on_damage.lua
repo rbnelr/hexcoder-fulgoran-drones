@@ -100,15 +100,16 @@ function dmg.fix_all_icons()
 	end
 end
 
-local _filter = {}
-local _on_dmg_filter = {}
+dmg.event_filter = {}
+dmg.on_dmg_filter = {}
 for _,type in pairs(TARGETS) do
-	table.insert(_filter, {filter="type", type=type})
-	table.insert(_on_dmg_filter, {filter="type", type=type})
-	table.insert(_on_dmg_filter, {filter="final-health", value=1, comparison="<=", mode="and"})
+	table.insert(dmg.event_filter, {filter="type", type=type})
+	
+	table.insert(dmg.on_dmg_filter, {filter="type", type=type})
+	table.insert(dmg.on_dmg_filter, {filter="final-health", value=1, comparison="<=", mode="and"})
 end
 
-script.on_event(defines.events.on_entity_damaged, function(event)
+function dmg.on_entity_damaged(event)
 	--game.print("on_entity_damaged: ".. serpent.line(event))
 	init()
 	
@@ -125,24 +126,12 @@ script.on_event(defines.events.on_entity_damaged, function(event)
 		-- likely player killed the building
 		-- on_entity_died will 
 	end
-end, _on_dmg_filter)
+end
 
--- I think this is needed since
-for _, event in pairs({
-	defines.events.on_built_entity,
-	defines.events.on_robot_built_entity,
-	defines.events.on_space_platform_built_entity,
-	defines.events.script_raised_built,
-	defines.events.script_raised_revive,
-	defines.events.on_entity_cloned, -- source to destination
-	defines.events.on_entity_died
-}) do
-	script.on_event(event, function(event)
-		---@type LuaEntity
-		init()
-		local e = event.entity or event.destination ---@diagnostic disable-line
-		dmg.reset_building(e.unit_number, e, nil, false)
-	end, _filter)
+---@param e LuaEntity
+function dmg.on_entity_built(e)
+	init()
+	dmg.reset_building(e.unit_number, e, nil, false)
 end
 
 ---@param event EventData.on_tick
@@ -154,7 +143,7 @@ function dmg.on_tick(event)
 	end
 	
 	local id = storage.poll_prev
-	for i = 1,MAX_POLL do
+	for i = 1,REPAIR_POLL_LIMIT do
 		id, data = next(storage.poll_repaired or {}, id)
 		if id == nil then break end
 		local e = data.entity

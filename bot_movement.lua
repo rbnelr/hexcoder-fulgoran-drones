@@ -57,19 +57,25 @@ local function choose_next_target(vault, bot)
 	return vault
 end
 
+-- got this from claude, Weyl sequence
+-- turn ids into uniformly distributed points in [0,1)
+local function weyl_hash01(id)
+	local p = id * 0.618033988749895
+	return p - math.floor(p)
+end
 
 -- TODO: can be optimized, by only checking bots depending on tick, and reacting to building_fully_damaged()
 ---@param vault Vault
 function movement.update(vault)
-	local count = table_size(vault.wave_bots)
-	if count == 0 then return end
+	--local count = table_size(vault.wave_bots)
+	--local had_bots = count > 0
+	local had_bots = next(vault.wave_bots) ~= nil
 	
 	local tick = game.tick
 	--local j = 1
 	local target = nil
-	local any_bot_alive
 	
-	for idx,bot in pairs(vault.wave_bots) do
+	for id,bot in pairs(vault.wave_bots) do
 		--- experimental movement logic, should rewrite later!
 		-- move all at once (robotic hivemind feeling)
 		-- or move staggered
@@ -80,9 +86,10 @@ function movement.update(vault)
 			---@cast bot -nil
 			-- form groups of bots where that all go to same target, with bots randomly breaking off
 			-- switch targets on a timer, or when target defeated
-			local group_idx = math.floor(idx / 4)
+			local group_idx = math.floor(id / 4)
 			local group_leader = group_idx * 4
-			local switch_target = (tick % 500) == math.floor(group_leader / count * 500)
+			--local switch_target = (tick % 500) == math.floor(group_leader / count * 500)
+			local switch_target = (tick % 500) == math.floor(weyl_hash01(group_leader) * 500)
 			
 			local cur_target = bot.combat_robot_owner
 			if cur_target and not cur_target.valid then cur_target = nil end
@@ -94,7 +101,7 @@ function movement.update(vault)
 				local break_off = rng < 0.2
 				
 				-- entire group to same target
-				if idx == group_leader or is_waypoint or break_off then
+				if id == group_leader or is_waypoint or break_off then
 					target = choose_next_target(vault, bot)
 				end
 				if target and target.valid then
@@ -108,24 +115,14 @@ function movement.update(vault)
 			--}
 			--rendering.draw_line{from=bot, to=bot.combat_robot_owner,
 			--	surface = bot.surface, width = 2, color = DBG_COL[bot.name], time_to_live=1}
-			
-			--if j < idx then -- keep list contiguous if bots die
-			--	bots[j] = bot -- safe?
-			--	bots[idx] = nil
-			--end
-			--j = j+1
-			any_bot_alive = true
 		else
 			-- remove dead bots
-			-- TODO: maybe just don't do this and just throw away list after all bots die (wave is over)
-			-- that way groups also stay consistent
-			--bots[idx] = nil
+			vault.wave_bots[id] = nil
 		end
 	end
 	
-	assert(count > 0)
-	if not any_bot_alive then
-		-- wave over
+	if had_bots and vault:wave_active() == false then
+		-- wave over, should only trigger once
 		vault:end_wave()
 	end
 end
