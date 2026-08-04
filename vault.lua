@@ -129,7 +129,7 @@ function Vault:start_wave(size, freq)
 	
 	game.forces["player"].add_custom_alert(self.entity,
 		{type="entity", name=VAULT_NAME},
-		{"alert.active-attack", size, freq}, true)
+		{"alert.active-attack", string.format("%.2f", size), string.format("%.2f", freq)}, true)
 	
 	storage.active_vaults[self.id] = self
 end
@@ -180,7 +180,7 @@ end
 ---@param area BoundingBox
 ---@param ore_tiles LuaEntity[]
 local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
-	local prof = helpers.create_profiler()
+	--local prof = helpers.create_profiler()
 	
 	-- scan more ore around the chunk, I think this makes sense
 	--local r = 10
@@ -235,26 +235,34 @@ local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
 			},
 			--force="neutral" -- don't destroy player creations!
 		}
+		local safe_to_spawn = true
 		for _,e in pairs(colliding) do
-			if e.force.name ~= "player" or e.name == "fulgoran-ruin-attractor" then -- fulgoran lighting-attractor has player force for some reason
-				e.destroy()
+			if e.force.name == "player" and e.name ~= "fulgoran-ruin-attractor" then -- fulgoran lighting-attractor has player force for some reason
+				safe_to_spawn = false
+				break
 			end
 		end
 		
-		local vault = surface.create_entity{name=VAULT_NAME, position=pos, snap_to_grid=false, raise_built=true, move_stuck_players=true}
-		if vault ~= nil then
-			game.print("Spawned missing vault ruin: "..serpent.line(vault))
+		if safe_to_spawn then
+			for _,e in pairs(colliding) do
+				e.destroy()
+			end
+			
+			local vault = surface.create_entity{name=VAULT_NAME, position=pos, snap_to_grid=false, raise_built=true, move_stuck_players=true}
+			if vault ~= nil then
+				game.print("Spawned missing vault ruin: "..serpent.line(vault))
+			end
 		end
 	end
 	
-	prof.stop()
-	game.print(prof)
+	--prof.stop()
+	--game.print(prof)
 end
 
 ---@param surface LuaSurface
 ---@param area BoundingBox
 function Vault.try_place_missing_vault_ruin(surface, area)
-	local prof = helpers.create_profiler()
+	--local prof = helpers.create_profiler()
 	
 	-- no vault ruin, count total scrap in chunk
 	local count = 0
@@ -263,8 +271,8 @@ function Vault.try_place_missing_vault_ruin(surface, area)
 		count = count + ore_tile.amount
 	end
 	
-	prof.stop()
-	game.print(prof)
+	--prof.stop()
+	--game.print(prof)
 	
 	if count > 1000000 then
 		-- >1M scrap, there should have been a vault ruin somewhere in this chunk, but its missing!

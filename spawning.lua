@@ -18,16 +18,16 @@ end
 
 ---@param bot_type string
 ---@param count integer
----@param start_time number
----@param over_time number
-function Vault:queue_spawn_drones(bot_type, count, start_time, over_time)
+---@param delay number
+---@param duration number
+function Vault:queue_spawn_drones(bot_type, count, delay, duration)
 	local name = "hexcoder-"..bot_type.."-emerge"
 	for i = 1,count do
 		--local id = self.next_bot_id ---@cast id -nil
 		--self.next_bot_id = id + 1
 		---@type Emerging
 		local emerging = {
-			tick = game.tick + math.floor((start_time + math.random() * over_time) * 60),
+			tick = game.tick + math.floor((delay + math.random() * duration) * 60),
 			--id = id,
 			name = name,
 			final_pos = spawn_position(),
@@ -104,9 +104,12 @@ function Vault:spawn_wave(size, freq)
 	
 	--self.next_bot_id = 1
 	
-	self:queue_spawn_drones("defender", 44, 1, 15)
-	self:queue_spawn_drones("distractor", 13, 0, 6)
-	self:queue_spawn_drones("destroyer", 14, 1.2, 4)
+	local count_scale = size
+	local dur_scale = math.sqrt(size) -- size 4 spawns 4x the bots over 2x the time (2x the rate)
+	
+	self:queue_spawn_drones("defender", 45*count_scale, 1, 18*dur_scale)
+	self:queue_spawn_drones("distractor", 12*count_scale, 0, 10*dur_scale)
+	self:queue_spawn_drones("destroyer", 16*count_scale, 2.5, 12*dur_scale)
 	
 	return true
 end
@@ -202,8 +205,13 @@ end
 
 ---@param player LuaPlayer
 function Vault:dbg_print(player)
+		
+	local time_since_start = (game.tick - (self.wave_start_tick or 0)) / 3600
+	local time_between = (game.tick - (self.wave_end_tick or 0)) / 3600
+	
 	if self:wave_active() then
-		player.print(string.format("Vault (%d): Wave active! Bots: %d active %d emerging %d queued", self.id,
+		player.print(string.format("Vault (%d): Wave active for %.2f min! Bots: %d active %d emerging %d queued", self.id,
+			time_since_start,
 			table_size(self.wave_bots),
 			table_size(self.wave_emerging_projectiles),
 			table_size(self.wave_emerging)
@@ -214,16 +222,13 @@ function Vault:dbg_print(player)
 		local mined_ore = (self.prev_wave_start_ore_amount or count) - count
 		if mined_ore < 0 then mined_ore = 0 end
 		
-		local time_since_last = (game.tick - (self.wave_start_tick or 0)) / 3600
-		local time_between = (game.tick - (self.wave_end_tick or 0)) / 3600
+		local mining_rate = mined_ore / time_since_start
 		
-		local mining_rate = mined_ore / time_since_last
+		local fire, size, freq, eta = self:should_spawn_wave(mined_ore, time_since_start, time_between, false)
 		
-		local fire, size, freq, eta = self:should_spawn_wave(mined_ore, time_since_last, time_between, false)
-		
-		--player.print("Last wave: "..time_since_last.." min ago  ore: "..mined_ore.." ("..mining_rate.."/m) => "
+		--player.print("Last wave: "..time_since_start.." min ago  ore: "..mined_ore.." ("..mining_rate.."/m) => "
 		--	.."Wave "..size.."x ("..freq.."/m)", {volume_modifier=0})
 		player.print(string.format("Vault (%d): Last wave: %.2f min ago  Mining: %d (%d/m) => Next wave %.2fx (%.2f/m) ETA %.2fm",
-			self.id, time_since_last, mined_ore, mining_rate, size or 0, freq or 0, eta or 0), {volume_modifier=0})
+			self.id, time_since_start, mined_ore, mining_rate, size or 0, freq or 0, eta or 0), {volume_modifier=0})
 	end
 end

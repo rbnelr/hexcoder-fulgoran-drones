@@ -45,7 +45,7 @@ data:extend({
 		localised_name = "Maximum time between waves",
 		localised_description = "in minutes\nSmall waves will spawn even without mining",
 		setting_type = "runtime-global",
-		default_value = 8,
+		default_value = 15,
 		minimum_value = 1,
 		maximum_value = 60,
 	}

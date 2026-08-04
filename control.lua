@@ -107,8 +107,8 @@ end)
 script.on_event(defines.events.on_tick, function(event)
 	--local prof = helpers.create_profiler()
 	
-	if not _was_reset then reset() _was_reset = true end -- for dev
-	init()
+	--if not _was_reset then reset() _was_reset = true end -- for dev
+	--init()
 	
 	-- TODO: could skip expensive checks by checking something like (last-get_resource_counts())>1000 first for whole planet?
 	-- how? pause until condition met, then scan every chunk once, then pause again?
