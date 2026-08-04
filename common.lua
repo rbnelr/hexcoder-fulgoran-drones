@@ -40,6 +40,8 @@ VAULT_SPAWN_RADIUS = 3.75
 ORE_POLL_PERIOD = 60*10
 REPAIR_POLL_LIMIT = 8 -- max per tick
 
+TRY_SPAWN_MISSING_VAULTS = true
+
 function check_distance(a, b, r)
 	local x = a.x - b.x
 	local y = a.y - b.y

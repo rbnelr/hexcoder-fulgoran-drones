@@ -1,12 +1,25 @@
 mod_name = "hexcoder-fulgoran-drones"
 require("common")
 local dmg = require("disable_on_damage")
-require("vault")
+local Vault = require("vault")
 require("spawning")
 local movement = require("bot_movement")
 
 local TINT = {0.80, 0.05, 0.05}
 local TINT_FILL = {TINT[1]*0.1,TINT[2]*0.1,TINT[3]*0.1,0.1}
+
+---@param surface LuaSurface
+---@param area BoundingBox
+local function init_chunk(surface, area)
+	local vaults = surface.find_entities_filtered{name=VAULT_NAME, area=area}
+	if next(vaults) then
+		for _,e in pairs(surface.find_entities_filtered{name=VAULT_NAME, area=area}) do
+			init_vault(e)
+		end
+	elseif TRY_SPAWN_MISSING_VAULTS then
+		Vault.try_place_missing_vault_ruin(surface, area)
+	end
+end
 
 function init()
 	-- create enemy drone force
@@ -27,18 +40,26 @@ function init()
 	--if s.marked_military == nil then s.marked_military = {} end
 	
 	if init then
-		local surf = game.get_surface("fulgora")
-		if surf then
-			for _,e in pairs(surf.find_entities_filtered{name=VAULT_NAME}) do
+		local surface = game.get_surface("fulgora")
+		if surface then
+			for _,e in pairs(surface.find_entities_filtered{name=VAULT_NAME}) do
 				init_vault(e)
+			end
+			
+			if TRY_SPAWN_MISSING_VAULTS then
+				for cpos in surface.get_chunks() do
+					if surface.is_chunk_generated(cpos) then
+						Vault.try_place_missing_vault_ruin(surface, {{cpos.x*32,cpos.y*32}, {cpos.x*32+32,cpos.y*32+32}})
+					end
+				end
 			end
 		end
 	end
 end
 local function reset()
-	local surf = game.get_surface("fulgora")
-	if surf then
-		for _,e in pairs(surf.find_entities_filtered{name={VAULT_NEAR_WALL_NAME,WAYPOINT}}) do
+	local surface = game.get_surface("fulgora")
+	if surface then
+		for _,e in pairs(surface.find_entities_filtered{name={VAULT_NEAR_WALL_NAME,WAYPOINT}}) do
 			e.destroy()
 		end
 	end
@@ -66,7 +87,7 @@ commands.add_command("fulg-ore", "", function(command)
 	local selected = player.selected
 	if selected == nil then return end
 	
-	local count = init_vault(selected):get_ore_depletion()
+	local count = init_vault(selected):get_ore_remaining()
 	
 	local diff = _prev_ore and count - _prev_ore or nil
 	_prev_ore = count
@@ -88,6 +109,9 @@ script.on_event(defines.events.on_tick, function(event)
 	
 	if not _was_reset then reset() _was_reset = true end -- for dev
 	init()
+	
+	-- TODO: could skip expensive checks by checking something like (last-get_resource_counts())>1000 first for whole planet?
+	-- how? pause until condition met, then scan every chunk once, then pause again?
 	
 	stagger_tick(storage.poll_vaults, storage.vaults, ORE_POLL_PERIOD, function(vault)
 		if vault.entity.valid then
@@ -153,7 +177,15 @@ script.on_event(defines.events.on_entity_died, function(event)
 	dmg.on_entity_built(event.entity)
 end, dmg.event_filter)
 
+script.on_event(defines.events.on_chunk_generated, function(event)
+	if event.surface.name == "fulgora" then
+		init_chunk(event.surface, event.area)
+	end
+end)
+
 script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_dmg_filter)
+
+--TODO: on_combat_robot_expired to spawn scrap under bot
 
 -- Show linked entity on hover
 -- TODO: can get stuck sometimes, seemingly on_selected_entity_changed does not handle going into map view, an there's no event?
@@ -189,19 +221,15 @@ local function update_viz(player)
 	end
 end
 local function dbg_vaults()
-	for _,p in pairs(game.players) do
-		if p.selected and p.selected.valid and p.selected.name == VAULT_NAME then
-			local v = init_vault(p.selected)
-			if v:wave_active() then
-				p.print("Wave active: "..table_size(v.wave_bots).." bots "
-				        ..table_size(v.wave_emerging_projectiles).." proj "..table_size(v.wave_emerging).." queued")
-			else
-				local time = (game.tick - (v.wave_start_tick or 0)) / 3600
-				local ore = v:get_ore_depletion() - (v.prev_wave_start_ore_amount or 0)
-				local speed = ore / time
-				p.print("Last wave: "..time.." min ago  ore: "..ore.." ("..speed.."/m)", {volume_modifier=0})
-			end
+	for _,player in pairs(game.players) do
+		local selected = player.selected
+		if selected and selected.valid and selected.name == VAULT_NAME then
+			init_vault(selected):dbg_print(player)
 		end
+		--if p.selected and p.selected.valid and p.selected.position ~= nil then
+		--	local res = p.selected.surface.calculate_tile_properties({"fulgora_spots", "fulgora_vaults_and_starting_vault"}, {p.selected.position})
+		--	p.print("props: "..serpent.line(res))
+		--end
 	end
 end
 
@@ -215,15 +243,22 @@ script.on_event(defines.events.on_selected_entity_changed, function(event)
 	local selected = player.selected
 	local prev = event.last_entity
 	if (selected and selected.name == VAULT_NAME) or (prev and prev.name == VAULT_NAME) then
+		if selected and selected.name == VAULT_NAME then
+			init_vault(player.selected):dbg_print(player)
+		end
 		update_viz(player)
 	end
 end)
-script.on_nth_tick(30, function(event)
+script.on_nth_tick(20, function(event)
 	update_all_viz()
+end)
+script.on_nth_tick(120, function(event)
 	dbg_vaults()
 end)
 
 script.on_init(init)
+
+script.register_metatable("Vault", Vault)
 
 ---@class obj_id : integer -- register_on_object_destroyed-based id
 ---@class unit_number : integer

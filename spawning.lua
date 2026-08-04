@@ -83,7 +83,7 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 		local id = script.register_on_object_destroyed(source)
 		local vault = storage.vaults[id]
 		
-		bot.force = DRONE_FORCE -- force is neutral for some reason
+		bot.force = DRONE_FORCE -- force is neutral for some reason, because vault (simple-entity) can't actually have a force?
 		--bot.color = {1,0,0} -- doesn't work
 		
 		if vault then
@@ -114,8 +114,8 @@ end
 ---@param mined_ore integer mined ore since last wave
 ---@param time_since_last number elapsed time in minutes since last wave started
 ---@param time_between number elapsed time in minutes since last wave ended
----@return number? size, number? freq
-function Vault:should_spawn_wave(mined_ore, time_since_last, time_between)
+---@return boolean fire, number? size, number? freq, number? eta
+function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early_out)
 	local wave_variation = 0.3 -- percent variation eg 0.2 => 0.8-1.2
 	
 	self.wave_rng = self.wave_rng or (math.random()*2-1)
@@ -125,8 +125,8 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between)
 	
 	-- vary min and max time too, to avoid waves synching
 	local min_time       = settings.global[mod_name.."-wave-min-time"].value * variation
-	if time_since_last < min_time then
-		return -- not enough time has elapsed, no wave
+	if time_since_last < min_time and early_out then
+		return false -- not enough time has elapsed, no wave
 	end
 	
 	local wave_frequency = settings.global[mod_name.."-wave-freq"].value / variation
@@ -160,20 +160,22 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between)
 	--	return -- not enough time has elapsed, no wave
 	--end
 	
-	if time_since_last >= 1 / target_freq or time_since_last >= max_time then
-		local size = wave_size * scale_factor
-		if size > max_size then size = max_size end
-		if size < min_size then size = min_size end
-		return size, target_freq
-	end
+	local size = wave_size * scale_factor
+	if size > max_size then size = max_size end
+	if size < min_size then size = min_size end
 	
-	return nil
+	target_freq = math.max(target_freq, 1/max_time)
+	local target_period = 1/target_freq
+	local eta = target_period - time_since_last
+	
+	local fire = time_since_last < min_time or time_since_last >= target_period
+	return fire, size, target_freq, eta
 end
 
 function Vault:update_waves()
 	if self:wave_active() then return end
 	
-	local count = self:get_ore_depletion()
+	local count = self:get_ore_remaining()
 	
 	if self.prev_wave_start_ore_amount == nil then
 		-- initially it takes one period for waves to appear
@@ -190,10 +192,38 @@ function Vault:update_waves()
 	
 	--game.print(serpent.line{ ore=count, diff=diff, --[[id=self.id, tick=game.tick,]] at=self.entity})
 	
-	local size, freq = self:should_spawn_wave(mined_ore, time_since_last, time_between)
-	if size ~= nil then
+	local fire, size, freq = self:should_spawn_wave(mined_ore, time_since_last, time_between, true)
+	if fire then
 		self.prev_wave_start_ore_amount = count
 		
 		self:spawn_wave(size, freq)
+	end
+end
+
+---@param player LuaPlayer
+function Vault:dbg_print(player)
+	if self:wave_active() then
+		player.print(string.format("Vault (%d): Wave active! Bots: %d active %d emerging %d queued", self.id,
+			table_size(self.wave_bots),
+			table_size(self.wave_emerging_projectiles),
+			table_size(self.wave_emerging)
+		), {volume_modifier=0})
+	else
+		local count = self:get_ore_remaining()
+		
+		local mined_ore = (self.prev_wave_start_ore_amount or count) - count
+		if mined_ore < 0 then mined_ore = 0 end
+		
+		local time_since_last = (game.tick - (self.wave_start_tick or 0)) / 3600
+		local time_between = (game.tick - (self.wave_end_tick or 0)) / 3600
+		
+		local mining_rate = mined_ore / time_since_last
+		
+		local fire, size, freq, eta = self:should_spawn_wave(mined_ore, time_since_last, time_between, false)
+		
+		--player.print("Last wave: "..time_since_last.." min ago  ore: "..mined_ore.." ("..mining_rate.."/m) => "
+		--	.."Wave "..size.."x ("..freq.."/m)", {volume_modifier=0})
+		player.print(string.format("Vault (%d): Last wave: %.2f min ago  Mining: %d (%d/m) => Next wave %.2fx (%.2f/m) ETA %.2fm",
+			self.id, time_since_last, mined_ore, mining_rate, size or 0, freq or 0, eta or 0), {volume_modifier=0})
 	end
 end

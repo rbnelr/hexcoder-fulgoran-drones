@@ -111,3 +111,51 @@ meld(data.raw["technology"]["recycling"], {
 
 data.raw["ammo-turret"]["gun-turret"].rotation_speed = 0.002
 data.raw["electric-turret"]["laser-turret"].rotation_speed = 0.04
+
+
+--data.raw["noise-expression"]["fulgora_blanks"].expression = "0"
+--data.raw["noise-expression"]["fulgora_sprawl"].expression = "0"
+--data.raw["noise-expression"]["fulgora_mesa"].expression = "0"
+--data.raw["noise-expression"]["fulgora_vaults"].expression = "1"
+
+--data.raw["noise-expression"]["fulgora_wx"].expression = "fulgora_ox"
+--data.raw["noise-expression"]["fulgora_wy"].expression = "fulgora_oy"
+
+-- try to fix the missing vaults
+-- bumping threshold can fix it, but it's not safe to bump by much without causing duplicate vaults!
+
+-- preventing other ruins from spawning sometimes makes the vault spawn
+-- despite the order giving the vault priority!?
+-- maybe just bad luck due to rng changing?
+--local ruins = {
+--	"fulgoran-ruin-small",
+--	"fulgoran-ruin-medium",
+--	"fulgoran-ruin-big",
+--	"fulgoran-ruin-stonehenge",
+--	"fulgoran-ruin-colossal",
+--	"fulgoran-ruin-huge",
+--}
+--data.raw["simple-entity"]["fulgoran-ruin-small"].autoplace.probability_expression = "0"
+--data.raw["simple-entity"]["fulgoran-ruin-medium"].autoplace.probability_expression = "0"
+--data.raw["simple-entity"]["fulgoran-ruin-big"].autoplace.probability_expression = "0"
+--data.raw["simple-entity"]["fulgoran-ruin-stonehenge"].autoplace.probability_expression = "0"
+--data.raw["simple-entity"]["fulgoran-ruin-colossal"].autoplace.probability_expression = "0"
+--data.raw["simple-entity"]["fulgoran-ruin-huge"].autoplace.probability_expression = "0"
+
+--for _,r in pairs(ruins) do
+--	local a = data.raw["simple-entity"][VAULT_NAME].autoplace.order
+--	local b = data.raw["simple-entity"][r].autoplace.order
+--	assert(a < b)
+--end
+
+-- Seemingly sometimes this helps, but sometimes it does not
+--data.raw["simple-entity"][VAULT_NAME].autoplace.placement_density = 10
+--data.raw["simple-entity"][VAULT_NAME].autoplace.probability_expression = "(min(fulgora_spots, (1 - fulgora_starting_vault_cone) / 2) < 0.0175) * min(fulgora_vaults_and_starting_vault, 1 - fulgora_starting_mask)"
+
+--meld(data.raw["simple-entity"][VAULT_NAME], {
+--	autoplace = {
+--		placement_density = 10, -- was 1
+--		-- thres was 0.015
+--		--probability_expression = "(min(fulgora_spots, (1 - fulgora_starting_vault_cone) / 2) < 0.020) * min(fulgora_vaults_and_starting_vault, 1 - fulgora_starting_mask)"
+--	}
+--})
