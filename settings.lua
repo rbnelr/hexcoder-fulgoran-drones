@@ -1,9 +1,9 @@
-mod_name = "hexcoder-fulgoran-drones"
+local MOD_NAME = "hexcoder-fulgoran-drones"
 
 data:extend({
 	{
 		type = "double-setting",
-		name = mod_name.."-vault-defense-radius",
+		name = MOD_NAME.."-vault-defense-radius",
 		localised_name = "Vault Defense radius",
 		localised_description = "",
 		setting_type = "runtime-global",
@@ -11,7 +11,7 @@ data:extend({
 	},
 	{
 		type = "double-setting",
-		name = mod_name.."-wave-freq",
+		name = MOD_NAME.."-wave-freq",
 		localised_name = "Wave frequency multiplier",
 		localised_description = "",
 		setting_type = "runtime-global",
@@ -21,7 +21,7 @@ data:extend({
 	},
 	{
 		type = "double-setting",
-		name = mod_name.."-wave-size",
+		name = MOD_NAME.."-wave-size",
 		localised_name = "Wave size multiplier",
 		localised_description = "",
 		setting_type = "runtime-global",
@@ -31,9 +31,9 @@ data:extend({
 	},
 	{
 		type = "double-setting",
-		name = mod_name.."-wave-min-time",
+		name = MOD_NAME.."-wave-min-time",
 		localised_name = "Minimum time between waves",
-		localised_description = "in minutes\n1 should result in about 1 wave every 10 minutes at 5k/min mining rate",
+		localised_description = "in minutes\n1 should result in about 1 wave every 10 minutes at 3k/min scrap depletion rate",
 		setting_type = "runtime-global",
 		default_value = 1,
 		minimum_value = 0.1,
@@ -41,12 +41,35 @@ data:extend({
 	},
 	{
 		type = "double-setting",
-		name = mod_name.."-wave-max-time",
+		name = MOD_NAME.."-wave-max-time",
 		localised_name = "Maximum time between waves",
 		localised_description = "in minutes\nSmall waves will spawn even without mining",
 		setting_type = "runtime-global",
 		default_value = 15,
 		minimum_value = 1,
 		maximum_value = 60,
-	}
+	},
+	{
+		type = "bool-setting",
+		name = MOD_NAME.."-buff-drones",
+		localised_name = "Buff drones",
+		localised_description = "Buff combat robot HP, resistances and time to live to balance around drones being fought by player turrets, will affect player-thrown combat robots too",
+		setting_type = "startup",
+		default_value = true,
+	},
+	{
+		type = "bool-setting",
+		name = MOD_NAME.."-nerf-turret-turn",
+		localised_name = "Nerf turret turn rate",
+		localised_description = "Nerf ammo and laser turret turn rate to make them a bit less effective at destroying drones",
+		setting_type = "startup",
+		default_value = false,
+	},
+	{
+		type = "bool-setting",
+		name = MOD_NAME.."-debug",
+		localised_name = "Debug mode",
+		setting_type = "startup",
+		default_value = false,
+	},
 })

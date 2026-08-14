@@ -1,19 +1,20 @@
 ---@class Vault
 local Vault = require("vault")
+local g = require("common")
 
 function spawn_position()
-	local spawn_r_x = VAULT_SPAWN_RADIUS
-	local spawn_r_y = spawn_r_x * VAULT_SHAFT_ELLIPSE_K
+	local spawn_r_x = g.VAULT_SPAWN_RADIUS
+	local spawn_r_y = spawn_r_x * g.VAULT_SHAFT_ELLIPSE_K
 	
 	--return random_in_ellipse_center_bias({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
-	return random_in_ellipse({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
+	return g.random_in_ellipse({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
 end
 -- project x onto bottom of ellipse
 ---@param x number
 ---@return number y
 function spawn_depth(x)
-	local r = VAULT_SHAFT_RADIUS
-	return VAULT_SHAFT_ELLIPSE_K * math.sqrt(r*r - x*x)
+	local r = g.VAULT_SHAFT_RADIUS
+	return g.VAULT_SHAFT_ELLIPSE_K * math.sqrt(r*r - x*x)
 end
 
 ---@param bot_type string
@@ -41,20 +42,20 @@ function Vault:update_emerging()
 	--	{1,1,0, 0.3})
 	
 	local cur_tick = game.tick
-	local center = { x = VAULT_SHAFT_CENTER.x + self.entity.position.x,
-	                 y = VAULT_SHAFT_CENTER.y + self.entity.position.y }
+	local center = { x = g.VAULT_SHAFT_CENTER.x + self.entity.position.x,
+	                 y = g.VAULT_SHAFT_CENTER.y + self.entity.position.y }
 	for id,e in pairs(self.wave_emerging) do
 		if cur_tick >= e.tick then
 			local x = center.x + e.final_pos.x
 			local y = center.y + e.final_pos.y
-			local sy = center.y + spawn_depth(e.final_pos.x) + BOT_FLOAT_HEIGHT
+			local sy = center.y + spawn_depth(e.final_pos.x) + g.BOT_FLOAT_HEIGHT
 			
 			--rendering.draw_line{from={x,sy}, to={x,y}, width=1, surface=self.entity.surface, time_to_live=30, color={1,1,0.5}}
 			
 			local projectile = self.entity.surface.create_entity{
 				name=e.name,
 				position = {x=x, y=sy}, target = {x=x, y=y}, snap_to_grid = false,
-				force=DRONE_FORCE,
+				force=g.DRONE_FORCE,
 				source = self.entity, -- track which vault this came from
 			} ---@cast projectile - nil
 			self.wave_emerging[id] = nil
@@ -77,14 +78,17 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 	local bot = event.entity
 	local source = event.source
 	-- we are not actually being told the projectile, which makes things harder as I can't associate an id with the spawned bot
-	if bot.type == "combat-robot" and source and source.name == VAULT_NAME then
+	if bot.type == "combat-robot" and source and source.name == g.VAULT_NAME then
 		bot.combat_robot_owner = source
 		
 		local id = script.register_on_object_destroyed(source)
 		local vault = storage.vaults[id]
 		
-		bot.force = DRONE_FORCE -- force is neutral for some reason, because vault (simple-entity) can't actually have a force?
+		bot.force = g.DRONE_FORCE -- force is neutral for some reason, because vault (simple-entity) can't actually have a force?
 		--bot.color = {1,0,0} -- doesn't work
+		
+		local variation = 1.0 - math.random()*0.2
+		bot.time_to_live = bot.time_to_live * variation
 		
 		if vault then
 			table.insert(vault.wave_bots, bot)
@@ -104,12 +108,21 @@ function Vault:spawn_wave(size, freq)
 	
 	--self.next_bot_id = 1
 	
-	local count_scale = size
-	local dur_scale = math.sqrt(size) -- size 4 spawns 4x the bots over 2x the time (2x the rate)
+	local var1 = 1 + (math.random()*2-1) * 0.3
+	local var2 = 1 + (math.random()*2-1) * 0.3
+	local var3 = 1 + (math.random()*2-1) * 0.3
 	
-	self:queue_spawn_drones("defender", 45*count_scale, 1, 18*dur_scale)
-	self:queue_spawn_drones("distractor", 12*count_scale, 0, 10*dur_scale)
-	self:queue_spawn_drones("destroyer", 16*count_scale, 2.5, 12*dur_scale)
+	local s1 = size * var1
+	local s2 = size * var2
+	local s3 = size * var3
+	
+	local dur1 = math.sqrt(s1) -- size 4 spawns 4x the bots over 2x the time (2x the rate)
+	local dur2 = math.sqrt(s2)
+	local dur3 = math.sqrt(s3)
+	
+	self:queue_spawn_drones("defender", 50*s1, 1, 15*dur1)
+	self:queue_spawn_drones("distractor", 15*s2, 0, 9*dur2)
+	self:queue_spawn_drones("destroyer", 20*s3, 2.5, 10*dur3)
 	
 	return true
 end
@@ -127,15 +140,15 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	local variation2 = 1 + self.wave_rng2 * wave_variation
 	
 	-- vary min and max time too, to avoid waves synching
-	local min_time       = settings.global[mod_name.."-wave-min-time"].value * variation
+	local min_time       = settings.global[g.MOD_NAME.."-wave-min-time"].value * variation
 	if time_since_last < min_time and early_out then
 		return false -- not enough time has elapsed, no wave
 	end
 	
-	local wave_frequency = settings.global[mod_name.."-wave-freq"].value / variation
-	local max_time       = settings.global[mod_name.."-wave-max-time"].value * variation
+	local wave_frequency = settings.global[g.MOD_NAME.."-wave-freq"].value / variation
+	local max_time       = settings.global[g.MOD_NAME.."-wave-max-time"].value * variation
 	-- use a second rng to make size and frequency non-correlated
-	local wave_size      = settings.global[mod_name.."-wave-size"].value * variation2
+	local wave_size      = settings.global[g.MOD_NAME.."-wave-size"].value * variation2
 	local min_size = 0.3
 	local max_size = 10
 	

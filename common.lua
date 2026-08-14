@@ -1,16 +1,28 @@
-mod_name = "hexcoder-fulgoran-drones"
+local g = {}
+g.MOD_NAME = "hexcoder-fulgoran-drones"
 
-util = require("util")
+g.DEBUG = settings.startup[g.MOD_NAME.."-debug"].value --[[@as boolean]]
 
 ---@type ModStorage
 storage = storage
 
-DRONE_FORCE = "enemy-fulgoran-drones"
-WAYPOINT = mod_name.."-waypoint"
-VAULT_NAME = "fulgoran-ruin-vault"
-VAULT_NEAR_WALL_NAME = "fulgoran-ruin-vault-near-wall"
+g.DRONE_FORCE = "enemy-fulgoran-drones"
+g.WAYPOINT = g.MOD_NAME.."-waypoint"
+g.VAULT_NAME = "fulgoran-ruin-vault"
+g.VAULT_NEAR_WALL_NAME = "fulgoran-ruin-vault-near-wall"
 
-TARGETS = {
+g.DRONES = {
+	"defender",
+	"distractor",
+	"destroyer",
+}
+g.IS_DRONE = {
+	["defender"] = true,
+	["distractor"] = true,
+	["destroyer"] = true,
+}
+
+g.TARGETS = {
 	"mining-drill",
 	"assembling-machine", "furnace",
 	"radar",
@@ -20,49 +32,49 @@ TARGETS = {
 	--"lamp", "arithmetic-combinator", "decider-combinator", "selector-combinator",
 	"ammo-turret", "electric-turret",
 }
-function VAULT_DEFENSE_RADIUS()
-	return settings.global[mod_name.."-vault-defense-radius"].value --[[@as number]]
+function g.VAULT_DEFENSE_RADIUS()
+	return settings.global[g.MOD_NAME.."-vault-defense-radius"].value --[[@as number]]
 end
-RETARGET_DIST = 15
+g.RETARGET_DIST = 15
 
-EMERGE_SPEEDS = {
+g.EMERGE_SPEEDS = {
 	["defender"] = 4.5,
 	["distractor"] = 2.5,
 	["destroyer"] = 3.0,
 }
-VAULT_SHAFT_CENTER = {x=-0.25, y=0.25}
-VAULT_SHAFT_RADIUS = 4
-VAULT_SHAFT_ELLIPSE_K = 0.65 -- shaft is an ellipse, due to perspective
+g.VAULT_SHAFT_CENTER = {x=-0.25, y=0.25}
+g.VAULT_SHAFT_RADIUS = 4
+g.VAULT_SHAFT_ELLIPSE_K = 0.65 -- shaft is an ellipse, due to perspective
 
-BOT_FLOAT_HEIGHT = 0.9 -- bots are rendererd higher than their actual y position, need to account for when spawning
+g.BOT_FLOAT_HEIGHT = 0.9 -- bots are rendererd higher than their actual y position, need to account for when spawning
 
-VAULT_SPAWN_RADIUS = 3.75
-ORE_POLL_PERIOD = 60*10
-REPAIR_POLL_LIMIT = 8 -- max per tick
+g.VAULT_SPAWN_RADIUS = 3.75
+g.ORE_POLL_PERIOD = 60*10
+g.REPAIR_POLL_LIMIT = 8 -- max per tick
 
-TRY_SPAWN_MISSING_VAULTS = true
+g.TRY_SPAWN_MISSING_VAULTS = true
 
-function check_distance(a, b, r)
+function g.check_distance(a, b, r)
 	local x = a.x - b.x
 	local y = a.y - b.y
 	return x*x + y*y <= r*r
 end
 
-function random_in_ellipse_center_bias(center, radius)
+function g.random_in_ellipse_center_bias(center, radius)
 	local r = math.random()
 	local theta = math.random() * 6.28318530 -- 2PI
 	
 	return { x = center.x + radius.x*r * math.cos(theta),
 	         y = center.y + radius.y*r * math.sin(theta) }
 end
-function random_in_ellipse(center, radius)
+function g.random_in_ellipse(center, radius)
 	local r = math.sqrt(math.random())
 	local theta = math.random() * 6.2831853 -- 2PI
 	
 	return { x = center.x + radius.x*r * math.cos(theta),
 	         y = center.y + radius.y*r * math.sin(theta) }
 end
-function random_in_circle(center, radius)
+function g.random_in_circle(center, radius)
 	radius = radius * math.sqrt(math.random())
 	local theta = math.random() * 6.2831853 -- 2PI
 	
@@ -73,7 +85,7 @@ end
 ---@param surface LuaSurface
 ---@param offset Vector
 ---@param radius Vector
-function draw_ellipse(target, surface, offset, radius, color)
+function g.draw_ellipse(target, surface, offset, radius, color)
 	local vertices = {}
 	for i=1,32 do
 		local theta = (i/32) * 6.28318530 -- 2PI
@@ -88,7 +100,7 @@ end
 ---@param items table<integer, table>
 ---@param period integer
 ---@param func fun(item)
-function stagger_tick(list, items, period, func)
+function g.stagger_tick(list, items, period, func)
 	local ok, val
 	local key = list.prev_key
 	local amount = list.amount or 0
@@ -116,3 +128,5 @@ function stagger_tick(list, items, period, func)
 	
 	list.prev_key, list.amount, list.count = key, amount, count
 end
+
+return g

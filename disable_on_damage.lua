@@ -1,4 +1,4 @@
-
+local g = require("common")
 local dmg = {}
 
 local RESTORED_HP = 2.0/3 -- 2/3 is where HP bar becomes green
@@ -90,7 +90,7 @@ function dmg.fix_building(id, e)
 	end
 end
 function dmg.fix_all_icons()
-	for _,r in pairs(rendering.get_all_objects(mod_name)) do
+	for _,r in pairs(rendering.get_all_objects(g.MOD_NAME)) do
 		if r.type == "sprite" and r.sprite == "virtual-signal/signal-explosion" then
 			local e = r.target.type == "entity" and r.target.entity ---@cast e LuaEntity
 			if not (e.valid and e.disabled_by_script) then
@@ -102,7 +102,7 @@ end
 
 dmg.event_filter = {}
 dmg.on_dmg_filter = {}
-for _,type in pairs(TARGETS) do
+for _,type in pairs(g.TARGETS) do
 	table.insert(dmg.event_filter, {filter="type", type=type})
 	
 	table.insert(dmg.on_dmg_filter, {filter="type", type=type})
@@ -117,7 +117,7 @@ function dmg.on_entity_damaged(event)
 	local e = event.entity
 	if not (e and e.valid) then return end
 	local id = e.unit_number ---@cast id -nil
-	if force and force.name == DRONE_FORCE then
+	if force and force.name == g.DRONE_FORCE then
 		dmg.building_fully_damaged(id, e, force)
 		e.health = 1 -- hp was <=1, setting it to 1 cancels building being killed
 		-- if we want buildings to be disabled at >0 HP already, should use individual thresholds in on_entity_damaged filter
@@ -129,7 +129,7 @@ function dmg.on_entity_damaged(event)
 end
 
 ---@param e LuaEntity
-function dmg.on_entity_built(e)
+function dmg.on_entity_event(e)
 	init()
 	dmg.reset_building(e.unit_number, e, nil, false)
 end
@@ -138,12 +138,12 @@ end
 function dmg.on_tick(event)
 	-- reset drone hostility (workaround)
 	if storage.friend_end_tick ~= nil and event.tick >= storage.friend_end_tick then
-		game.forces[DRONE_FORCE].set_friend("player", false)
+		game.forces[g.DRONE_FORCE].set_friend("player", false)
 		storage.friend_end_tick = nil
 	end
 	
 	local id = storage.poll_prev
-	for i = 1,REPAIR_POLL_LIMIT do
+	for i = 1,g.REPAIR_POLL_LIMIT do
 		id, data = next(storage.poll_repaired or {}, id)
 		if id == nil then break end
 		local e = data.entity

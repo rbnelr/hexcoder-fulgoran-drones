@@ -1,11 +1,13 @@
+local g = require("common")
 local movement = {}
 
 -- choose bot target when it wants to switch
 -- TODO: track how many bots are targeting which target and bias against it, so attacks are more spread out
 ---@param vault Vault
 ---@param bot LuaEntity
+---@return LuaEntity
 local function choose_next_target(vault, bot)
-	local R = VAULT_DEFENSE_RADIUS()
+	local R = g.VAULT_DEFENSE_RADIUS()
 	
 	-- break off = got to waypoint
 	local break_off = math.random() < 0.08
@@ -13,13 +15,13 @@ local function choose_next_target(vault, bot)
 	
 	if not break_off then
 		-- check for close targets
-		local close = vault.entity.surface.find_entities_filtered{position=bot.position, radius=RETARGET_DIST, type = TARGETS, is_military_target=true}
+		local close = vault.entity.surface.find_entities_filtered{position=bot.position, radius=g.RETARGET_DIST, type = g.TARGETS, is_military_target=true}
 		local count = #close
 		if count > 0 then
 			for i=1,3 do
 				local idx = math.floor(rnd * (count-0.001))+1
 				local targ = close[idx]
-				if check_distance(targ.position, vault.entity.position, R) then
+				if g.check_distance(targ.position, vault.entity.position, R) then
 					return targ
 				end
 				rnd = math.random() -- new random to pick other target
@@ -54,7 +56,7 @@ local function choose_next_target(vault, bot)
 	if targ then return targ end
 	
 	-- no waypoint found?
-	return vault
+	return vault.entity
 end
 
 -- got this from claude, Weyl sequence
@@ -93,7 +95,7 @@ function movement.update(vault)
 			
 			local cur_target = bot.combat_robot_owner
 			if cur_target and not cur_target.valid then cur_target = nil end
-			local is_waypoint = cur_target and cur_target.name == WAYPOINT
+			local is_waypoint = cur_target and cur_target.name == g.WAYPOINT
 			local valid_target = cur_target and cur_target.valid and (is_waypoint or cur_target.is_military_target)
 			
 			if switch_target or not valid_target then

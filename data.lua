@@ -1,4 +1,4 @@
-require("common")
+local g = require("common")
 
 --[[
 local sounds = require("__base__.prototypes.entity.sounds")
@@ -61,6 +61,9 @@ data:extend{
 }
 ]]
 
+-- projectile that looks like a drone, to create illusion of drones acending out of hole before they actually become active
+-- TODO: tinting doesn't work for these yet
+
 -- projectiles can be covered up by fulgoran-ruin-vault-near-wall
 -- what was also suggested was rendering manually with LuaRendering (allow for fading in from black etc.)
 -- and using smoke-with-trigger (which has features for fade in, but possibly can't actually move in a line?)
@@ -79,7 +82,7 @@ for name,bot in pairs(data.raw["combat-robot"]) do
 			flags = { "not-on-map" },
 			hidden = true,
 			acceleration = 0.01,
-			max_speed = EMERGE_SPEEDS[name] / 60,
+			max_speed = g.EMERGE_SPEEDS[name] / 60,
 			rotatable = true, -- Does this allow me to spawn the projectile with an orientation?
 			action = {
 				type = "direct",
@@ -103,10 +106,11 @@ for name,bot in pairs(data.raw["combat-robot"]) do
 	}
 end
 
+-- hidden entity to act as a waypoint around the vault for random drone movement, since drone can't move to arbitrary positions
 data:extend{
 	{
-		name = WAYPOINT,
+		name = g.WAYPOINT,
 		type = "simple-entity",
-		--picture = data.raw["container"]["wooden-chest"].picture,
+		picture = g.DEBUG and data.raw["container"]["wooden-chest"].picture or nil,
 	}
 }

@@ -1,4 +1,5 @@
 local dmg = require("disable_on_damage")
+local g = require("common")
 
 ---@class Vault
 local Vault = {}
@@ -7,7 +8,7 @@ Vault.__index = Vault
 ---@param vault LuaEntity
 ---@return Vault
 function init_vault(vault)
-	assert(vault.name == VAULT_NAME)
+	assert(vault.name == g.VAULT_NAME)
 	
 	-- simple entity has no unit_number!
 	--local id = vault.unit_number ---@cast id -nil
@@ -27,23 +28,25 @@ function init_vault(vault)
 	}, Vault)
 	
 	-- enemy structures cannot be mined, but decoratives like ruins can
-	vault.force = DRONE_FORCE -- vault (simple-entity) can't actually have a force?
+	vault.force = g.DRONE_FORCE -- vault (simple-entity) can't actually have a force?
 	vault.destructible = false -- can't damage
 	
-	v.shaft_near_wall = vault.surface.find_entity(VAULT_NEAR_WALL_NAME, vault.position)
-	if v.shaft_near_wall == nil then
-		v.shaft_near_wall = v.entity.surface.create_entity{
-			name = VAULT_NEAR_WALL_NAME, position = v.entity.position,
+	v.near_wall = vault.surface.find_entity(g.VAULT_NEAR_WALL_NAME, vault.position)
+	if v.near_wall == nil then
+		v.near_wall = v.entity.surface.create_entity{
+			name = g.VAULT_NEAR_WALL_NAME, position = v.entity.position,
 		}
 	end
-	v.shaft_near_wall.destructible = false
+	v.near_wall.destructible = false
 	
 	v:prepare() -- make sure to fix buildings
 	
 	storage.vaults[id] = v
 	
-	rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
-		surface=vault.surface, filled=true, color={0,1,0}, time_to_live=60}
+	if g.DEBUG then
+		rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
+			surface=vault.surface, filled=true, color={0,1,0}, time_to_live=60}
+	end
 	
 	return v
 end
@@ -51,8 +54,8 @@ end
 function Vault:destroy()
 	self:end_wave() -- deletes waypoints too
 	
-	if self.shaft_near_wall and self.shaft_near_wall.valid then
-		self.shaft_near_wall.destroy()
+	if self.near_wall and self.near_wall.valid then
+		self.near_wall.destroy()
 	end
 	
 	if self.entity and self.entity.valid then
@@ -69,12 +72,12 @@ end
 -- because drones cannot be instructed to move to arbitrary positions
 function Vault:make_waypoints()
 	local count = 30
-	local R = VAULT_DEFENSE_RADIUS()*0.8
+	local R = g.VAULT_DEFENSE_RADIUS()*0.8
 	
 	self.waypoints = {}
 	for i=1,count do
-		local waypoint = self.entity.surface.create_entity{name=WAYPOINT,
-			position = random_in_circle(self.entity.position, R)
+		local waypoint = self.entity.surface.create_entity{name=g.WAYPOINT,
+			position = g.random_in_circle(self.entity.position, R)
 		}
 		waypoint.destructible = false
 		
@@ -100,13 +103,13 @@ function Vault:prepare()
 	-- build new list, no cleanup needed for old one
 	self.targets = {}
 	
-	local R = VAULT_DEFENSE_RADIUS()
+	local R = g.VAULT_DEFENSE_RADIUS()
 	local p = self.entity.position
 	for _,e in pairs(self.entity.surface.find_entities_filtered{
-						position=p, radius=R, type = TARGETS }) do
+						position=p, radius=R, type = g.TARGETS }) do
 		--game.print(serpent.line(e))
 		
-		if check_distance(e.position, p, R) then
+		if g.check_distance(e.position, p, R) then
 			dmg.fix_building(e.unit_number, e)
 			
 			if not e.disabled_by_script then
@@ -128,7 +131,7 @@ function Vault:start_wave(size, freq)
 	self.wave_start_tick = game.tick
 	
 	game.forces["player"].add_custom_alert(self.entity,
-		{type="entity", name=VAULT_NAME},
+		{type="entity", name=g.VAULT_NAME},
 		{"alert.active-attack", string.format("%.2f", size), string.format("%.2f", freq)}, true)
 	
 	storage.active_vaults[self.id] = self
@@ -152,7 +155,7 @@ end
 ---@return integer
 function Vault:get_ore_remaining()
 	-- TODO: profile, and if at all significant, split it into smaller chunks to rotate through
-	local circ_r = VAULT_DEFENSE_RADIUS()
+	local circ_r = g.VAULT_DEFENSE_RADIUS()
 	local square_r = circ_r * 0.71 + 5 -- can only check rectangle, don't check outside visual circle, so radius*cos(pi/4)
 	local count = 0
 	for _,ore_tile in pairs(self.entity.surface.find_entities_filtered{
@@ -216,7 +219,7 @@ local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
 	-- I assume this has to be because the neighbouring chunk is not actually generated yet?
 	-- so we manually spawn vaults that would not actually be missing, but this works out ok actually
 	if found then
-		local near_vaults = surface.find_entities_filtered{name=VAULT_NAME, position=pos, radius=25}
+		local near_vaults = surface.find_entities_filtered{name=g.VAULT_NAME, position=pos, radius=25}
 		if next(near_vaults) then
 			-- chunk area did not contain a vault, but in neighbouring chunk (next to suitable vault pos) there already is one
 			found = nil
@@ -226,7 +229,7 @@ local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
 	if found then
 		--game.print("Spawning missing vault ruin: "..serpent.line(found))
 		
-		local bb = prototypes.entity[VAULT_NAME].collision_box
+		local bb = prototypes.entity[g.VAULT_NAME].collision_box
 		local p0 = {pos.x+bb.left_top.x, pos.y+bb.left_top.y}
 		local p1 = {pos.x+bb.right_bottom.x, pos.y+bb.right_bottom.y}
 		local colliding = surface.find_entities_filtered{
@@ -248,7 +251,7 @@ local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
 				e.destroy()
 			end
 			
-			local vault = surface.create_entity{name=VAULT_NAME, position=pos, snap_to_grid=false, raise_built=true, move_stuck_players=true}
+			local vault = surface.create_entity{name=g.VAULT_NAME, position=pos, snap_to_grid=false, raise_built=true, move_stuck_players=true}
 			if vault ~= nil then
 				game.print("Spawned missing vault ruin: "..serpent.line(vault))
 			end
@@ -278,6 +281,14 @@ function Vault.try_place_missing_vault_ruin(surface, area)
 		-- >1M scrap, there should have been a vault ruin somewhere in this chunk, but its missing!
 		try_place_missing_vault_ruin2(surface, area, ore_tiles)
 	end
+end
+
+---@param event EventData.on_entity_died
+function Vault.on_drone_died(event)
+	if not (event.entity.force == g.DRONE_FORCE and g.IS_DRONE[event.entity.name]) then
+		return
+	end
+	
 end
 
 return Vault
