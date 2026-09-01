@@ -19,8 +19,8 @@ meld(data.raw["simple-entity"][g.VAULT_NAME], {
 meld(data.raw["technology"]["recycling"], {
 	research_trigger = meld.overwrite{
 		type = "mine-entity",
-		--entities = {"fulgoran-ruin-colossal", "fulgoran-ruin-huge"} -- 2.1
-		entity = "fulgoran-ruin-colossal" -- needed for 2.0
+		entities = {"fulgoran-ruin-colossal", "fulgoran-ruin-huge"} -- 2.1
+		--entity = "fulgoran-ruin-colossal" -- needed for 2.0
 	}
 })
 

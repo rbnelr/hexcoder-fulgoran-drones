@@ -143,9 +143,9 @@ function Vault:start_wave(size, freq)
 	self.wave_start_tick = game.tick
 	
 	-- 2.1 only
-	--game.forces["player"].add_custom_alert(self.entity,
-	--	{type="entity", name=g.VAULT_NAME},
-	--	{"alert.active-attack", string.format("%.2f", size), string.format("%.2f", freq)}, true)
+	game.forces["player"].add_custom_alert(self.entity,
+		{type="entity", name=g.VAULT_NAME},
+		{"alert.active-attack", string.format("%.2f", size), string.format("%.2f", freq)}, true)
 		
 	self.wave_size = size
 	self.wave_freq = freq
