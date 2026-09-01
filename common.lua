@@ -22,6 +22,8 @@ g.IS_DRONE = {
 	["destroyer"] = true,
 }
 
+-- restrict buildings being attacked to drills, assemblers and military targets, leave inserters, trains, roboports etc alone,
+-- so repair and defense can be safely automated
 g.TARGETS = {
 	"mining-drill",
 	"assembling-machine", "furnace",
@@ -32,6 +34,10 @@ g.TARGETS = {
 	--"lamp", "arithmetic-combinator", "decider-combinator", "selector-combinator",
 	"ammo-turret", "electric-turret",
 }
+g.IS_TARGET = {}
+for _,name in pairs(g.TARGETS) do
+	g.IS_TARGET[name] = true
+end
 function g.VAULT_DEFENSE_RADIUS()
 	return settings.global[g.MOD_NAME.."-vault-defense-radius"].value --[[@as number]]
 end
@@ -52,7 +58,7 @@ g.VAULT_SPAWN_RADIUS = 3.75
 g.ORE_POLL_PERIOD = 60*10
 g.REPAIR_POLL_LIMIT = 8 -- max per tick
 
-g.TRY_SPAWN_MISSING_VAULTS = true
+g.TRY_SPAWN_MISSING_VAULTS = false
 
 function g.check_distance(a, b, r)
 	local x = a.x - b.x

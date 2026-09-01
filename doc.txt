@@ -1,0 +1,40 @@
+
+Fulgora mod:
+*I can spawn enemy drones - yes (TODO spawning randomization or even animation or staggered timing)
+* -> don't animate with lua, make a capsule that throws the thing and randomizes the actual spawn
+*  -> throw capsule from random distance, mod speed really slow, to create staggered spawn
+*  -> spawn actually just triggers another projectile that rises slowly, skinned as a bot
+*drones attack buildings and shut them down - yes, but hacky
+*I can repair building and they start working again
+*drones move around (experiment what works)
+* -> if no military targets, make drones move to random spots in range of vault
+*-make vaults indestructable
+and possibly special scrap resource instead of just having it scattered around
+*-description on hover ("a deep vertical shaft, seemingly serving as the entrance to a underground complex. Holds very large amounts of scrap but there are occasional remenants of activity...")
+*-drone color (still wrong for the projectile version)
+*-drone render behind shaft?
+-destroyed drones add scrap resource if they get destroyed because that's cool
+*-make "attack events" happen at random intervals, but scaled by scrap mining activity
+-evolution system? use vanilla evolution somehow?
+*-change research trigger, just getting close to a vault ruin, which triggers an attack? or just mine any large ruin?
+*-render radius
+*-investiage map gen / autoplace, why is that one island without vault?
+ -> based on noise function < threshold, with threshold sometimes too small, but can't increase since it will spawn double vaults
+ -> tried to fix by manually detecting missing vaults and spawning them, but disabled as it's not working well
+remove (cancel) alerts from destroyed robots close to vault, ideally also damaged buildings, but make it an option
+ -> not really possible apparently, we can remove alerts, but not without the sound still playing, we can only remove them per destroyee prototype
+turn dbg feature into real feature with pop up gui?
+
+ideas:
+-destroyers are thematically fitting with electro attacks, because of lighting and electronics "frying" machines
+-distractors are nice since they actually seem to distract your turrets, their laser attack is less thematic
+-defenders with bullets feel thematically off, maybe don't use them? or can we mod their attacks?
+
+maybe medium laser resistance since that's the easy defense
+low physical res, since ammo logistics are harder
+no electrical res, so drone vs drone battles make sense?, but then tesla turrets are an OP counter, right
+? -> maybe not actually that OP, especially with drone HP and damage buffed a bit, even if that would make them OP against enemies? maybe only buff HP by at most 50%
+
+roboport drone deployment
+-make roboports detect enemies
+-allow insertion of drones into roboport

@@ -125,14 +125,29 @@ function Vault:prepare()
 	self:make_waypoints()
 end
 
+function Vault:update_alert()
+	local force = game.forces["player"]
+	local cpos = { self.entity.position.x / 32, self.entity.position.y / 32 }
+	if force.is_chunk_visible(self.entity.surface, cpos) then
+		force.add_custom_alert(self.entity,
+			{type="entity", name=g.VAULT_NAME},
+			{"alert.active-attack",
+			string.format("%.2f", self.wave_size or -1),
+			string.format("%.2f", self.wave_freq or -1)}, true)
+	end
+end
+
 function Vault:start_wave(size, freq)
 	self:prepare()
 	
 	self.wave_start_tick = game.tick
 	
-	game.forces["player"].add_custom_alert(self.entity,
-		{type="entity", name=g.VAULT_NAME},
-		{"alert.active-attack", string.format("%.2f", size), string.format("%.2f", freq)}, true)
+	-- 2.1 only
+	--game.forces["player"].add_custom_alert(self.entity,
+	--	{type="entity", name=g.VAULT_NAME},
+	--	{"alert.active-attack", string.format("%.2f", size), string.format("%.2f", freq)}, true)
+	self.wave_size = size
+	self.wave_freq = freq
 	
 	storage.active_vaults[self.id] = self
 end
@@ -142,10 +157,12 @@ function Vault:end_wave()
 	self.wave_end_tick = game.tick
 	self.wave_rng = nil -- every wave gets random variation for time and mining spawning
 	self.wave_rng2 = nil
+	self.wave_size = nil
+	self.wave_freq = nil
 	
-	if self.entity.valid then
-		game.forces["player"].remove_alert{entity=self.entity}
-	end
+	--if self.entity.valid then
+	--	game.forces["player"].remove_alert{entity=self.entity}
+	--end
 	
 	self:delete_waypoints()
 	
@@ -156,10 +173,13 @@ end
 function Vault:get_ore_remaining()
 	-- TODO: profile, and if at all significant, split it into smaller chunks to rotate through
 	local circ_r = g.VAULT_DEFENSE_RADIUS()
-	local square_r = circ_r * 0.71 + 5 -- can only check rectangle, don't check outside visual circle, so radius*cos(pi/4)
+	
+	-- actually it's a circle?
+	--local square_r = circ_r * 0.71 + 5 -- can only check rectangle, don't check outside visual circle, so radius*cos(pi/4)
+	
 	local count = 0
 	for _,ore_tile in pairs(self.entity.surface.find_entities_filtered{
-		position=self.entity.position, radius=square_r, type="resource", name="scrap"}) do
+		position=self.entity.position, radius=circ_r, type="resource", name="scrap"}) do
 		count = count + ore_tile.amount
 	end
 	

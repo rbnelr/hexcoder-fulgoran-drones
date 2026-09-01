@@ -111,6 +111,6 @@ data:extend{
 	{
 		name = g.WAYPOINT,
 		type = "simple-entity",
-		picture = g.DEBUG and data.raw["container"]["wooden-chest"].picture or nil,
+		--picture = g.DEBUG and data.raw["container"]["wooden-chest"].picture or nil,
 	}
 }
