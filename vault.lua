@@ -129,11 +129,11 @@ function Vault:update_alert()
 	local force = game.forces["player"]
 	local cpos = { self.entity.position.x / 32, self.entity.position.y / 32 }
 	if force.is_chunk_visible(self.entity.surface, cpos) then
-		force.add_custom_alert(self.entity,
-			{type="entity", name=g.VAULT_NAME},
-			{"alert.active-attack",
-			string.format("%.2f", self.wave_size or -1),
-			string.format("%.2f", self.wave_freq or -1)}, true)
+		--force.add_custom_alert(self.entity,
+		--	{type="entity", name=g.VAULT_NAME},
+		--	{"alert.active-attack",
+		--	string.format("%.2f", self.wave_size or -1),
+		--	string.format("%.2f", self.wave_freq or -1)}, true)
 	end
 end
 
