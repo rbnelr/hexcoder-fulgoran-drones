@@ -59,7 +59,7 @@ local function choose_next_target(vault, bot)
 	return vault.entity
 end
 
--- got this from claude, Weyl sequence
+-- Weyl sequence
 -- turn ids into uniformly distributed points in [0,1)
 local function weyl_hash01(id)
 	local p = id * 0.618033988749895

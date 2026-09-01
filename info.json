@@ -1,13 +1,13 @@
 {
 	"name": "hexcoder-fulgoran-drones",
 	"version": "1.0.0",
-	"title": "Fulgoran Remnant Drones",
+	"title": "Fulgoran Remnant - Vault Drones",
 	"author": "Hexcoder",
 	"contact": "rbnelr@gmail.com",
-	"factorio_version": "2.1",
+	"factorio_version": "2.0",
 	"dependencies": [
-		"base >= 2.1.7",
-		"space-age >= 2.1.7"
+		"base >= 2.0.77",
+		"space-age >= 2.0.77"
 	],
-	"description": ""
+	"description": "Fulgora's Vault ruins show occasional remnants of activity...\nAncient defense drones are still active!\nKickstart your base with sparse scrap, then find ways to deal with the aggressive drones that keep emerging from vault ruins.\nTheir attacks will only disable your mining drills, never destroy them."
 }

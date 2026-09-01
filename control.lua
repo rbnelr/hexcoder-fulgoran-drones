@@ -82,34 +82,7 @@ local function reset()
 	storage = nil
 end
 
-local _prev_ore = nil
-commands.add_command("fulg-ore", "", function(command)
-	init()
-	local player = game.get_player(command.player_index) ---@cast player -nil
-	
-	local selected = player.selected
-	if selected == nil then return end
-	
-	local count = init_vault(selected):get_ore_remaining()
-	
-	local diff = _prev_ore and count - _prev_ore or nil
-	_prev_ore = count
-	game.print("ore: ".. count .."  (".. (diff or "nil") ..") at ("..selected.position.x..", "..selected.position.y..")")
-end)
-
-commands.add_command("fulg-attack", "", function(command)
-	init()
-	
-	local size = command.parameter and tonumber(command.parameter) or 1
-	
-	-- vault for testing
-	local sel = game.get_player(command.player_index).selected
-	if sel and sel.valid and sel.name == g.VAULT_NAME then
-		init_vault(sel):spawn_wave(size)
-	end
-end)
-
-local _was_reset
+--local _was_reset
 script.on_event(defines.events.on_tick, function(event)
 	--local prof = helpers.create_profiler()
 	
@@ -132,6 +105,7 @@ script.on_event(defines.events.on_tick, function(event)
 	--for id,v in pairs(storage.vaults) do
 	for id,v in pairs(storage.active_vaults) do
 		if v.entity.valid then -- and v:wave_active()
+			v:update_alert()
 			v:update_emerging()
 			
 			movement.update(v)
@@ -205,13 +179,54 @@ for _, name in pairs({
 		end
 	end, built_filter)
 end
+
+-----@param event EventData.on_entity_died
+--local function remove_alert(event)
+--	local surf = game.surfaces["fulgora"]
+--	local force = game.forces["player"]
+--	if event.entity.force == force then
+--		--local pos = event.entity.position
+--		--for _,p in pairs(game.players) do
+--		--	--p.remove_alert{entity=event.entity}
+--		--	p.remove_alert{surface=surf, position=pos} -- alert does not exist yet, and if removed after it exists the sound still plays!
+--		--end
+--		
+--		--event.entity.destroy() works but messes things up, like no corpses or loot
+--	end
+--	--game.remove_alert{type=defines.alert_type.entity_destroyed, surface="fulgora"}
+--	--game.remove_alert{type=defines.alert_type.entity_under_attack, surface="fulgora"}
+--end
+
+--script.on_event(defines.events.on_entity_died, function(event)
+--	if event.entity.type == "combat-robot" then
+--		Vault.on_drone_died(event)
+--	else
+--		dmg.on_entity_event(event.entity)
+--	end
+--end, died_filter)
 script.on_event(defines.events.on_entity_died, function(event)
-	if event.entity.type == "combat-robot" then
-		Vault.on_drone_died(event)
-	else
-		dmg.on_entity_event(event.entity)
+	if event.entity.surface.name == "fulgora" then
+		if event.entity.type == "combat-robot" then
+			Vault.on_drone_died(event)
+		elseif g.IS_TARGET[event.entity.name] then
+			dmg.on_entity_event(event.entity)
+		end
+		--remove_alert(event)
 	end
-end, died_filter)
+end)
+--script.on_event(defines.events.on_post_entity_died, function(event)
+--	local surf = game.surfaces["fulgora"]
+--	if event.force.name == g.DRONE_FORCE and
+--	   event.surface_index == surf.index then
+--		--remove_alert(event)
+--		
+--		local pos = event.position
+--		for _,p in pairs(game.players) do
+--			--p.remove_alert{entity=event.entity}
+--			p.remove_alert{surface=surf, position=pos}
+--		end
+--	end
+--end) -- can be filtered to only enemy force killing things, but my actual drone force only exists after init
 
 script.on_event(defines.events.on_chunk_generated, function(event)
 	if event.surface.name == "fulgora" then
@@ -221,7 +236,7 @@ end)
 
 script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_dmg_filter)
 
--- Show linked entity on hover
+-- Show vault radius on hover
 ---@param player LuaPlayer
 local function update_viz(player)
 	init()
@@ -259,9 +274,9 @@ local function dbg_vaults()
 		if selected and selected.valid and selected.name == g.VAULT_NAME then
 			init_vault(selected):dbg_print(player)
 		end
-		--if p.selected and p.selected.valid and p.selected.position ~= nil then
-		--	local res = p.selected.surface.calculate_tile_properties({"fulgora_spots", "fulgora_vaults_and_starting_vault"}, {p.selected.position})
-		--	p.print("props: "..serpent.line(res))
+		--if player.selected and player.selected.valid and player.selected.position ~= nil then
+		--	local res = player.selected.surface.calculate_tile_properties({"fulgora_spots", "fulgora_vaults_and_starting_vault"}, {p.selected.position})
+		--	player.print("props: "..serpent.line(res))
 		--end
 	end
 end
@@ -291,6 +306,33 @@ end)
 if g.DEBUG then
 	script.on_nth_tick(120, function(event)
 		dbg_vaults()
+	end)
+	
+	local _prev_ore = nil
+	commands.add_command("fulg-ore", "", function(command)
+		init()
+		local player = game.get_player(command.player_index) ---@cast player -nil
+		
+		local selected = player.selected
+		if selected == nil then return end
+		
+		local count = init_vault(selected):get_ore_remaining()
+		
+		local diff = _prev_ore and count - _prev_ore or nil
+		_prev_ore = count
+		game.print("ore: ".. count .."  (".. (diff or "nil") ..") at ("..selected.position.x..", "..selected.position.y..")")
+	end)
+
+	commands.add_command("fulg-attack", "", function(command)
+		init()
+		
+		local size = command.parameter and tonumber(command.parameter) or 1
+		
+		-- vault for testing
+		local sel = game.get_player(command.player_index).selected
+		if sel and sel.valid and sel.name == g.VAULT_NAME then
+			init_vault(sel):spawn_wave(size, 1, true)
+		end
 	end)
 end
 
@@ -325,6 +367,8 @@ script.register_metatable("Vault", Vault)
 ---@field waypoints LuaEntity[]
 ---@field wave_rng number?
 ---@field wave_rng2 number?
+---@field wave_size number?
+---@field wave_freq number?
 ---@field wave_start_tick integer?
 ---@field wave_end_tick integer?
 -- TODO: track sorted into buckets by tick or sort list?

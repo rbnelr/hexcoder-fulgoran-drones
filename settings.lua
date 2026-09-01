@@ -50,6 +50,16 @@ data:extend({
 		maximum_value = 60,
 	},
 	{
+		type = "double-setting",
+		name = MOD_NAME.."-evolution-speed",
+		localised_name = "Evolution speed",
+		localised_description = "1=50% evolution at 10M scrap produced, 5=50% at 2M, 0.5=50% at 20M\nEvolution effects wave size",
+		setting_type = "runtime-global",
+		default_value = 1,
+		minimum_value = 0.01,
+		maximum_value = 100,
+	},
+	{
 		type = "bool-setting",
 		name = MOD_NAME.."-buff-drones",
 		localised_name = "Buff drones",

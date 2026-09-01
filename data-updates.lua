@@ -19,7 +19,8 @@ meld(data.raw["simple-entity"][g.VAULT_NAME], {
 meld(data.raw["technology"]["recycling"], {
 	research_trigger = meld.overwrite{
 		type = "mine-entity",
-		entities = {"fulgoran-ruin-colossal", "fulgoran-ruin-huge"}
+		--entities = {"fulgoran-ruin-colossal", "fulgoran-ruin-huge"} -- 2.1
+		entity = "fulgoran-ruin-colossal" -- needed for 2.0
 	}
 })
 
@@ -114,8 +115,9 @@ if settings.startup[g.MOD_NAME.."-buff-drones"].value then
 end
 
 if settings.startup[g.MOD_NAME.."-nerf-turret-turn"].value then
-	data.raw["ammo-turret"]["gun-turret"].rotation_speed = 0.0025 -- was 0.015
-	data.raw["electric-turret"]["laser-turret"].rotation_speed = 0.004 -- was 0.01
+	-- was 0.015   0.0025 -> very slow against biters (esp turret nests that get surrounded)
+	data.raw["ammo-turret"]["gun-turret"].rotation_speed = 0.005 -- was 0.015
+	data.raw["electric-turret"]["laser-turret"].rotation_speed = 0.007 -- was 0.01   0.004
 end
 
 -- try to fix the missing vaults

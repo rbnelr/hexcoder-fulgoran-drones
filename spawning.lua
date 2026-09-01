@@ -2,7 +2,7 @@
 local Vault = require("vault")
 local g = require("common")
 
-function spawn_position()
+local function spawn_position()
 	local spawn_r_x = g.VAULT_SPAWN_RADIUS
 	local spawn_r_y = spawn_r_x * g.VAULT_SHAFT_ELLIPSE_K
 	
@@ -12,9 +12,34 @@ end
 -- project x onto bottom of ellipse
 ---@param x number
 ---@return number y
-function spawn_depth(x)
+local function spawn_depth(x)
 	local r = g.VAULT_SHAFT_RADIUS
 	return g.VAULT_SHAFT_ELLIPSE_K * math.sqrt(r*r - x*x)
+end
+
+local function get_total_scrap_produced()
+	local surface = game.surfaces["fulgora"]
+	--local test = surface.get_resource_counts() -- only counts generated chunks, not clear how to use this
+	
+	-- this counts productivity, unlike my per-vault spawning logic, but that's probably ok
+	local stats = game.forces.player.get_item_production_statistics(surface)
+	
+	local total = 0
+	for Q,_ in pairs(prototypes.quality) do
+		if Q ~= "quality-unknown" then
+			total = total + stats.get_input_count({name="scrap", quality=Q})
+		end
+	end
+	
+	return total
+end
+local function get_evolution_factor(x)
+	local total = get_total_scrap_produced()
+
+	local evo_speed = settings.global[g.MOD_NAME.."-evolution-speed"].value --[[@as number]]
+	local x = total * (evo_speed / 10000000)
+	local factor = x / (x + 1) -- like vanilla, squash 0-inf into 0-1 range
+	return factor
 end
 
 ---@param bot_type string
@@ -99,10 +124,16 @@ end)
 
 ---@param size number?
 ---@param freq number?
+---@param apply_evo boolean?
 ---@return boolean success
-function Vault:spawn_wave(size, freq)
+function Vault:spawn_wave(size, freq, apply_evo)
 	size = size or 1
 	freq = freq or 1
+	
+	local evo = apply_evo and get_evolution_factor() or 1
+	-- TODO: needs to be tuned still, maybe evo needs to be lower since I think a max of wave size 4x is fine with infinite techs, quality etc.
+	-- it's just that right now all my saves are at high evo despite not being in the endgame
+	size = size * (evo*evo * 3.8 + 0.2)
 	
 	self:start_wave(size, freq)
 	
@@ -120,9 +151,13 @@ function Vault:spawn_wave(size, freq)
 	local dur2 = math.sqrt(s2)
 	local dur3 = math.sqrt(s3)
 	
-	self:queue_spawn_drones("defender", 50*s1, 1, 15*dur1)
-	self:queue_spawn_drones("distractor", 15*s2, 0, 9*dur2)
-	self:queue_spawn_drones("destroyer", 20*s3, 2.5, 10*dur3)
+	local delay = 2
+	
+	self:queue_spawn_drones("defender", 50*s1, delay+1, 15*dur1)
+	self:queue_spawn_drones("distractor", 15*s2, delay+0, 9*dur2)
+	self:queue_spawn_drones("destroyer", 20*s3, delay+2.5, 10*dur3)
+	
+	--game.print(serpent.block{ evo=evo, size=size, freq=freq })
 	
 	return true
 end
@@ -212,7 +247,7 @@ function Vault:update_waves()
 	if fire then
 		self.prev_wave_start_ore_amount = count
 		
-		self:spawn_wave(size, freq)
+		self:spawn_wave(size, freq, true)
 	end
 end
 
