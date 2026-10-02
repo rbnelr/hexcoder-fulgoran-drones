@@ -60,6 +60,11 @@ g.REPAIR_POLL_LIMIT = 8 -- max per tick
 
 g.TRY_SPAWN_MISSING_VAULTS = false
 
+function g.check_distance2(ax, ay, bx, by, r)
+	local x = ax - bx
+	local y = ay - by
+	return x*x + y*y <= r*r
+end
 function g.check_distance(a, b, r)
 	local x = a.x - b.x
 	local y = a.y - b.y

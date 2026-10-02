@@ -4,6 +4,7 @@ local dmg = require("disable_on_damage")
 local Vault = require("vault")
 require("spawning")
 local movement = require("bot_movement")
+require("gui_util")
 
 local TINT = {0.80, 0.05, 0.05}
 local TINT_FILL = {TINT[1]*0.1,TINT[2]*0.1,TINT[3]*0.1,0.1}
@@ -30,7 +31,7 @@ function init()
 	end
 	
 	local s = storage
-	local init = s == nil
+	local init = next(s) == nil
 	if s == nil then
 		s = {} ---@diagnostic disable-line
 		storage = s
@@ -207,7 +208,7 @@ end
 script.on_event(defines.events.on_entity_died, function(event)
 	if event.entity.surface.name == "fulgora" then
 		if event.entity.type == "combat-robot" then
-			Vault.on_drone_died(event)
+			--Vault.on_drone_died(event) -- not needed right now, needed for drone 
 		elseif g.IS_TARGET[event.entity.name] then
 			dmg.on_entity_event(event.entity)
 		end
@@ -235,6 +236,129 @@ script.on_event(defines.events.on_chunk_generated, function(event)
 end)
 
 script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_dmg_filter)
+
+
+---@return GuiDef
+local function get_window_def()
+	local window = GUI{type="frame", name="hexcoder_fulgoran_drones_vault", direction="vertical"}:add{
+		GUI{type="flow", style={horizontal_spacing=8}}:add{
+			GUI{type="label", caption="Vault Ruin", style={base="frame_title", top_margin=-3, bottom_margin=3}, ignored_by_interaction=true}
+		},
+	}
+	
+	--[[
+		Prev/active wave: size %, freq/m  bots: 5 A  6 B  12 C
+		Mining: Since last (rate/m)
+		ETA  size %, freq/m
+		Mining Depth: total mined, "depth" in m, <bar for depth with quality indicator?
+	]]
+	
+	window:add{
+		gui_hflow{}:add{
+			GUI{type="frame", direction="vertical", style={base="inside_deep_frame", padding=4}}:add{
+				GUI{type="label", name="cur_cap", caption="", style={base="caption_label"}},
+				GUI{type="label", name="cur1", caption=""},
+				GUI{type="label", name="cur2", caption=""},
+				GUI{type="label", name="cur3", caption=""},
+			},
+			GUI{type="frame", direction="vertical", style={base="inside_deep_frame", padding=4}}:add{
+				GUI{type="label", name="last_cap", caption="", style={base="caption_label"}},
+				GUI{type="label", name="last1", caption=""},
+				GUI{type="label", name="last2", caption=""},
+				GUI{type="label", name="last3", caption=""},
+			},
+			GUI{type="frame", direction="vertical", style={base="inside_deep_frame", padding=4}}:add{
+				GUI{type="label", caption="Mining", style={base="caption_label"}},
+				GUI{type="label", name="mining1", caption=""},
+				GUI{type="label", name="mining2", caption=""},
+				GUI{type="label", name="mining3", caption=""},
+			},
+		}
+	}
+	
+	return window
+end
+local vauld_gui_def = get_window_def()
+
+---@param vault Vault
+---@param gui GuiRefs
+---@return string
+local function update_info_gui_content(vault, gui)
+		
+	local time_since_start = (game.tick - (vault.wave_start_tick or 0)) / 3600
+	local time_between = (game.tick - (vault.wave_end_tick or 0)) / 3600
+	
+	local remain_ore = vault:get_ore_remaining()
+	local initial_ore = vault.initial_ore_amount
+	local mined_since_last = (vault.wave_start_ore_amount or remain_ore) - remain_ore
+	local mined_total = (initial_ore or remain_ore) - remain_ore
+	if mined_since_last < 0 then mined_since_last = 0 end
+	if mined_total < 0 then mined_total = 0  vault.initial_ore_amount = vault:get_initial_ore() end
+	
+	local mining_rate = mined_since_last / time_since_start
+	
+	-- prev or current wave bots
+	local s_bots = "Bots: "
+	for n,c in pairs(vault.wave_bots) do
+		s_bots = s_bots..string.format("%d [entity=%s,quality=normal], ", c, n)
+	end
+	--gui.all_text.caption = string.format("Bots: %d active %d emerging %d queued",
+	--	table_size(vault.active_wave_bots),
+	--	table_size(vault.wave_emerging_projectiles),
+	--	table_size(vault.wave_emerging)
+	--)
+	
+	local depth = mined_total / initial_ore * 100
+	
+	gui.mining1.caption = string.format("[font=default-bold]%6d[/font] ([font=default-bold]%d[/font]/m)", mined_since_last, mining_rate)
+	gui.mining2.caption = string.format("[font=default-bold]%4.2fM[/font] / [font=default-bold]%4.2fM[/font]",
+		mined_total/1000000, initial_ore/1000000)
+	--gui.mining3.caption = string.format("Depth %dm (%s)", depth, )
+	
+	if vault:wave_active() then
+		gui.cur_cap.caption = string.format("Wave active for %.1f min!", time_since_start)
+		gui.cur1.caption = string.format("size %3.0f %%", (vault.wave_size or 0) * 100)
+		gui.cur2.caption = string.format("every %.1f min", (1/(vault.wave_freq or 0)))
+		gui.cur3.caption = s_bots
+		
+		gui.last_cap.caption = "Last Wave"
+		gui.last1.caption = ""
+		gui.last2.caption = ""
+		gui.last3.caption = ""
+	else
+		local trigger_wave, size, freq, eta = vault:should_spawn_wave(mined_since_last, time_since_start, time_between, false)
+		
+		gui.cur_cap.caption = string.format("Next wave est. in %.1f min", eta or 0)
+		gui.cur1.caption = string.format("size %3.0f %%", (size or 0) * 100)
+		gui.cur2.caption = string.format("every %.1f min", 1/(freq or 0))
+		gui.cur3.caption = ""
+		
+		gui.last_cap.caption = string.format("Last wave %.1f min ago  size %3.0f %%", time_since_start)
+		gui.last1.caption = string.format("size %3.0f %%", (vault.wave_size or 0) * 100)
+		gui.last2.caption = string.format("every %.1f min", (1/(vault.wave_freq or 0)))
+		gui.last3.caption = s_bots
+	end
+end
+
+---@param player LuaPlayer
+local function update_info_gui(player)
+	
+	local existing = player.gui.left["hexcoder_fulgoran_drones_vault"]
+	if existing then
+		existing.destroy()
+	end
+	
+	local selected = player.selected
+	if selected and selected.valid and selected.name == g.VAULT_NAME then
+		local vault = init_vault(selected)
+		
+		--local window, refs = vauld_gui_def:add_to(player.gui.screen)
+		local window, refs = vauld_gui_def:add_to(player.gui.left)
+		--window.force_auto_center()
+		
+		update_info_gui_content(vault, refs)
+	end
+end
 
 -- Show vault radius on hover
 ---@param player LuaPlayer
@@ -268,22 +392,11 @@ local function update_viz(player)
 	
 	storage.viz[player.index] = draws
 end
-local function dbg_vaults()
-	for _,player in pairs(game.players) do
-		local selected = player.selected
-		if selected and selected.valid and selected.name == g.VAULT_NAME then
-			init_vault(selected):dbg_print(player)
-		end
-		--if player.selected and player.selected.valid and player.selected.position ~= nil then
-		--	local res = player.selected.surface.calculate_tile_properties({"fulgora_spots", "fulgora_vaults_and_starting_vault"}, {p.selected.position})
-		--	player.print("props: "..serpent.line(res))
-		--end
-	end
-end
 
-function update_all_viz()
-	for _,p in pairs(game.players) do
-		update_viz(p)
+local function update_all_viz()
+	for _,player in pairs(game.players) do
+		update_viz(player)
+		update_info_gui(player)
 	end
 end
 script.on_event(defines.events.on_selected_entity_changed, function(event)
@@ -292,21 +405,22 @@ script.on_event(defines.events.on_selected_entity_changed, function(event)
 	local prev = event.last_entity
 	if (selected and selected.name == g.VAULT_NAME) or (prev and prev.name == g.VAULT_NAME) then
 		if g.DEBUG and selected and selected.name == g.VAULT_NAME then
-			init_vault(player.selected):dbg_print(player)
+			--init_vault(player.selected):dbg_print(player)
 		end
 		update_viz(player)
+		update_info_gui(player)
 	end
 end)
 -- on_selected_entity_changed viz can get stuck sometimes
 -- seemingly on_selected_entity_changed does not handle going into map view, an there's no event?
 -- so poll as well
-script.on_nth_tick(20, function(event)
+script.on_nth_tick(30, function(event)
 	update_all_viz()
 end)
 if g.DEBUG then
-	script.on_nth_tick(120, function(event)
-		dbg_vaults()
-	end)
+	--script.on_nth_tick(120, function(event)
+	--	dbg_vaults()
+	--end)
 	
 	local _prev_ore = nil
 	commands.add_command("fulg-ore", "", function(command)
@@ -336,8 +450,6 @@ if g.DEBUG then
 	end)
 end
 
-script.on_init(init)
-
 script.register_metatable("Vault", Vault)
 
 ---@class obj_id : integer -- register_on_object_destroyed-based id
@@ -358,28 +470,20 @@ script.register_metatable("Vault", Vault)
 ---@field entity LuaEntity
 ---@field icon LuaRenderObject
 
----@class Vault
----@field entity LuaEntity
----@field id obj_id
----@field near_wall LuaEntity?
----@field prev_wave_start_ore_amount integer?
----@field targets LuaEntity[] -- NOTE: entities can end up in two vaults target list!
----@field waypoints LuaEntity[]
----@field wave_rng number?
----@field wave_rng2 number?
----@field wave_size number?
----@field wave_freq number?
----@field wave_start_tick integer?
----@field wave_end_tick integer?
--- TODO: track sorted into buckets by tick or sort list?
----@field wave_emerging table<integer, Emerging> -- current attack wave emerging bots (queues projectiles, not active projectiles)
---@field wave_emerging_projectiles table<obj_id, LuaEntity> -- current attack wave active bots
----@field wave_emerging_projectiles table<integer, LuaEntity> -- current attack wave active bots
----@field wave_bots table<integer, LuaEntity> -- current attack wave active bots
---@field next_bot_id integer?
-
----@class Emerging
---@field id integer
----@field tick integer
----@field name string -- emerging projectile name
----@field final_pos MapPosition
+script.on_init(init)
+script.on_configuration_changed(function(data)
+	local changes = data.mod_changes["hexcoder-radar-uplink"]
+	if not changes then return end
+	
+	local old = changes.old_version
+	if not old then
+		init()
+		return
+	end
+	
+	---- no real migrations right now, not sure if storage=nil is safe
+	--if storage then
+	--	-- reset old viz
+	--	storage.viz = nil
+	--end
+end)

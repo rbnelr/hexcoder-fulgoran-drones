@@ -60,6 +60,7 @@ function Vault:queue_spawn_drones(bot_type, count, delay, duration)
 		}
 		table.insert(self.wave_emerging, emerging)
 	end
+	self.wave_bots[bot_type] = (self.wave_bots[bot_type] or 0) + count
 end
 function Vault:update_emerging()
 	--draw_ellipse(self.entity, self.entity.surface,
@@ -116,7 +117,7 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 		bot.time_to_live = bot.time_to_live * variation
 		
 		if vault then
-			table.insert(vault.wave_bots, bot)
+			table.insert(vault.active_wave_bots, bot)
 		end
 	end
 end)
@@ -165,7 +166,7 @@ end
 ---@param mined_ore integer mined ore since last wave
 ---@param time_since_last number elapsed time in minutes since last wave started
 ---@param time_between number elapsed time in minutes since last wave ended
----@return boolean fire, number? size, number? freq, number? eta
+---@return boolean trigger_wave, number? size, number? freq, number? eta
 function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early_out)
 	local wave_variation = 0.3 -- percent variation eg 0.2 => 0.8-1.2
 	
@@ -219,8 +220,8 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	local target_period = 1/target_freq
 	local eta = target_period - time_since_last
 	
-	local fire = time_since_last < min_time or time_since_last >= target_period
-	return fire, size, target_freq, eta
+	local trigger_wave = time_since_last < min_time or time_since_last >= target_period
+	return trigger_wave, size, target_freq, eta
 end
 
 function Vault:update_waves()
@@ -228,14 +229,14 @@ function Vault:update_waves()
 	
 	local count = self:get_ore_remaining()
 	
-	if self.prev_wave_start_ore_amount == nil then
+	if self.wave_start_ore_amount == nil then
 		-- initially it takes one period for waves to appear
-		self.prev_wave_start_ore_amount = count
+		self.wave_start_ore_amount = count
 		self.wave_start_tick = game.tick
 		self.wave_end_tick = game.tick
 	end
 	
-	local mined_ore = self.prev_wave_start_ore_amount - count
+	local mined_ore = self.wave_start_ore_amount - count
 	if mined_ore < 0 then mined_ore = 0 end
 	
 	local time_since_last = (game.tick - (self.wave_start_tick or 0)) / 3600
@@ -243,40 +244,10 @@ function Vault:update_waves()
 	
 	--game.print(serpent.line{ ore=count, diff=diff, --[[id=self.id, tick=game.tick,]] at=self.entity})
 	
-	local fire, size, freq = self:should_spawn_wave(mined_ore, time_since_last, time_between, true)
-	if fire then
-		self.prev_wave_start_ore_amount = count
+	local trigger_wave, size, freq = self:should_spawn_wave(mined_ore, time_since_last, time_between, true)
+	if trigger_wave then
+		self.wave_start_ore_amount = count
 		
 		self:spawn_wave(size, freq, true)
-	end
-end
-
----@param player LuaPlayer
-function Vault:dbg_print(player)
-		
-	local time_since_start = (game.tick - (self.wave_start_tick or 0)) / 3600
-	local time_between = (game.tick - (self.wave_end_tick or 0)) / 3600
-	
-	if self:wave_active() then
-		player.print(string.format("Vault (%d): Wave active for %.2f min! Bots: %d active %d emerging %d queued", self.id,
-			time_since_start,
-			table_size(self.wave_bots),
-			table_size(self.wave_emerging_projectiles),
-			table_size(self.wave_emerging)
-		), {volume_modifier=0})
-	else
-		local count = self:get_ore_remaining()
-		
-		local mined_ore = (self.prev_wave_start_ore_amount or count) - count
-		if mined_ore < 0 then mined_ore = 0 end
-		
-		local mining_rate = mined_ore / time_since_start
-		
-		local fire, size, freq, eta = self:should_spawn_wave(mined_ore, time_since_start, time_between, false)
-		
-		--player.print("Last wave: "..time_since_start.." min ago  ore: "..mined_ore.." ("..mining_rate.."/m) => "
-		--	.."Wave "..size.."x ("..freq.."/m)", {volume_modifier=0})
-		player.print(string.format("Vault (%d): Last wave: %.2f min ago  Mining: %d (%d/m) => Next wave %.2fx (%.2f/m) ETA %.2fm",
-			self.id, time_since_start, mined_ore, mining_rate, size or 0, freq or 0, eta or 0), {volume_modifier=0})
 	end
 end
