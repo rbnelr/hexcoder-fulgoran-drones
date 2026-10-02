@@ -69,15 +69,15 @@ end
 -- TODO: can be optimized, by only checking bots depending on tick, and reacting to building_fully_damaged()
 ---@param vault Vault
 function movement.update(vault)
-	--local count = table_size(vault.wave_bots)
+	--local count = table_size(vault.active_wave_bots)
 	--local had_bots = count > 0
-	local had_bots = next(vault.wave_bots) ~= nil
+	local had_bots = next(vault.active_wave_bots) ~= nil
 	
 	local tick = game.tick
 	--local j = 1
 	local target = nil
 	
-	for id,bot in pairs(vault.wave_bots) do
+	for id,bot in pairs(vault.active_wave_bots) do
 		--- experimental movement logic, should rewrite later!
 		-- move all at once (robotic hivemind feeling)
 		-- or move staggered
@@ -119,7 +119,7 @@ function movement.update(vault)
 			--	surface = bot.surface, width = 2, color = DBG_COL[bot.name], time_to_live=1}
 		else
 			-- remove dead bots
-			vault.wave_bots[id] = nil
+			vault.active_wave_bots[id] = nil
 		end
 	end
 	

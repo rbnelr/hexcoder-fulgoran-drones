@@ -2,6 +2,34 @@ local dmg = require("disable_on_damage")
 local g = require("common")
 
 ---@class Vault
+---@field entity LuaEntity
+---@field id obj_id
+---@field near_wall LuaEntity?
+---@field targets LuaEntity[] -- NOTE: entities can end up in two vaults target list!
+---@field waypoints LuaEntity[]
+---@field wave_rng number?
+---@field wave_rng2 number?
+---@field initial_ore_amount integer?
+---@field wave_start_ore_amount integer?
+---@field wave_size number?
+---@field wave_freq number?
+---@field wave_start_tick integer?
+---@field wave_end_tick integer?
+---@field wave_bots table<string, integer>
+-- TODO: track sorted into buckets by tick or sort list?
+---@field wave_emerging table<integer, Emerging> -- current attack wave emerging bots (queues projectiles, not active projectiles)
+--@field wave_emerging_projectiles table<obj_id, LuaEntity> -- current attack wave active bots
+---@field wave_emerging_projectiles table<integer, LuaEntity> -- current attack wave active bots
+---@field active_wave_bots table<integer, LuaEntity> -- current attack wave active bots
+--@field next_bot_id integer?
+
+---@class (exact) Emerging
+--@field id integer
+---@field tick integer
+---@field name string -- emerging projectile name
+---@field final_pos MapPosition
+
+---@class Vault
 local Vault = {}
 Vault.__index = Vault
 
@@ -22,9 +50,10 @@ function init_vault(vault)
 		id = id,
 		targets={},
 		waypoints={},
+		wave_bots={},
 		wave_emerging={},
 		wave_emerging_projectiles={},
-		wave_bots={}
+		active_wave_bots={}
 	}, Vault)
 	
 	-- enemy structures cannot be mined, but decoratives like ruins can
@@ -94,7 +123,7 @@ function Vault:delete_waypoints()
 end
 
 function Vault:wave_active()
-	return (next(self.wave_bots) or next(self.wave_emerging) or next(self.wave_emerging_projectiles)) ~= nil
+	return (next(self.active_wave_bots) or next(self.wave_emerging) or next(self.wave_emerging_projectiles)) ~= nil
 end
 
 function Vault:prepare()
@@ -140,26 +169,24 @@ end
 function Vault:start_wave(size, freq)
 	self:prepare()
 	
-	self.wave_start_tick = game.tick
-	
 	-- 2.1 only
 	game.forces["player"].add_custom_alert(self.entity,
 		{type="entity", name=g.VAULT_NAME},
 		{"alert.active-attack", string.format("%.2f", size), string.format("%.2f", freq)}, true)
-		
+	
+	self.wave_start_tick = game.tick
 	self.wave_size = size
 	self.wave_freq = freq
+	self.wave_bots = {}
 	
 	storage.active_vaults[self.id] = self
 end
 function Vault:end_wave()
 	--self.next_bot_id = nil
 	
-	self.wave_end_tick = game.tick
 	self.wave_rng = nil -- every wave gets random variation for time and mining spawning
 	self.wave_rng2 = nil
-	self.wave_size = nil
-	self.wave_freq = nil
+	self.wave_end_tick = game.tick
 	
 	--if self.entity.valid then
 	--	game.forces["player"].remove_alert{entity=self.entity}
@@ -170,6 +197,120 @@ function Vault:end_wave()
 	storage.active_vaults[self.id] = nil
 end
 
+-- only needed for my own stupid mod where mining one scrap ore actually gives more than one result so we can be probabalistic
+-- note that the map view hover also does applies this factor
+local function average_scrap_mining_result()
+	local minable = prototypes.entity.scrap.mineable_properties
+	local product = minable.products[1]
+	local avg_result = product.amount or (product.amount_min + product.amount_max)/2
+	avg_result = avg_result * (product.independent_probability or 1)
+	-- shared_probability?
+	return avg_result
+end
+
+--[[
+---@return integer
+function Vault:get_initial_ore()
+	-- TODO: profile, and if at all significant, split it into smaller chunks to rotate through
+	local circ_r = g.VAULT_DEFENSE_RADIUS()
+	
+	local vx = self.entity.position.x
+	local vy = self.entity.position.y
+	local x0 = math.floor(vx - circ_r) -- center of tile correct for calculate_tile_properties ?
+	local x1 = math.floor(vx + circ_r)
+	local y0 = math.ceil(vy - circ_r)
+	local y1 = math.ceil(vy + circ_r)
+	--local x0 = math.floor(vx - circ_r)+0.5 -- center of tile correct for calculate_tile_properties ?
+	--local x1 = math.floor(vx + circ_r)+0.5
+	--local y0 = math.ceil(vy - circ_r)+0.5
+	--local y1 = math.ceil(vy + circ_r)+0.5
+	
+	local surface = self.entity.surface
+	local prop_names = {"entity:scrap:richness", "entity:scrap:probability", "fulgora_scrap_small", "resource_autoplace_all_patches"}
+	local tile_pos = {}
+	local count = 0
+	
+	--for x=x0,x1 do
+	--	for y=y0,y1 do
+	--		if g.check_distance2(x,y, vx,vy, circ_r) then
+	--			tile_pos[1] = {x, y} -- is center correct here?
+	--			local props = surface.calculate_tile_properties(prop_names, tile_pos)
+	--			
+	--			local frequency = 1
+	--			local richness = 1
+	--			local val = (1 + props.fulgora_structure_subnoise[1]) * 1000 * (7 / (6 + frequency) + 100 * props.fulgora_vaults_and_starting_vault[1]) * richness
+	--			
+	--			if val > 0 then
+	--				rendering.draw_circle{target=tile_pos[1], surface=surface, radius=0.25, width=1, color={0,1,0}, time_to_live=30}
+	--			end
+	--		end
+	--	end
+	--end
+	
+	-- way faster than individual calculate_tile_properties calls
+	for x=x0,x1 do
+		for y=y0,y1 do
+			if g.check_distance2(x,y, vx,vy, circ_r) then
+				-- orignal probability_expression = "(min(fulgora_spots, (1 - fulgora_starting_vault_cone) / 2) < 0.015) * min(fulgora_vaults_and_starting_vault, 1 - fulgora_starting_mask)"
+				-- don't bother trying to evaluate starting area
+				table.insert(tile_pos, {x, y})
+			end
+		end
+	end
+	local props = surface.calculate_tile_properties(prop_names, tile_pos)
+	for i=1,#tile_pos do
+		local prob = props["entity:scrap:probability"][i]
+		local rich = props["entity:scrap:richness"][i]
+		local noise = props["fulgora_scrap_small"][i]
+		--local autopl = props["resource_autoplace_all_patches"][i]
+		
+		if prob > 0.0 then
+			local p = tile_pos[i]
+			rendering.draw_circle{target={p[1]+0.5, p[2]+0.5}, surface=surface, radius=0.25, width=1, color={0,1,0}, time_to_live=30}
+		end
+	end
+	
+	for _,ore_tile in pairs(surface.find_entities_filtered{position=self.entity.position, radius=circ_r, type="resource", name="scrap"}) do
+		rendering.draw_circle{target=ore_tile.position, surface=surface, radius=0.4, width=1, color={0,0,1}, time_to_live=30}
+	end
+	
+	if self.initial_ore_amount == nil then
+		self.initial_ore_amount = count
+	end
+	
+	return count
+end]]
+---@return integer
+function Vault:get_initial_ore()
+	local circ_r = g.VAULT_DEFENSE_RADIUS()
+	
+	local surface = self.entity.surface
+	
+	-- deleting is queued, seems like it sometimes can still exist
+	local temp_surf = game.surfaces["hexcoder_fake_fulgora"]
+	if temp_surf == nil then
+		temp_surf = game.create_surface("hexcoder_fake_fulgora", surface.map_gen_settings)
+	end
+	
+	-- I assume find_entities_filtered won't generate chunks for us
+	temp_surf.request_to_generate_chunks(self.entity.position, circ_r/32+1) -- not sure about this radius
+	temp_surf.force_generate_chunk_requests()
+	
+	local count = 0
+	for _,ore_tile in pairs(temp_surf.find_entities_filtered{position=self.entity.position, radius=circ_r, type="resource", name="scrap"}) do
+		--rendering.draw_circle{target=ore_tile.position, surface=surface, radius=0.4, width=1, color={0,0,1}, time_to_live=600}
+		count = count + ore_tile.amount
+	end
+	game.delete_surface("hexcoder_fake_fulgora")
+	
+	count = math.floor(count * average_scrap_mining_result()) -- mods can how much one mining operation actually outputs (on average)
+	
+	return count
+end
+
+-- Changing the radius potentially changes total scanned ore
+-- Previously this may have worked since I only used it to trigger waves after x amount of mining
+-- For new mechanics we may want to handle radius changes (TODO: reset wave_start_ore_amount and try to determine new initial amount?)
 ---@return integer
 function Vault:get_ore_remaining()
 	-- TODO: profile, and if at all significant, split it into smaller chunks to rotate through
@@ -184,18 +325,12 @@ function Vault:get_ore_remaining()
 		count = count + ore_tile.amount
 	end
 	
-	--if game.get_player(1).selected == self.entity then
-	--	local time = (game.tick - (_ore_prev_tick or 0)) / 60
-	--	local delta = count - (_ore_prev or 0)
-	--	local speed = (delta / time) * 60
-	--	_ore_prev_tick = game.tick
-	--	_ore_prev = count
-	--	rendering.draw_rectangle{
-	--		left_top=    {x=self.entity.position.x-square_r, y=self.entity.position.y-square_r},
-	--		right_bottom={x=self.entity.position.x+square_r, y=self.entity.position.y+square_r},
-	--		width=5, surface=self.entity.surface, color={0,1,0}, time_to_live=60 }
-	--	game.print("check_ore_depletion: "..serpent.line{self.entity, count, delta, time, speed})
-	--end
+	count = math.floor(count * average_scrap_mining_result())
+	
+	if self.initial_ore_amount == nil then
+		--self.initial_ore_amount = count
+		self.initial_ore_amount = self:get_initial_ore()
+	end
 	
 	return count
 end
