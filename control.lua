@@ -2,12 +2,10 @@ local g = require("common")
 local util = require("util")
 local dmg = require("disable_on_damage")
 local Vault = require("vault")
+require("ore_tracking")
 require("spawning")
 local movement = require("bot_movement")
-require("gui_util")
-
-local TINT = {0.80, 0.05, 0.05}
-local TINT_FILL = {TINT[1]*0.1,TINT[2]*0.1,TINT[3]*0.1,0.1}
+local gui = require("gui")
 
 -- 'somewhat lazy' init ideally called in every handler
 function init()
@@ -37,28 +35,14 @@ function init()
 				Vault.from_entity(e)
 			end
 			
-			if g.TRY_SPAWN_MISSING_VAULTS then
-				for cpos in surface.get_chunks() do
-					if surface.is_chunk_generated(cpos) then
-						Vault.try_place_missing_vault_ruin(surface, {{cpos.x*32,cpos.y*32}, {cpos.x*32+32,cpos.y*32+32}})
-					end
-				end
-			end
+			--if g.TRY_SPAWN_MISSING_VAULTS then
+			--	for cpos in surface.get_chunks() do
+			--		if surface.is_chunk_generated(cpos) then
+			--			Vault.try_place_missing_vault_ruin(surface, {{cpos.x*32,cpos.y*32}, {cpos.x*32+32,cpos.y*32+32}})
+			--		end
+			--	end
+			--end
 		end
-	end
-end
-
--- detect vaults on startup and as they spawn in
----@param surface LuaSurface
----@param area BoundingBox
-local function init_chunk(surface, area)
-	local vaults = surface.find_entities_filtered{name=g.VAULT_NAME, area=area}
-	if next(vaults) then
-		for _,e in pairs(surface.find_entities_filtered{name=g.VAULT_NAME, area=area}) do
-			Vault.from_entity(e)
-		end
-	elseif g.TRY_SPAWN_MISSING_VAULTS then
-		Vault.try_place_missing_vault_ruin(surface, area)
 	end
 end
 
@@ -111,36 +95,6 @@ end
 --		init()
 --	end
 --end
-
-script.on_event(defines.events.on_tick, function(event)
-	--local prof = helpers.create_profiler()
-	--g._dev_reset()
-	init()
-	
-	-- TODO: could skip expensive checks by checking something like (last-get_resource_counts())>1000 first for whole planet?
-	-- how? pause until condition met, then scan every chunk once, then pause again?
-	
-	g.stagger_tick(storage.poll_vaults, storage.vaults, g.ORE_POLL_PERIOD, function(vault)
-		if vault.entity.valid then
-			vault:update_waves()
-		end
-	end)
-	
-	dmg.on_tick(event)
-	
-	--for id,v in pairs(storage.vaults) do
-	for id,v in pairs(storage.active_vaults) do
-		if v.entity.valid then -- and v:wave_active()
-			v:update_alert()
-			v:update_emerging()
-			
-			movement.update(v)
-		end
-	end
-	
-	--prof.stop()
-	--game.print(prof)
-end)
 
 local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 	[defines.target_type.entity] = function(event)
@@ -257,6 +211,25 @@ end)
 --	end
 --end) -- can be filtered to only enemy force killing things, but my actual drone force only exists after init
 
+script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_dmg_filter)
+
+-- detect vaults as they spawn in during mapgen
+---@param surface LuaSurface
+---@param area BoundingBox
+local function init_chunk(surface, area)
+	local vaults = surface.find_entities_filtered{name=g.VAULT_NAME, area=area}
+	if next(vaults) then
+		for _,e in pairs(surface.find_entities_filtered{name=g.VAULT_NAME, area=area}) do
+			local vault = Vault.from_entity(e)
+			-- avoid lag from get_initial_ore() hack if not actually installing in running game
+			-- so initial_ore is just current ore
+			vault.initial_ore_amount = vault:get_ore_remaining()
+		end
+	end
+	--elseif g.TRY_SPAWN_MISSING_VAULTS then
+	--	Vault.try_place_missing_vault_ruin(surface, area)
+	--end
+end
 script.on_event(defines.events.on_chunk_generated, function(event)
 	if event.surface.name == "fulgora" then
 		init()
@@ -264,168 +237,37 @@ script.on_event(defines.events.on_chunk_generated, function(event)
 	end
 end)
 
-script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_dmg_filter)
+---- Tick
 
-
----@return GuiDef
-local function get_window_def()
-	local window = GUI{type="frame", name="hexcoder_fulgoran_drones_vault", direction="vertical"}:add{
-		GUI{type="flow", style={horizontal_spacing=8}}:add{
-			GUI{type="label", caption="Vault Ruin", style={base="frame_title", top_margin=-3, bottom_margin=3}, ignored_by_interaction=true}
-		},
-	}
-	
-	--[[
-		Prev/active wave: size %, freq/m  bots: 5 A  6 B  12 C
-		Mining: Since last (rate/m)
-		ETA  size %, freq/m
-		Mining Depth: total mined, "depth" in m, <bar for depth with quality indicator?
-	]]
-	
-	window:add{
-		gui_hflow{}:add{
-			GUI{type="frame", direction="vertical", style={base="inside_deep_frame", padding=4}}:add{
-				GUI{type="label", name="cur_cap", caption="", style={base="caption_label"}},
-				GUI{type="label", name="cur1", caption=""},
-				GUI{type="label", name="cur2", caption=""},
-				GUI{type="label", name="cur3", caption=""},
-			},
-			GUI{type="frame", direction="vertical", style={base="inside_deep_frame", padding=4}}:add{
-				GUI{type="label", name="last_cap", caption="", style={base="caption_label"}},
-				GUI{type="label", name="last1", caption=""},
-				GUI{type="label", name="last2", caption=""},
-				GUI{type="label", name="last3", caption=""},
-			},
-			GUI{type="frame", direction="vertical", style={base="inside_deep_frame", padding=4}}:add{
-				GUI{type="label", caption="Mining", style={base="caption_label"}},
-				GUI{type="label", name="mining1", caption=""},
-				GUI{type="label", name="mining2", caption=""},
-				GUI{type="label", name="mining3", caption=""},
-			},
-		}
-	}
-	
-	return window
-end
-local vauld_gui_def = get_window_def()
-
----@param vault Vault
----@param gui GuiRefs
----@return string
-local function update_info_gui_content(vault, gui)
-		
-	local time_since_start = (game.tick - (vault.wave_start_tick or 0)) / 3600
-	local time_between = (game.tick - (vault.wave_end_tick or 0)) / 3600
-	
-	local remain_ore = vault:get_ore_remaining()
-	local initial_ore = vault.initial_ore_amount
-	local mined_since_last = (vault.wave_start_ore_amount or remain_ore) - remain_ore
-	local mined_total = (initial_ore or remain_ore) - remain_ore
-	if mined_since_last < 0 then mined_since_last = 0 end
-	if mined_total < 0 then mined_total = 0  vault.initial_ore_amount = vault:get_initial_ore() end
-	
-	local mining_rate = mined_since_last / time_since_start
-	
-	-- prev or current wave bots
-	local s_bots = "Bots: "
-	for n,c in pairs(vault.wave_bots) do
-		s_bots = s_bots..string.format("%d [entity=%s,quality=normal], ", c, n)
-	end
-	--gui.all_text.caption = string.format("Bots: %d active %d emerging %d queued",
-	--	table_size(vault.active_wave_bots),
-	--	table_size(vault.wave_emerging_projectiles),
-	--	table_size(vault.wave_emerging)
-	--)
-	
-	local depth = mined_total / initial_ore * 100
-	
-	--gui.mining1.caption = string.format("%6d (%d/m)", mined_since_last, mining_rate)
-	gui.mining1.caption = string.format("Rate: %d/min", mining_rate)
-	gui.mining2.caption = string.format("Progess: %4.2fM / %4.2fM", mined_total/1000000, initial_ore/1000000) -- "[font=default-bold]%4.2fM[/font] / [font=default-bold]%4.2fM[/font]"
-	--gui.mining3.caption = string.format("Depth: %dm (%s)", depth, )
-	
-	if vault:wave_active() then
-		gui.cur_cap.caption = string.format("Wave active for %.1fmin!", time_since_start)
-		gui.cur1.caption = string.format("Size: %3.0f %%", (vault.wave_size or 0) * 100)
-		gui.cur2.caption = string.format("Freq: %.1fmin", (1/(vault.wave_freq or 0)))
-		gui.cur3.caption = s_bots
-		
-		gui.last_cap.caption = "Last Wave"
-		gui.last1.caption = ""
-		gui.last2.caption = ""
-		gui.last3.caption = ""
-	else
-		-- Note that this factors in random variation
-		local trigger_wave, size, freq, eta = vault:should_spawn_wave(mined_since_last, time_since_start, time_between, false)
-		
-		gui.cur_cap.caption = string.format("Next Wave est. in %.1fmin", eta or 0)
-		gui.cur1.caption = string.format("Size: %3.0f%%", (size or 0) * 100)
-		gui.cur2.caption = string.format("Freq: %.1fmin", 1/(freq or 0)) -- despite being used internally, maybe displaying frequency is a bit weird, eta for next, and time since last might be enough
-		gui.cur3.caption = ""
-		
-		gui.last_cap.caption = string.format("Last wave %.1fmin ago", time_since_start)
-		gui.last1.caption = string.format("Size: %3.0f%%", (vault.wave_size or 0) * 100)
-		gui.last2.caption = string.format("Freq: %.1fmin", (1/(vault.wave_freq or 0)))
-		gui.last3.caption = s_bots
-	end
-end
-
----@param player LuaPlayer
-local function update_info_gui(player)
-	local existing = player.gui.left["hexcoder_fulgoran_drones_vault"]
-	if existing then
-		existing.destroy()
-	end
-	
-	local selected = player.selected
-	if selected and selected.valid and selected.name == g.VAULT_NAME then
-		local vault = Vault.from_entity(selected)
-		
-		local window, refs = vauld_gui_def:add_to(player.gui.left)
-		update_info_gui_content(vault, refs)
-	end
-end
-
--- Show vault radius on hover
----@param player LuaPlayer
-local function update_viz(player)
+script.on_event(defines.events.on_tick, function(event)
+	--local prof = helpers.create_profiler()
+	--g._dev_reset()
 	init()
 	
-	local draws = storage.render_objs[player.index]
-	if draws then -- remove previous rendering
-		for _,d in pairs(draws) do
-			d.destroy()
+	-- TODO: could skip expensive checks by checking something like (last-get_resource_counts())>1000 first for whole planet?
+	-- how? pause until condition met, then scan every chunk once, then pause again?
+	
+	g.stagger_tick(storage.poll_vaults, storage.vaults, g.ORE_POLL_PERIOD, function(vault)
+		if vault.entity.valid then
+			vault:update_waves()
 		end
-		draws = nil
+	end)
+	
+	dmg.on_tick(event)
+	
+	--for id,v in pairs(storage.vaults) do
+	for id,v in pairs(storage.active_vaults) do
+		if v.entity.valid then -- and v:wave_active()
+			v:update_alert()
+			v:update_emerging()
+			
+			movement.update(v)
+		end
 	end
 	
-	local selected = player.selected
-	if selected and selected.name == g.VAULT_NAME then
-		draws = {}
-		
-		local surf = selected.surface
-		local r = g.VAULT_DEFENSE_RADIUS()
-		local pl = {player}
-		draws[1] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, filled=true, color=TINT_FILL, render_mode="chart"}
-		draws[2] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, width=80, color=TINT, render_mode="chart"}
-		
-		draws[3] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, filled=true, color=TINT_FILL}
-		draws[4] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, width=5, color=TINT}
-		
-		--local p = selected.position
-		--local sr = r*0.71
-		--rendering.draw_rectangle{left_top={p.x-sr, p.y-sr}, right_bottom={p.x+sr, p.y+sr}, surface=surf, filled=true, color=TINT_FILL}
-	end
-	
-	storage.render_objs[player.index] = draws
-end
-local function update_all_viz()
-	init()
-	for _,player in pairs(game.players) do
-		update_viz(player)
-		update_info_gui(player)
-	end
-end
+	--prof.stop()
+	--game.print(prof)
+end)
 
 script.on_event(defines.events.on_selected_entity_changed, function(event)
 	local player = game.get_player(event.player_index) ---@cast player -nil
@@ -436,18 +278,19 @@ script.on_event(defines.events.on_selected_entity_changed, function(event)
 		if g.DEBUG and selected and selected.name == g.VAULT_NAME then
 			--Vault.from_entity(player.selected):dbg_print(player)
 		end
-		update_viz(player)
-		update_info_gui(player)
+		gui.update_viz(player)
+		gui.update_info_gui(player)
 	end
 end)
-
 -- on_selected_entity_changed viz can get stuck sometimes
--- seemingly on_selected_entity_changed does not handle going into map view, an there's no event?
--- so poll as well
+-- seemingly on_selected_entity_changed does not handle going into map view, and there's no event for map view switch?
+-- so poll for this, shoudl be okay
 script.on_nth_tick(30, function(event)
 	init()
-	update_all_viz()
+	gui.update_all_viz()
 end)
+
+---- Commands
 
 if g.DEBUG then
 	--local _prev_ore = nil
@@ -464,7 +307,7 @@ if g.DEBUG then
 	--	_prev_ore = count
 	--	game.print("ore: ".. count .."  (".. (diff or "nil") ..") at ("..selected.position.x..", "..selected.position.y..")")
 	--end)
-
+	
 	commands.add_command("fulg-attack", "", function(command)
 		init()
 		
@@ -473,10 +316,24 @@ if g.DEBUG then
 		-- vault for testing
 		local sel = game.get_player(command.player_index).selected
 		if sel and sel.valid and sel.name == g.VAULT_NAME then
+			Vault.from_entity(sel):stop_wave_and_kill_bots(true)
 			Vault.from_entity(sel):spawn_wave(size, 1, true)
 		end
 	end)
+	commands.add_command("fulg-kill-wave", "", function(command)
+		init()
+		
+		local size = command.parameter and tonumber(command.parameter) or 1
+		
+		-- vault for testing
+		local sel = game.get_player(command.player_index).selected
+		if sel and sel.valid and sel.name == g.VAULT_NAME then
+			Vault.from_entity(sel):stop_wave_and_kill_bots(true)
+		end
+	end)
 end
+
+---- Init
 
 script.register_metatable("Vault", Vault)
 
