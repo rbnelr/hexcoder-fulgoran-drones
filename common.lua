@@ -1,5 +1,6 @@
 local g = {}
 g.MOD_NAME = "hexcoder-fulgoran-drones"
+g.MOD_DIR = "__"..g.MOD_NAME.."__"
 
 g.DEBUG = settings.startup[g.MOD_NAME.."-debug"].value --[[@as boolean]]
 

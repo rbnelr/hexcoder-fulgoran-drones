@@ -35,7 +35,7 @@ Vault.__index = Vault
 
 ---@param vault LuaEntity
 ---@return Vault
-function init_vault(vault)
+function Vault.from_entity(vault)
 	assert(vault.name == g.VAULT_NAME)
 	
 	-- simple entity has no unit_number!
@@ -73,8 +73,9 @@ function init_vault(vault)
 	storage.vaults[id] = v
 	
 	if g.DEBUG then
-		rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
-			surface=vault.surface, filled=true, color={0,1,0}, time_to_live=60}
+		--rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
+		--	surface=vault.surface, filled=true, color={0,1,0}, time_to_live=60}
+		game.print("init vault ".. serpent.line{vault})
 	end
 	
 	return v
@@ -99,7 +100,17 @@ end
 
 -- create random invisible waypoints to act as drone movement targets
 -- because drones cannot be instructed to move to arbitrary positions
+function Vault:delete_waypoints()
+	if self.waypoints then
+		for id,e in pairs(self.waypoints) do
+			e.destroy()
+		end
+		self.waypoints = {}
+	end
+end
 function Vault:make_waypoints()
+	self:delete_waypoints()
+	
 	local count = 30
 	local R = g.VAULT_DEFENSE_RADIUS()*0.8
 	
@@ -113,22 +124,12 @@ function Vault:make_waypoints()
 		table.insert(self.waypoints, waypoint)
 	end
 end
-function Vault:delete_waypoints()
-	if self.waypoints then
-		for id,e in pairs(self.waypoints) do
-			e.destroy()
-		end
-		self.waypoints = {}
-	end
-end
 
 function Vault:wave_active()
 	return (next(self.active_wave_bots) or next(self.wave_emerging) or next(self.wave_emerging_projectiles)) ~= nil
 end
 
 function Vault:prepare()
-	self:delete_waypoints()
-	
 	-- build new list, no cleanup needed for old one
 	self.targets = {}
 	
@@ -149,9 +150,6 @@ function Vault:prepare()
 	end
 	
 	dmg.fix_all_icons()
-	
-	-- create new waypoints every attack, takes into account radius changes and ends up more random
-	self:make_waypoints()
 end
 
 function Vault:update_alert()
@@ -168,6 +166,9 @@ end
 
 function Vault:start_wave(size, freq)
 	self:prepare()
+	
+	-- create new waypoints every attack, takes into account radius changes and ends up more random
+	self:make_waypoints()
 	
 	-- 2.1 only
 	game.forces["player"].add_custom_alert(self.entity,
@@ -192,6 +193,7 @@ function Vault:end_wave()
 	--	game.forces["player"].remove_alert{entity=self.entity}
 	--end
 	
+	-- reduce entity count, waypoints only while wave active
 	self:delete_waypoints()
 	
 	storage.active_vaults[self.id] = nil
@@ -439,12 +441,13 @@ function Vault.try_place_missing_vault_ruin(surface, area)
 	end
 end
 
----@param event EventData.on_entity_died
-function Vault.on_drone_died(event)
-	if not (event.entity.force == g.DRONE_FORCE and g.IS_DRONE[event.entity.name]) then
-		return
-	end
-	
-end
+-- TODO: drone dying spawning stuff
+-----@param event EventData.on_entity_died
+--function Vault.on_drone_died(event)
+--	if not (event.entity.force == g.DRONE_FORCE and g.IS_DRONE[event.entity.name]) then
+--		return
+--	end
+--	
+--end
 
 return Vault

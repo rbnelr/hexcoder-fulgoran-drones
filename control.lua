@@ -9,19 +9,7 @@ require("gui_util")
 local TINT = {0.80, 0.05, 0.05}
 local TINT_FILL = {TINT[1]*0.1,TINT[2]*0.1,TINT[3]*0.1,0.1}
 
----@param surface LuaSurface
----@param area BoundingBox
-local function init_chunk(surface, area)
-	local vaults = surface.find_entities_filtered{name=g.VAULT_NAME, area=area}
-	if next(vaults) then
-		for _,e in pairs(surface.find_entities_filtered{name=g.VAULT_NAME, area=area}) do
-			init_vault(e)
-		end
-	elseif g.TRY_SPAWN_MISSING_VAULTS then
-		Vault.try_place_missing_vault_ruin(surface, area)
-	end
-end
-
+-- 'somewhat lazy' init ideally called in every handler
 function init()
 	-- create enemy drone force
 	if game.forces[g.DRONE_FORCE] == nil then
@@ -32,22 +20,21 @@ function init()
 	
 	local s = storage
 	local init = next(s) == nil
-	if s == nil then
-		s = {} ---@diagnostic disable-line
-		storage = s
-	end
+	--if s == nil then -- I was setting storage to nil, apparently default is {} though, so this should not be needed!
+	--	s = {} ---@diagnostic disable-line
+	--	storage = s
+	--end
 	if s.vaults == nil then s.vaults = {} end
 	if s.poll_vaults == nil then s.poll_vaults = {} end
 	if s.poll_repaired == nil then s.poll_repaired = {} end
 	if s.active_vaults == nil then s.active_vaults = {} end
-	if s.viz == nil then s.viz = {} end
-	--if s.marked_military == nil then s.marked_military = {} end
+	if s.render_objs == nil then s.render_objs = {} end
 	
 	if init then
 		local surface = game.get_surface("fulgora")
 		if surface then
 			for _,e in pairs(surface.find_entities_filtered{name=g.VAULT_NAME}) do
-				init_vault(e)
+				Vault.from_entity(e)
 			end
 			
 			if g.TRY_SPAWN_MISSING_VAULTS then
@@ -60,6 +47,23 @@ function init()
 		end
 	end
 end
+
+-- detect vaults on startup and as they spawn in
+---@param surface LuaSurface
+---@param area BoundingBox
+local function init_chunk(surface, area)
+	local vaults = surface.find_entities_filtered{name=g.VAULT_NAME, area=area}
+	if next(vaults) then
+		for _,e in pairs(surface.find_entities_filtered{name=g.VAULT_NAME, area=area}) do
+			Vault.from_entity(e)
+		end
+	elseif g.TRY_SPAWN_MISSING_VAULTS then
+		Vault.try_place_missing_vault_ruin(surface, area)
+	end
+end
+
+-- reset for dev purposes
+-- but may also be used for deinstalling mod
 local function reset()
 	local surface = game.get_surface("fulgora")
 	if surface then
@@ -70,8 +74,22 @@ local function reset()
 	
 	rendering.clear(g.MOD_NAME)
 	
-	game.merge_forces(game.forces[g.DRONE_FORCE], game.forces["player"]) -- can't delete forces directly (?)
+	for _,player in pairs(game.players) do
+		local existing = player.gui.left["hexcoder_fulgoran_drones_vault"]
+		if existing then
+			existing.destroy()
+		end
+	end
 	
+	local drone_force = game.forces[g.DRONE_FORCE]
+	if drone_force then
+		-- can't delete forces directly (?), I guess this means that spawned bots now belong to the player until they timeout
+		-- force still exists until next tick or so, may crash if calling init after this but not every tick!
+		game.merge_forces(drone_force, game.forces["player"])
+	end
+	
+	-- fix_building only makes sure buildings that are stuck depite being repaired get enabled
+	-- if used for deinstall, want restore_building instead
 	local s = storage
 	if s and s.poll_repaired then
 		for _,e in pairs(s.poll_repaired) do
@@ -80,17 +98,24 @@ local function reset()
 			end
 		end
 	end
-	storage = nil
+	-- this makes us forget vaults, active waves and bots
+	storage = {}
+	
+	-- vaults will be rescanned, but active bots will linger until dying by timeout
 end
-
 --local _was_reset
+--function g._dev_reset()
+--	if g.DEBUG and not _was_reset then
+--		_was_reset = true
+--		reset()
+--		init()
+--	end
+--end
+
 script.on_event(defines.events.on_tick, function(event)
 	--local prof = helpers.create_profiler()
-	
-	--if g.DEBUG then
-	--	if not _was_reset then reset() _was_reset = true end -- for dev
-	--	init()
-	--end
+	--g._dev_reset()
+	init()
 	
 	-- TODO: could skip expensive checks by checking something like (last-get_resource_counts())>1000 first for whole planet?
 	-- how? pause until condition met, then scan every chunk once, then pause again?
@@ -127,15 +152,16 @@ local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 		end
 	end,
 	[defines.target_type.player] = function(event)
-		for _,v in pairs(storage.viz[event.useful_id]) do
+		for _,v in pairs(storage.render_objs[event.useful_id]) do
 			v.destroy()
 		end
-		storage.viz[event.useful_id] = nil
+		storage.render_objs[event.useful_id] = nil
 	end,
 }
 script.on_event(defines.events.on_object_destroyed, function(event)
 	local handler = deathrattles[event.type]
 	if storage ~= nil and handler ~= nil then
+		init()
 		handler(event)
 	end
 end)
@@ -169,11 +195,12 @@ for _, name in pairs({
 	defines.events.on_entity_cloned, -- source to destination
 }) do
 	script.on_event(name, function(event)
+		init()
 		local entity = event.entity or event.destination --[[@as LuaEntity]]
 		if entity.type == "simple-entity" then
 			-- can't actually be built in game, but still do generic built events
 			if entity.name == g.VAULT_NAME then
-				init_vault(entity)
+				Vault.from_entity(entity)
 			end
 		else
 			dmg.on_entity_event(entity)
@@ -207,6 +234,7 @@ end
 --end, died_filter)
 script.on_event(defines.events.on_entity_died, function(event)
 	if event.entity.surface.name == "fulgora" then
+		init()
 		if event.entity.type == "combat-robot" then
 			--Vault.on_drone_died(event) -- not needed right now, needed for drone 
 		elseif g.IS_TARGET[event.entity.name] then
@@ -231,6 +259,7 @@ end)
 
 script.on_event(defines.events.on_chunk_generated, function(event)
 	if event.surface.name == "fulgora" then
+		init()
 		init_chunk(event.surface, event.area)
 	end
 end)
@@ -310,15 +339,15 @@ local function update_info_gui_content(vault, gui)
 	
 	local depth = mined_total / initial_ore * 100
 	
-	gui.mining1.caption = string.format("[font=default-bold]%6d[/font] ([font=default-bold]%d[/font]/m)", mined_since_last, mining_rate)
-	gui.mining2.caption = string.format("[font=default-bold]%4.2fM[/font] / [font=default-bold]%4.2fM[/font]",
-		mined_total/1000000, initial_ore/1000000)
-	--gui.mining3.caption = string.format("Depth %dm (%s)", depth, )
+	--gui.mining1.caption = string.format("%6d (%d/m)", mined_since_last, mining_rate)
+	gui.mining1.caption = string.format("Rate: %d/min", mining_rate)
+	gui.mining2.caption = string.format("Progess: %4.2fM / %4.2fM", mined_total/1000000, initial_ore/1000000) -- "[font=default-bold]%4.2fM[/font] / [font=default-bold]%4.2fM[/font]"
+	--gui.mining3.caption = string.format("Depth: %dm (%s)", depth, )
 	
 	if vault:wave_active() then
-		gui.cur_cap.caption = string.format("Wave active for %.1f min!", time_since_start)
-		gui.cur1.caption = string.format("size %3.0f %%", (vault.wave_size or 0) * 100)
-		gui.cur2.caption = string.format("every %.1f min", (1/(vault.wave_freq or 0)))
+		gui.cur_cap.caption = string.format("Wave active for %.1fmin!", time_since_start)
+		gui.cur1.caption = string.format("Size: %3.0f %%", (vault.wave_size or 0) * 100)
+		gui.cur2.caption = string.format("Freq: %.1fmin", (1/(vault.wave_freq or 0)))
 		gui.cur3.caption = s_bots
 		
 		gui.last_cap.caption = "Last Wave"
@@ -326,23 +355,23 @@ local function update_info_gui_content(vault, gui)
 		gui.last2.caption = ""
 		gui.last3.caption = ""
 	else
+		-- Note that this factors in random variation
 		local trigger_wave, size, freq, eta = vault:should_spawn_wave(mined_since_last, time_since_start, time_between, false)
 		
-		gui.cur_cap.caption = string.format("Next wave est. in %.1f min", eta or 0)
-		gui.cur1.caption = string.format("size %3.0f %%", (size or 0) * 100)
-		gui.cur2.caption = string.format("every %.1f min", 1/(freq or 0))
+		gui.cur_cap.caption = string.format("Next Wave est. in %.1fmin", eta or 0)
+		gui.cur1.caption = string.format("Size: %3.0f%%", (size or 0) * 100)
+		gui.cur2.caption = string.format("Freq: %.1fmin", 1/(freq or 0)) -- despite being used internally, maybe displaying frequency is a bit weird, eta for next, and time since last might be enough
 		gui.cur3.caption = ""
 		
-		gui.last_cap.caption = string.format("Last wave %.1f min ago  size %3.0f %%", time_since_start)
-		gui.last1.caption = string.format("size %3.0f %%", (vault.wave_size or 0) * 100)
-		gui.last2.caption = string.format("every %.1f min", (1/(vault.wave_freq or 0)))
+		gui.last_cap.caption = string.format("Last wave %.1fmin ago", time_since_start)
+		gui.last1.caption = string.format("Size: %3.0f%%", (vault.wave_size or 0) * 100)
+		gui.last2.caption = string.format("Freq: %.1fmin", (1/(vault.wave_freq or 0)))
 		gui.last3.caption = s_bots
 	end
 end
 
 ---@param player LuaPlayer
 local function update_info_gui(player)
-	
 	local existing = player.gui.left["hexcoder_fulgoran_drones_vault"]
 	if existing then
 		existing.destroy()
@@ -350,12 +379,9 @@ local function update_info_gui(player)
 	
 	local selected = player.selected
 	if selected and selected.valid and selected.name == g.VAULT_NAME then
-		local vault = init_vault(selected)
+		local vault = Vault.from_entity(selected)
 		
-		--local window, refs = vauld_gui_def:add_to(player.gui.screen)
 		local window, refs = vauld_gui_def:add_to(player.gui.left)
-		--window.force_auto_center()
-		
 		update_info_gui_content(vault, refs)
 	end
 end
@@ -365,7 +391,7 @@ end
 local function update_viz(player)
 	init()
 	
-	local draws = storage.viz[player.index]
+	local draws = storage.render_objs[player.index]
 	if draws then -- remove previous rendering
 		for _,d in pairs(draws) do
 			d.destroy()
@@ -379,63 +405,65 @@ local function update_viz(player)
 		
 		local surf = selected.surface
 		local r = g.VAULT_DEFENSE_RADIUS()
-		draws[1] = rendering.draw_circle{target=selected, radius=r, surface=surf, filled=true, color=TINT_FILL, render_mode="chart"}
-		draws[2] = rendering.draw_circle{target=selected, radius=r, surface=surf, width=80, color=TINT, render_mode="chart"}
+		local pl = {player}
+		draws[1] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, filled=true, color=TINT_FILL, render_mode="chart"}
+		draws[2] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, width=80, color=TINT, render_mode="chart"}
 		
-		draws[3] = rendering.draw_circle{target=selected, radius=r, surface=surf, filled=true, color=TINT_FILL}
-		draws[4] = rendering.draw_circle{target=selected, radius=r, surface=surf, width=5, color=TINT}
+		draws[3] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, filled=true, color=TINT_FILL}
+		draws[4] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, width=5, color=TINT}
 		
 		--local p = selected.position
 		--local sr = r*0.71
 		--rendering.draw_rectangle{left_top={p.x-sr, p.y-sr}, right_bottom={p.x+sr, p.y+sr}, surface=surf, filled=true, color=TINT_FILL}
 	end
 	
-	storage.viz[player.index] = draws
+	storage.render_objs[player.index] = draws
 end
-
 local function update_all_viz()
+	init()
 	for _,player in pairs(game.players) do
 		update_viz(player)
 		update_info_gui(player)
 	end
 end
+
 script.on_event(defines.events.on_selected_entity_changed, function(event)
 	local player = game.get_player(event.player_index) ---@cast player -nil
 	local selected = player.selected
 	local prev = event.last_entity
 	if (selected and selected.name == g.VAULT_NAME) or (prev and prev.name == g.VAULT_NAME) then
+		init()
 		if g.DEBUG and selected and selected.name == g.VAULT_NAME then
-			--init_vault(player.selected):dbg_print(player)
+			--Vault.from_entity(player.selected):dbg_print(player)
 		end
 		update_viz(player)
 		update_info_gui(player)
 	end
 end)
+
 -- on_selected_entity_changed viz can get stuck sometimes
 -- seemingly on_selected_entity_changed does not handle going into map view, an there's no event?
 -- so poll as well
 script.on_nth_tick(30, function(event)
+	init()
 	update_all_viz()
 end)
+
 if g.DEBUG then
-	--script.on_nth_tick(120, function(event)
-	--	dbg_vaults()
+	--local _prev_ore = nil
+	--commands.add_command("fulg-ore", "", function(command)
+	--	init()
+	--	local player = game.get_player(command.player_index) ---@cast player -nil
+	--	
+	--	local selected = player.selected
+	--	if selected == nil then return end
+	--	
+	--	local count = Vault.from_entity(selected):get_ore_remaining()
+	--	
+	--	local diff = _prev_ore and count - _prev_ore or nil
+	--	_prev_ore = count
+	--	game.print("ore: ".. count .."  (".. (diff or "nil") ..") at ("..selected.position.x..", "..selected.position.y..")")
 	--end)
-	
-	local _prev_ore = nil
-	commands.add_command("fulg-ore", "", function(command)
-		init()
-		local player = game.get_player(command.player_index) ---@cast player -nil
-		
-		local selected = player.selected
-		if selected == nil then return end
-		
-		local count = init_vault(selected):get_ore_remaining()
-		
-		local diff = _prev_ore and count - _prev_ore or nil
-		_prev_ore = count
-		game.print("ore: ".. count .."  (".. (diff or "nil") ..") at ("..selected.position.x..", "..selected.position.y..")")
-	end)
 
 	commands.add_command("fulg-attack", "", function(command)
 		init()
@@ -445,7 +473,7 @@ if g.DEBUG then
 		-- vault for testing
 		local sel = game.get_player(command.player_index).selected
 		if sel and sel.valid and sel.name == g.VAULT_NAME then
-			init_vault(sel):spawn_wave(size, 1, true)
+			Vault.from_entity(sel):spawn_wave(size, 1, true)
 		end
 	end)
 end
@@ -463,27 +491,33 @@ script.register_metatable("Vault", Vault)
 ---@field poll_repaired Damaged[]
 ---@field poll_prev unit_number?
 ---@field active_vaults table<obj_id, Vault>
----@field viz table<player_index, LuaRenderObject[]?>
---@field marked_military LuaEntity[]
+---@field render_objs table<player_index, LuaRenderObject[]?>
 
 ---@class Damaged
 ---@field entity LuaEntity
 ---@field icon LuaRenderObject
 
-script.on_init(init)
+--script.on_init(init)
+
+-- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
 script.on_configuration_changed(function(data)
-	local changes = data.mod_changes["hexcoder-radar-uplink"]
-	if not changes then return end
-	
-	local old = changes.old_version
-	if not old then
+	local changes = data.mod_changes[g.MOD_NAME]
+	if changes or g.DEBUG then
+		if g.DEBUG then -- dev reset
+			reset()
+			init()
+			return
+		end
+		
+		-- reset + init works too, why is this a pattern I see often? because this can be used instead of script.on_init?
+		--local old = changes.old_version
+		--if not old then
+		--	init()
+		--	return
+		--end
+		
+		-- reset + init, kinda works, but may be arkward
+		reset()
 		init()
-		return
 	end
-	
-	---- no real migrations right now, not sure if storage=nil is safe
-	--if storage then
-	--	-- reset old viz
-	--	storage.viz = nil
-	--end
 end)

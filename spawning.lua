@@ -105,6 +105,8 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 	local source = event.source
 	-- we are not actually being told the projectile, which makes things harder as I can't associate an id with the spawned bot
 	if bot.type == "combat-robot" and source and source.name == g.VAULT_NAME then
+		init()
+		
 		bot.combat_robot_owner = source
 		
 		local id = script.register_on_object_destroyed(source)
@@ -176,52 +178,49 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	local variation2 = 1 + self.wave_rng2 * wave_variation
 	
 	-- vary min and max time too, to avoid waves synching
-	local min_time       = settings.global[g.MOD_NAME.."-wave-min-time"].value * variation
+	local min_time = settings.global[g.MOD_NAME.."-wave-min-time"].value * variation
 	if time_since_last < min_time and early_out then
 		return false -- not enough time has elapsed, no wave
 	end
 	
-	local wave_frequency = settings.global[g.MOD_NAME.."-wave-freq"].value / variation
+	-- weird code I came up with to make attacks more dynamic than 'attack every 10k ore mined)
+	-- both size and frequency of attacks increase with higher mining rate, though rate is determined by mined amount since last wave
+	-- so if stopped mining, the rate is not 0 but actually decreases over time, the attack will happen later and at lower size
+	
+	-- 1 wave every 10 minutes if mining 3000 ore/min
+	local base_mining_rate = 3000 -- was 5000 50% resource drain on big miners makes this more forgiving
+	local base_frequency = 1 / 10
+	
+	-- exp=0.5: at 4x the mining rate: 2x as often and 2x as big, at 9x the rate 3x as often
+	-- meaning the number of bots over time is proportional to mining rate
+	-- could increase so size and frequency would be exponential to mining rate
+	local freq_exp = 0.6 -- was 0.5
+	local size_exp = 0.7 -- was 0.5
+	
+	local wave_frequency = settings.global[g.MOD_NAME.."-wave-freq"].value / variation * base_frequency
 	local max_time       = settings.global[g.MOD_NAME.."-wave-max-time"].value * variation
 	-- use a second rng to make size and frequency non-correlated
 	local wave_size      = settings.global[g.MOD_NAME.."-wave-size"].value * variation2
 	local min_size = 0.3
 	local max_size = 10
 	
-	
-	-- 1 wave every 10 minutes if mining 3000 ore/min
-	local base_mining_rate = 3000 -- was 5000 50% resource drain on big miners makes this more forgiving
-	local base_frequency = 1 / 10
-	-- nonlinear, at 4x the mining rate: 2x as often and 2x as big, at 9x the rate 3x as often
-	local nonlinear_exp = 0.5
-	
-	local frequency = wave_frequency * base_frequency
-	
 	local mining_rate = mined_ore / math.max(time_since_last, 0.01)
+	local mining_factor = mining_rate / base_mining_rate
 	
-	local time_fac = mining_rate / base_mining_rate
-	local nonlinear = time_fac ^ nonlinear_exp
-	local target_freq = frequency * nonlinear
-	local scale_factor = time_fac / math.max(nonlinear, 0.01)
+	wave_frequency = wave_frequency * mining_factor ^ freq_exp
+	wave_size = mining_factor ^ size_exp
 	
-	--if mining_rate > 0 then
-	--	game.print(serpent.line{ time_fac=time_fac, time=time_since_last, period=1 / target_freq,
-	--		mining_rate=mining_rate, target_freq=target_freq, scale_factor=scale_factor, at=self.entity})
-	--end
-	--if time_since_last < min_time then
-	--	return -- not enough time has elapsed, no wave
-	--end
+	wave_size = math.max(wave_size, min_size)
+	wave_size = math.min(wave_size, max_size)
 	
-	local size = wave_size * scale_factor
-	if size > max_size then size = max_size end
-	if size < min_size then size = min_size end
+	wave_frequency = math.max(wave_frequency, 1/max_time)
+	wave_frequency = math.min(wave_frequency, 1/min_time)
 	
-	target_freq = math.max(target_freq, 1/max_time)
-	local target_period = 1/target_freq
+	local target_period = 1/wave_frequency
 	local eta = target_period - time_since_last
 	
 	local trigger_wave = time_since_last < min_time or time_since_last >= target_period
-	return trigger_wave, size, target_freq, eta
+	return trigger_wave, wave_size, wave_frequency, eta
 end
 
 function Vault:update_waves()

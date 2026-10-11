@@ -55,16 +55,16 @@ end
 
 -- reset building
 -- either because building was restored by sufficient repair
--- or building was destroyed or otherwise reset it
+-- or building was destroyed or we otherwise want to reset it
 -- this may get called with buildings we didn't actually touch, safe except for other mods trying to use disabled_by_script
 -- could kinda fix this by tracking which buildings we modify, but not 100% safe either
 ---@param id unit_number
 ---@param e LuaEntity?
 ---@param data Damaged?
 ---@param is_military_target boolean?
-function dmg.reset_building(id, e, data, is_military_target)
+function dmg.restore_building(id, e, data, is_military_target)
 	if e and e.valid and e.surface.name == "fulgora" then -- at least restrict to fulgora
-		e.is_military_target = is_military_target or false
+		e.is_military_target = is_military_target or false -- TODO: may be incorrect if the building was a military_target originally (only turrets?), but probably irrelevant
 		--storage.marked_military[id] = is_military_target and e or nil
 		
 		e.disabled_by_script = false
@@ -86,7 +86,7 @@ end
 function dmg.fix_building(id, e)
 	if e.disabled_by_script and e.health >= e.max_health*RESTORED_HP then -- somehow got stuck disabled despite enough HP
 		local data = storage.poll_repaired[id]
-		dmg.reset_building(id, e, data, false)
+		dmg.restore_building(id, e, data, false) -- TODO: Should this be true, not false?
 	end
 end
 function dmg.fix_all_icons()
@@ -110,8 +110,8 @@ for _,type in pairs(g.TARGETS) do
 end
 
 function dmg.on_entity_damaged(event)
-	--game.print("on_entity_damaged: ".. serpent.line(event))
 	init()
+	--game.print("on_entity_damaged: ".. serpent.line(event))
 	
 	local force = event.force
 	local e = event.entity
@@ -131,7 +131,7 @@ end
 ---@param e LuaEntity
 function dmg.on_entity_event(e)
 	init()
-	dmg.reset_building(e.unit_number, e, nil, false)
+	dmg.restore_building(e.unit_number, e, nil, false) -- TODO: why false here?, I guess I try to keep buildings non-military while no attack is active
 end
 
 ---@param event EventData.on_tick
@@ -152,16 +152,12 @@ function dmg.on_tick(event)
 		elseif e.health >= e.max_health*RESTORED_HP then
 			-- apparently deleting is safe with next() iteration, not sure if also if inserting inbetween
 			-- but worst case next returns nil, which restarts iteration(?)
-			dmg.reset_building(id, e, data, true) -- this has to be the actual LuaEntity, not a new one!
+			dmg.restore_building(id, e, data, true) -- this has to be the actual LuaEntity, not a new one!
 		elseif e.health > 1 then
 			dmg.building_partially_repaired(id, e)
 		end
 	end
 	storage.poll_prev = id
 end
-
---script.on_event(defines.events.on_player_repaired_entity, function(event)
---	--game.print("on_player_repaired_entity: ".. serpent.line(event))
---end)
 
 return dmg

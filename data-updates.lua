@@ -36,7 +36,7 @@ data:extend{
 		--minable = {minable=false, mining_time=999999999},
 		max_health = 1000000, healing_per_tick = 1000000/60,
 		pictures = {
-			{width = 960, height = 640, filename = "__hexcoder-fulgoran-drones__/graphics/fulgoran-ruin-vault-near-wall.png",
+			{width = 960, height = 640, filename = g.MOD_DIR.."/graphics/fulgoran-ruin-vault-near-wall.png",
 			shift = util.by_pixel( 18.5/2, -6/2), scale = 0.5}
 		},
 		--render_layer = "higher-object-under",
