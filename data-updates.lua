@@ -64,7 +64,8 @@ if settings.startup[g.MOD_NAME.."-buff-drones"].value then
 			{ type = "electric", percent = 50 }, -- was 0  eff HP  400
 		},
 		max_health = 200, -- was 60
-		time_to_live = 65*60, -- was 45
+		--time_to_live = 65*60, -- was 45sec
+		time_to_live = 40*60, -- was 45sec
 		
 		separation_range = 2,
 		range_from_player = 5,
@@ -92,7 +93,7 @@ if settings.startup[g.MOD_NAME.."-buff-drones"].value then
 			{ type = "electric", percent = 50 }, -- was 0                eff HP  1100
 		},
 		max_health = 550, -- was 180
-		time_to_live = 125*60, -- was 90
+		--time_to_live = 125*60, -- was 90sec
 		selection_priority = 55, -- was 35, normal buildings are 50, ore is 40
 	})
 	meld(data.raw["combat-robot"]["destroyer"], {
@@ -104,7 +105,8 @@ if settings.startup[g.MOD_NAME.."-buff-drones"].value then
 			{ type = "electric", percent = 90, decrease = 20 }, -- was 0  eff HP ~4000
 		},
 		max_health = 400, -- was 60, now same as a turret
-		time_to_live = 120*60, -- was 120
+		--time_to_live = 120*60, -- was 120sec
+		time_to_live = 60*60, -- distractors feel like they should last longest
 		
 		separation_range = 3,
 		range_from_player = 4,

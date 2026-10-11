@@ -59,7 +59,8 @@ g.VAULT_SPAWN_RADIUS = 3.75
 g.ORE_POLL_PERIOD = 60*10
 g.REPAIR_POLL_LIMIT = 8 -- max per tick
 
-g.TRY_SPAWN_MISSING_VAULTS = false
+-- vaults missing from not being generated despite being on an ore island
+--g.TRY_SPAWN_MISSING_VAULTS = false
 
 function g.check_distance2(ax, ay, bx, by, r)
 	local x = ax - bx

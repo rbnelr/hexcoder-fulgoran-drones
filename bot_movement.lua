@@ -84,41 +84,43 @@ function movement.update(vault)
 		-- or move in random intervals (including switching target if target dies)
 		-- maybe switch target to closest if it dies, but move to purely random otherwise?
 		-- could also divide robots into clusters and stagger clusters, might look cool
-		if bot and bot.valid and bot.name ~= "distractor" then
-			---@cast bot -nil
-			-- form groups of bots where that all go to same target, with bots randomly breaking off
-			-- switch targets on a timer, or when target defeated
-			local group_idx = math.floor(id / 4)
-			local group_leader = group_idx * 4
-			--local switch_target = (tick % 500) == math.floor(group_leader / count * 500)
-			local switch_target = (tick % 500) == math.floor(weyl_hash01(group_leader) * 500)
-			
-			local cur_target = bot.combat_robot_owner
-			if cur_target and not cur_target.valid then cur_target = nil end
-			local is_waypoint = cur_target and cur_target.name == g.WAYPOINT
-			local valid_target = cur_target and cur_target.valid and (is_waypoint or cur_target.is_military_target)
-			
-			if switch_target or not valid_target then
-				local rng = math.random()
-				local break_off = rng < 0.2
+		if bot and bot.valid then
+			if bot.name ~= "distractor" then
+				---@cast bot -nil
+				-- form groups of bots where that all go to same target, with bots randomly breaking off
+				-- switch targets on a timer, or when target defeated
+				local group_idx = math.floor(id / 4)
+				local group_leader = group_idx * 4
+				--local switch_target = (tick % 500) == math.floor(group_leader / count * 500)
+				local switch_target = (tick % 500) == math.floor(weyl_hash01(group_leader) * 500)
 				
-				-- entire group to same target
-				if id == group_leader or is_waypoint or break_off then
-					target = choose_next_target(vault, bot)
+				local cur_target = bot.combat_robot_owner
+				if cur_target and not cur_target.valid then cur_target = nil end
+				local is_waypoint = cur_target and cur_target.name == g.WAYPOINT
+				local valid_target = cur_target and cur_target.valid and (is_waypoint or cur_target.is_military_target)
+				
+				if switch_target or not valid_target then
+					local rng = math.random()
+					local break_off = rng < 0.2
+					
+					-- entire group to same target
+					if id == group_leader or is_waypoint or break_off then
+						target = choose_next_target(vault, bot)
+					end
+					if target and target.valid then
+						-- abuse combat_robot_owner to make defenders and destroyers move to targets
+						bot.combat_robot_owner = target
+					end
 				end
-				if target and target.valid then
-					-- abuse combat_robot_owner to make defenders and destroyers move to targets
-					bot.combat_robot_owner = target
-				end
+				
+				--local DBG_COL = {
+				--	["defender"] = {0,0,1}, ["distractor"] = {0,1,0}, ["destroyer"] = {1,0,0},
+				--}
+				--rendering.draw_line{from=bot, to=bot.combat_robot_owner,
+				--	surface = bot.surface, width = 2, color = DBG_COL[bot.name], time_to_live=1}
 			end
-			
-			--local DBG_COL = {
-			--	["defender"] = {0,0,1}, ["distractor"] = {0,1,0}, ["destroyer"] = {1,0,0},
-			--}
-			--rendering.draw_line{from=bot, to=bot.combat_robot_owner,
-			--	surface = bot.surface, width = 2, color = DBG_COL[bot.name], time_to_live=1}
 		else
-			-- remove dead bots
+			-- remove dead bots (and not distractor accidentally too!)
 			vault.active_wave_bots[id] = nil
 		end
 	end

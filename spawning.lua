@@ -9,10 +9,10 @@ local function spawn_position()
 	--return random_in_ellipse_center_bias({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
 	return g.random_in_ellipse({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
 end
--- project x onto bottom of ellipse
+-- project x onto bottom of ellipse, where bot (projectile) can spawn hidden behind VAULT_NEAR_WALL_NAME entity
 ---@param x number
 ---@return number y
-local function spawn_depth(x)
+local function emerging_obscured_y_pos(x)
 	local r = g.VAULT_SHAFT_RADIUS
 	return g.VAULT_SHAFT_ELLIPSE_K * math.sqrt(r*r - x*x)
 end
@@ -22,7 +22,7 @@ local function get_total_scrap_produced()
 	--local test = surface.get_resource_counts() -- only counts generated chunks, not clear how to use this
 	
 	-- this counts productivity, unlike my per-vault spawning logic, but that's probably ok
-	local stats = game.forces.player.get_item_production_statistics(surface)
+	local stats = game.forces["player"].get_item_production_statistics(surface)
 	
 	local total = 0
 	for Q,_ in pairs(prototypes.quality) do
@@ -33,7 +33,7 @@ local function get_total_scrap_produced()
 	
 	return total
 end
-local function get_evolution_factor(x)
+local function get_evolution_factor()
 	local total = get_total_scrap_produced()
 
 	local evo_speed = settings.global[g.MOD_NAME.."-evolution-speed"].value --[[@as number]]
@@ -58,9 +58,9 @@ function Vault:queue_spawn_drones(bot_type, count, delay, duration)
 			name = name,
 			final_pos = spawn_position(),
 		}
-		table.insert(self.wave_emerging, emerging)
+		table.insert(self.wave_emerging_queued, emerging)
 	end
-	self.wave_bots[bot_type] = (self.wave_bots[bot_type] or 0) + count
+	self.wave_bots_count[bot_type] = (self.wave_bots_count[bot_type] or 0) + count
 end
 function Vault:update_emerging()
 	--draw_ellipse(self.entity, self.entity.surface,
@@ -70,11 +70,11 @@ function Vault:update_emerging()
 	local cur_tick = game.tick
 	local center = { x = g.VAULT_SHAFT_CENTER.x + self.entity.position.x,
 	                 y = g.VAULT_SHAFT_CENTER.y + self.entity.position.y }
-	for id,e in pairs(self.wave_emerging) do
+	for id,e in pairs(self.wave_emerging_queued) do
 		if cur_tick >= e.tick then
 			local x = center.x + e.final_pos.x
 			local y = center.y + e.final_pos.y
-			local sy = center.y + spawn_depth(e.final_pos.x) + g.BOT_FLOAT_HEIGHT
+			local sy = center.y + emerging_obscured_y_pos(e.final_pos.x) + g.BOT_FLOAT_HEIGHT
 			
 			--rendering.draw_line{from={x,sy}, to={x,y}, width=1, surface=self.entity.surface, time_to_live=30, color={1,1,0.5}}
 			
@@ -84,7 +84,7 @@ function Vault:update_emerging()
 				force=g.DRONE_FORCE,
 				source = self.entity, -- track which vault this came from
 			} ---@cast projectile - nil
-			self.wave_emerging[id] = nil
+			self.wave_emerging_queued[id] = nil
 			
 			-- projectiles have no unit_number!
 			--local proj_id = script.register_on_object_destroyed(projectile)
@@ -112,8 +112,10 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 		local id = script.register_on_object_destroyed(source)
 		local vault = storage.vaults[id]
 		
-		bot.force = g.DRONE_FORCE -- force is neutral for some reason, because vault (simple-entity) can't actually have a force?
-		--bot.color = {1,0,0} -- doesn't work
+		-- set force again, already set on projectile and _should_ have spawned bot with correct force, but does not
+		-- force is neutral for some reason, possibly because source==vault (simple-entity) can't actually have a force?
+		bot.force = g.DRONE_FORCE
+		--bot.color = {1,0,0} -- individual bot tinting doesn't work?
 		
 		local variation = 1.0 - math.random()*0.2
 		bot.time_to_live = bot.time_to_live * variation
@@ -124,6 +126,35 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 	end
 end)
 
+-- stop bots not yet spawned as projectiles
+--function Vault:stop_queued_bots()
+--	self.wave_emerging_queued = {} -- drops old table (purely data)
+--end
+
+---@param drop_loot boolean?
+function Vault:stop_wave_and_kill_bots(drop_loot)
+	self.wave_emerging_queued = {}
+	
+	for id,e in pairs(self.wave_emerging_projectiles) do
+		if e.valid then
+			-- don't drop loot?
+			e.destroy() -- would .die work?
+		end
+	end
+	self.wave_emerging_projectiles = {}
+	
+	for id,e in pairs(self.active_wave_bots) do
+		if e.valid then
+			if drop_loot then
+				-- should drop loot
+				e.die() -- force=neutral, cause=nothing
+			else
+				e.destroy()
+			end
+		end
+	end
+	self.active_wave_bots = {}
+end
 
 ---@param size number?
 ---@param freq number?
@@ -150,12 +181,20 @@ function Vault:spawn_wave(size, freq, apply_evo)
 	local s2 = size * var2
 	local s3 = size * var3
 	
-	local dur1 = math.sqrt(s1) -- size 4 spawns 4x the bots over 2x the time (2x the rate)
+	-- size 4 spawns 4x the bots over 2x the time (2x the rate)
+	-- TODO: could also intentially cluster more around the start?
+	local dur1 = math.sqrt(s1)
 	local dur2 = math.sqrt(s2)
 	local dur3 = math.sqrt(s3)
 	
 	local delay = 2
 	
+	-- TODO: current distribution fixed, should make
+	-- low sizes spawn almost only defenders
+	-- and high sizes more destroyers than this
+	-- probably want 1-2 distractors and 0 or 1 destroyer even on minimum size
+	
+	-- distractors spawn first, other types delayed
 	self:queue_spawn_drones("defender", 50*s1, delay+1, 15*dur1)
 	self:queue_spawn_drones("distractor", 15*s2, delay+0, 9*dur2)
 	self:queue_spawn_drones("destroyer", 20*s3, delay+2.5, 10*dur3)
@@ -178,6 +217,10 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	local variation2 = 1 + self.wave_rng2 * wave_variation
 	
 	-- vary min and max time too, to avoid waves synching
+	-- TODO: min time is a bit weird, esp being a setting, unless somebody really wants a ex. 2 minute safe window
+	-- esp with this not even being time_between, but time_since_last (did I make this change for consistency)?
+	-- in fact, at high mining rates/evo/settings, having attacks literally uninterruppted may be cool
+	-- TODO: just remove this?
 	local min_time = settings.global[g.MOD_NAME.."-wave-min-time"].value * variation
 	if time_since_last < min_time and early_out then
 		return false -- not enough time has elapsed, no wave
@@ -213,7 +256,7 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	wave_size = math.max(wave_size, min_size)
 	wave_size = math.min(wave_size, max_size)
 	
-	wave_frequency = math.max(wave_frequency, 1/max_time)
+	wave_frequency = math.max(wave_frequency, 1/max_time) -- 1/max_time==min_freq could also be added instead of max'ed
 	wave_frequency = math.min(wave_frequency, 1/min_time)
 	
 	local target_period = 1/wave_frequency
