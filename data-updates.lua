@@ -65,7 +65,6 @@ if settings.startup[g.MOD_NAME.."-buff-drones"].value then
 		},
 		max_health = 200, -- was 60
 		--time_to_live = 65*60, -- was 45sec
-		time_to_live = 40*60, -- was 45sec
 		
 		separation_range = 2,
 		range_from_player = 5,
@@ -106,7 +105,7 @@ if settings.startup[g.MOD_NAME.."-buff-drones"].value then
 		},
 		max_health = 400, -- was 60, now same as a turret
 		--time_to_live = 120*60, -- was 120sec
-		time_to_live = 60*60, -- distractors feel like they should last longest
+		time_to_live = 70*60, -- shorter than distractors, distractors feel like they should last longest
 		
 		separation_range = 3,
 		range_from_player = 4,
@@ -121,6 +120,63 @@ if settings.startup[g.MOD_NAME.."-nerf-turret-turn"].value then
 	data.raw["ammo-turret"]["gun-turret"].rotation_speed = 0.005 -- was 0.015
 	data.raw["electric-turret"]["laser-turret"].rotation_speed = 0.007 -- was 0.01   0.004
 end
+
+meld(data.raw["combat-robot"]["distractor"], {
+	resistances = meld.overwrite{
+		{ type = "acid",     percent = 50 }, -- was 80               eff HP  1100
+		{ type = "fire",     percent = 90 }, -- was 95               eff HP  5500
+		{ type = "physical", percent = 70 }, -- was 0                eff HP  1833
+		{ type = "laser",    percent = 80, decrease = 5 }, -- was 0  eff HP ~2750
+		{ type = "electric", percent = 50 }, -- was 0                eff HP  1100
+	},
+	max_health = 550, -- was 180
+	--time_to_live = 125*60, -- was 90sec
+	selection_priority = 55, -- was 35, normal buildings are 50, ore is 40
+})
+
+for _, name in pairs({"defender", "distractor", "destroyer"}) do
+	local real_recyc = data.raw["recipe"][name.."-capsule-recycling"]
+	local auto_recyc = data.raw["recipe"]["dead-"..name.."-capsule-recycling"]
+	data.raw["recipe"]["item-dead-"..name.."-recycling"] = nil
+	
+	local dead_recyc = table.deepcopy(real_recyc)
+	meld(dead_recyc, {
+		name = auto_recyc.name,
+		ingredients = meld.overwrite{{ type="item", name="dead-"..name.."-capsule", amount=1 }},
+		icons = auto_recyc.icons,
+		localised_name = auto_recyc.localised_name,
+	})
+	for _,v in pairs(dead_recyc.results) do
+		if v.name:match("-capsule") then
+			v.name = "dead-"..v.name
+		end
+	end
+	data:extend{ dead_recyc }
+end
+
+-- TODO: inf ores?
+-- how to handle ores on non-vault islands? add infinine ore? should I manually replace vault ore?
+local inf_ore = {
+	--minable = {
+	--	mining_time = 1.25, -- was 0.5
+	--	result = meld.delete(),
+	--	results = {{
+	--		type="item",
+	--		name = "scrap",
+	--		amount_min = 1,
+	--		amount_max = 4, -- avg 2.5
+	--	}}
+	--},
+	infinite = true,
+	minimum = 12000, -- min 20%
+	normal =  80000, -- fulgora vault scrap tiles seem to average around 100k -> that would be 100% yield
+	-- ~20M vault patches
+	-- 20 big miners => 1M at 5/s = 55h to deplete if min was 0
+	-- at depletion_amount=10  => ~5h
+	--infinite_depletion_amount = 2.5 * 10 -- average result then 10x
+	infinite_depletion_amount = 10 -- average result then 10x
+}
+meld(data.raw["resource"]["scrap"], inf_ore)
 
 -- try to fix the missing vaults
 -- bumping threshold can fix it, but it's not safe to bump by much without causing duplicate vaults!

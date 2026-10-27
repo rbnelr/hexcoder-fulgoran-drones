@@ -64,6 +64,7 @@ function Vault.from_entity(vault)
 	if v.near_wall == nil then
 		v.near_wall = v.entity.surface.create_entity{
 			name = g.VAULT_NEAR_WALL_NAME, position = v.entity.position,
+			preserve_ghosts_and_corpses = true, -- ??
 		}
 	end
 	v.near_wall.destructible = false
@@ -116,8 +117,10 @@ function Vault:make_waypoints()
 	
 	self.waypoints = {}
 	for i=1,count do
-		local waypoint = self.entity.surface.create_entity{name=g.WAYPOINT,
-			position = g.random_in_circle(self.entity.position, R)
+		local waypoint = self.entity.surface.create_entity{
+			name=g.WAYPOINT,
+			position = g.random_in_circle(self.entity.position, R),
+			preserve_ghosts_and_corpses = true, -- ??
 		}
 		waypoint.destructible = false
 		
@@ -199,14 +202,5 @@ function Vault:end_wave()
 	
 	storage.active_vaults[self.id] = nil
 end
-
--- TODO: drone dying spawning stuff
------@param event EventData.on_entity_died
---function Vault.on_drone_died(event)
---	if not (event.entity.force == g.DRONE_FORCE and g.IS_DRONE[event.entity.name]) then
---		return
---	end
---	
---end
 
 return Vault
