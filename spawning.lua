@@ -83,6 +83,7 @@ function Vault:update_emerging()
 				position = {x=x, y=sy}, target = {x=x, y=y}, snap_to_grid = false,
 				force=g.DRONE_FORCE,
 				source = self.entity, -- track which vault this came from
+				preserve_ghosts_and_corpses = true, -- ??
 			} ---@cast projectile - nil
 			self.wave_emerging_queued[id] = nil
 			

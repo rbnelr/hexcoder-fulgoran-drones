@@ -5,13 +5,27 @@ local Vault = require("vault")
 -- mods can how much one mining operation actually outputs (on average), for example giving 0-5 ore per mining operation in 2.5x the time
 -- this is actually respected by the value shown in the map view on hover (unlike mining prod or 50% drain on big miners)
 -- so use this to match the map view
-local function average_scrap_mining_result()
-	local minable = prototypes.entity["scrap"].mineable_properties
+--local function scrap_result_per_mining_drain()
+--	local minable = prototypes.entity["scrap"].mineable_properties
+--	local product = minable.products[1]
+--	local avg_result = product.amount or (product.amount_min + product.amount_max)/2
+--	avg_result = avg_result * (product.independent_probability or 1)
+--	-- shared_probability?
+--	return avg_result
+--end
+local function scrap_result_per_mining_drain()
+	local resource = prototypes.entity["scrap"]
+	local minable = resource.mineable_properties
 	local product = minable.products[1]
-	local avg_result = product.amount or (product.amount_min + product.amount_max)/2
-	avg_result = avg_result * (product.independent_probability or 1)
+	local factor = product.amount or (product.amount_min + product.amount_max)/2
+	factor = factor * (product.independent_probability or 1)
 	-- shared_probability?
-	return avg_result
+	
+	-- currently, avg 8 scrap with mining time 4 and inf drain 80 => 8/10 = 0.1 product per drain
+	-- not taking into account yield!
+	-- observed_drain * factor = mining rate without drain% or productivity
+	factor = factor / resource.infinite_depletion_resource_amount
+	return factor
 end
 
 -- We want to know what the original ore amount was per vault scrap patch
@@ -120,7 +134,7 @@ function Vault:get_initial_ore()
 	end
 	game.delete_surface("hexcoder_fake_fulgora")
 	
-	count = math.floor(count * average_scrap_mining_result())
+	count = math.floor(count * scrap_result_per_mining_drain())
 	
 	return count
 end
@@ -142,7 +156,7 @@ function Vault:get_ore_remaining()
 		count = count + ore_tile.amount
 	end
 	
-	count = math.floor(count * average_scrap_mining_result())
+	count = math.floor(count * scrap_result_per_mining_drain())
 	
 	if self.initial_ore_amount == nil then
 		--self.initial_ore_amount = count
@@ -226,7 +240,7 @@ local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
 				e.destroy()
 			end
 			
-			local vault = surface.create_entity{name=g.VAULT_NAME, position=pos, snap_to_grid=false, raise_built=true, move_stuck_players=true}
+			local vault = surface.create_entity{name=g.VAULT_NAME, position=pos, snap_to_grid=false, raise_built=true, move_stuck_players=true} -- preserve_ghosts_and_corpses ?
 			if vault ~= nil then
 				game.print("Spawned missing vault ruin: "..serpent.line(vault))
 			end

@@ -4,8 +4,11 @@ local dmg = require("disable_on_damage")
 local Vault = require("vault")
 require("ore_tracking")
 require("spawning")
+local dead_bots = require("dead_bots")
 local movement = require("bot_movement")
 local gui = require("gui")
+
+---- Init
 
 -- 'somewhat lazy' init ideally called in every handler
 function init()
@@ -14,6 +17,7 @@ function init()
 		local force = game.create_force(g.DRONE_FORCE)
 		--force.custom_color = {255,215,0}
 		force.custom_color = {230,50,255}
+		-- TODO: can give force robot livetime bonus
 	end
 	
 	local s = storage
@@ -87,14 +91,6 @@ local function reset()
 	
 	-- vaults will be rescanned, but active bots will linger until dying by timeout
 end
---local _was_reset
---function g._dev_reset()
---	if g.DEBUG and not _was_reset then
---		_was_reset = true
---		reset()
---		init()
---	end
---end
 
 local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 	[defines.target_type.entity] = function(event)
@@ -114,32 +110,19 @@ local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 }
 script.on_event(defines.events.on_object_destroyed, function(event)
 	local handler = deathrattles[event.type]
-	if storage ~= nil and handler ~= nil then
+	if handler ~= nil then
 		init()
 		handler(event)
 	end
 end)
 
-local function append(tbl1, tbl2)
-	local t = util.table.deepcopy(tbl1)
-	for k,v in pairs(tbl2) do
-		table.insert(t, v)
-	end
-	return t
-end
-local built_filter = append(dmg.event_filter, {
+---- Events
+
+-- TODO: explain
+local built_filter = g.merge(dmg.event_filter, {
 	{filter="type", type="simple-entity"},
 	{filter="name", name=g.VAULT_NAME, mode="and"}
 })
-local died_filter = append(dmg.event_filter, {
-	{filter="type", type="combat-robot"},
-	{filter="name", name=g.DRONES[1], mode="and"},
-	{filter="type", type="combat-robot"},
-	{filter="name", name=g.DRONES[2], mode="and"},
-	{filter="type", type="combat-robot"},
-	{filter="name", name=g.DRONES[3], mode="and"}
-})
-	
 for _, name in pairs({
 	defines.events.on_built_entity, -- also triggered by editor
 	defines.events.on_robot_built_entity,
@@ -179,24 +162,42 @@ end
 --	--game.remove_alert{type=defines.alert_type.entity_under_attack, surface="fulgora"}
 --end
 
---script.on_event(defines.events.on_entity_died, function(event)
---	if event.entity.type == "combat-robot" then
---		Vault.on_drone_died(event)
---	else
---		dmg.on_entity_event(event.entity)
---	end
---end, died_filter)
+-- could also trigger this via bots dying-particle trigger event?
+-- any reason not to just react to on_entity_died?
+-----@param event EventData.on_entity_died
+local function on_drone_died(event)
+	init()
+	
+	local drone = event.entity or event.robot
+	--if drone.force == g.DRONE_FORCE and g.IS_DRONE[drone.name] then
+	if drone and g.IS_DRONE[drone.name] then
+		-- TODO: position may be of but but not of corpse, would like to get corpse position, use dying-particle trigger after all?
+		dead_bots.add_dead_bot_resource(drone.surface, drone.position, drone.name, 1)
+	end
+end
+
+local died_filter = g.merge(dmg.event_filter, {
+	{filter="type", type="combat-robot"},
+	{filter="name", name=g.DRONES[1], mode="and"},
+	{filter="type", type="combat-robot"},
+	{filter="name", name=g.DRONES[2], mode="and"},
+	{filter="type", type="combat-robot"},
+	{filter="name", name=g.DRONES[3], mode="and"}
+})
 script.on_event(defines.events.on_entity_died, function(event)
 	if event.entity.surface.name == "fulgora" then
-		init()
 		if event.entity.type == "combat-robot" then
-			--Vault.on_drone_died(event) -- not needed right now, needed for drone 
+			on_drone_died(event) -- combat robot got killed (not if expired due to time!)
 		elseif g.IS_TARGET[event.entity.name] then
+			-- why am I calling this again? I think to reset non-military state so that revived entity will actually get attacked
+			-- currently entities are prevented from dying to enemies (but player could kill them)
 			dmg.on_entity_event(event.entity)
 		end
 		--remove_alert(event)
 	end
-end)
+end, died_filter)
+script.on_event(defines.events.on_combat_robot_expired, on_drone_died)
+
 --script.on_event(defines.events.on_post_entity_died, function(event)
 --	local surf = game.surfaces["fulgora"]
 --	if event.force.name == g.DRONE_FORCE and
@@ -331,6 +332,20 @@ if g.DEBUG then
 			Vault.from_entity(sel):stop_wave_and_kill_bots(true)
 		end
 	end)
+	
+	commands.add_command("fulg-spawn-bot-res", "", function(command)
+		init()
+		
+		local args = command.parameter and string.gmatch(command.parameter, "[^%s]+")
+		local type = args and args() or "destroyer"
+		local count = args and args()
+		count = count and tonumber(count) or 1
+		
+		-- vault for testing
+		local player = game.get_player(command.player_index)
+		
+		dead_bots.add_dead_bot_resource(player.surface, player.position, type, count)
+	end)
 end
 
 ---- Init
@@ -354,8 +369,7 @@ script.register_metatable("Vault", Vault)
 ---@field entity LuaEntity
 ---@field icon LuaRenderObject
 
---script.on_init(init)
-
+script.on_init(init)
 -- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
 script.on_configuration_changed(function(data)
 	local changes = data.mod_changes[g.MOD_NAME]

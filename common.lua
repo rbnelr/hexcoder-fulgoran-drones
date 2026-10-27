@@ -23,6 +23,12 @@ g.IS_DRONE = {
 	["destroyer"] = true,
 }
 
+g.DRONE_TINT = {
+	["defender"  ] = {0.29, 0.64, 0.82}, -- TODO: check these tints
+	["distractor"] = {0.57, 0.78, 0.21},
+	["destroyer" ] = {0.85, 0.25, 0.14},
+}
+
 -- restrict buildings being attacked to drills, assemblers and military targets, leave inserters, trains, roboports etc alone,
 -- so repair and defense can be safely automated
 g.TARGETS = {
@@ -140,6 +146,38 @@ function g.stagger_tick(list, items, period, func)
 	end
 	
 	list.prev_key, list.amount, list.count = key, amount, count
+end
+
+-- merge tables
+function g.merge(tbl1, tbl2)
+	local t = util.table.deepcopy(tbl1)
+	for k,v in pairs(tbl2) do
+		table.insert(t, v)
+	end
+	return t
+end
+
+local meld = require("__core__.lualib.meld")
+
+-- append value if not already exist
+-- ex. use instead of meld.append in tech prerequisites, if values could already exist
+---@param values string[]
+function g.meld_append_unique(values)
+	local meld = require("__core__.lualib.meld")
+	return { marker = meld.control_marker, op = "append_unique", data = values }
+end
+meld.control_handlers.append_unique = function(target, k, v)
+	local list = target[k] or {}
+	local existing_values = {}
+	for _, value in pairs(list) do
+		table.insert(existing_values, value)
+	end
+	for _, value in pairs(v.data) do
+		if existing_values[value] == nil then
+			table.insert(list, util.copy(value))
+		end
+	end
+	target[k] = list
 end
 
 return g
