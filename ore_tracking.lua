@@ -128,7 +128,7 @@ function Vault:get_initial_ore()
 	temp_surf.force_generate_chunk_requests()
 	
 	local count = 0
-	for _,ore_tile in pairs(temp_surf.find_entities_filtered{position=self.entity.position, radius=circ_r, type="resource", name="scrap"}) do
+	for _,ore_tile in pairs(temp_surf.find_entities_filtered{position=self.entity.position, radius=circ_r, type="resource", name={"scrap", "vault-scrap"}}) do
 		--rendering.draw_circle{target=ore_tile.position, surface=surface, radius=0.4, width=1, color={0,0,1}, time_to_live=600}
 		count = count + ore_tile.amount
 	end
@@ -150,9 +150,11 @@ function Vault:get_ore_remaining()
 	-- actually it's a circle?
 	--local square_r = circ_r * 0.71 + 5 -- can only check rectangle, don't check outside visual circle, so radius*cos(pi/4)
 	
+	local e = self.entity
+	
 	local count = 0
-	for _,ore_tile in pairs(self.entity.surface.find_entities_filtered{
-		position=self.entity.position, radius=circ_r, type="resource", name="scrap"}) do
+	for _,ore_tile in pairs(e.surface.find_entities_filtered{
+		position=e.position, radius=circ_r, type="resource", name={"scrap", "vault-scrap"}}) do
 		count = count + ore_tile.amount
 	end
 	
@@ -164,6 +166,34 @@ function Vault:get_ore_remaining()
 	end
 	
 	return count
+end
+
+-- Changing the radius potentially changes total scanned ore
+-- Previously this may have worked since I only used it to trigger waves after x amount of mining
+-- For new mechanics we may want to handle radius changes (TODO: reset wave_start_ore_amount and try to determine new initial amount?)
+---@return integer
+function Vault:make_ore_infinite()
+	-- TODO: profile, and if at all significant, split it into smaller chunks to rotate through
+	local circ_r = g.VAULT_DEFENSE_RADIUS()
+	
+	local position = self.entity.position
+	local surface = self.entity.surface
+	for _,ore_tile in pairs(surface.find_entities_filtered{
+		  position=position, radius=circ_r, type="resource", name="scrap"}) do
+		
+		local inf_ore = surface.create_entity{name="vault-scrap", position=ore_tile.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
+		inf_ore.amount = ore_tile.amount
+		inf_ore.initial_amount = ore_tile.amount
+		
+		ore_tile.destroy()
+	end
+	
+	local r = circ_r + g.max_drill_radius
+	local area = {{position.x-r, position.y-r},
+	              {position.x+r, position.y+r}}
+	for _,drill in pairs(surface.find_entities_filtered{area=area, type="mining-drill"}) do
+		drill.update_connections()
+	end
 end
 
 -- experimental way of spawning vaults in rare case where vault island is missing its ruin

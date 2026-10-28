@@ -7,7 +7,7 @@ data:extend({
 		localised_name = "Vault Defense radius",
 		localised_description = "",
 		setting_type = "runtime-global",
-		default_value = 60,
+		default_value = 55,
 	},
 	{
 		type = "double-setting",

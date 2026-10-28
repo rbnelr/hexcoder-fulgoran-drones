@@ -40,9 +40,9 @@ g.DRONE_CORPSE = {
 	["fulgoran-destroyer" ] = "destroyer-remnant",
 }
 g.DRONE_RESOURCE = {
-	["fulgoran-defender"  ] = "resource-dead-defender",
-	["fulgoran-distractor"] = "resource-dead-distractor",
-	["fulgoran-destroyer" ] = "resource-dead-destroyer",
+	["fulgoran-defender"  ] = "dead-defender",
+	["fulgoran-distractor"] = "dead-distractor",
+	["fulgoran-destroyer" ] = "dead-destroyer",
 }
 
 -- restrict buildings being attacked to drills, assemblers and military targets, leave inserters, trains, roboports etc alone,
@@ -80,6 +80,17 @@ g.BOT_FLOAT_HEIGHT = 0.9 -- bots are rendererd higher than their actual y positi
 g.VAULT_SPAWN_RADIUS = 3.75
 g.ORE_POLL_PERIOD = 60*10
 g.REPAIR_POLL_LIMIT = 8 -- max per tick
+
+-- This is super dodgy, if there are modded drills with high radius we may miss to update them (they won't mine the newly added bot resource)
+g.max_drill_radius = 0
+if prototypes then
+	for _,drill in pairs(prototypes.get_entity_filtered{{filter="type", type="mining-drill"}}) do
+		for quality,_ in pairs(prototypes.quality) do
+			local radius = drill.get_mining_drill_radius(quality)
+			if radius > g.max_drill_radius then g.max_drill_radius = radius end
+		end
+	end
+end
 
 -- vaults missing from not being generated despite being on an ore island
 --g.TRY_SPAWN_MISSING_VAULTS = false
@@ -180,9 +191,9 @@ local meld = require("__core__.lualib.meld")
 ---@param values string[]
 function g.meld_append_unique(values)
 	local meld = require("__core__.lualib.meld")
-	return { marker = meld.control_marker, op = "append_unique", data = values }
+	return { marker = meld.control_marker, op = "append_unique", data = values } ---@diagnostic disable-line
 end
-meld.control_handlers.append_unique = function(target, k, v)
+meld.control_handlers.append_unique = function(target, k, v) ---@diagnostic disable-line
 	local list = target[k] or {}
 	local existing_values = {}
 	for _, value in pairs(list) do
