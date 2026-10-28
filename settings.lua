@@ -82,4 +82,20 @@ data:extend({
 		setting_type = "startup",
 		default_value = false,
 	},
+	{
+		type = "bool-setting",
+		name = MOD_NAME.."-inf-scrap",
+		localised_name = "Infinite vault scrap",
+		localised_description = "Make scrap around vault ruins a infinite resource like crude oil.",
+		setting_type = "startup",
+		default_value = true,
+	},
+	{
+		type = "bool-setting",
+		name = MOD_NAME.."-dead-bot-resource",
+		localised_name = "Harvestable drones",
+		localised_description = "Dead enemy drones can be mined and recycled for valuable ingredients like batteries and supercapacitors.\nAlso changes player combat robot recipes.",
+		setting_type = "startup",
+		default_value = true,
+	},
 })

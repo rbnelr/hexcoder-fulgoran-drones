@@ -47,7 +47,7 @@ end
 ---@param delay number
 ---@param duration number
 function Vault:queue_spawn_drones(bot_type, count, delay, duration)
-	local name = "hexcoder-"..bot_type.."-emerge"
+	local name = g.EMERGE_PARTICLES[bot_type]
 	for i = 1,count do
 		--local id = self.next_bot_id ---@cast id -nil
 		--self.next_bot_id = id + 1
@@ -116,7 +116,6 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 		-- set force again, already set on projectile and _should_ have spawned bot with correct force, but does not
 		-- force is neutral for some reason, possibly because source==vault (simple-entity) can't actually have a force?
 		bot.force = g.DRONE_FORCE
-		--bot.color = {1,0,0} -- individual bot tinting doesn't work?
 		
 		local variation = 1.0 - math.random()*0.2
 		bot.time_to_live = bot.time_to_live * variation
@@ -157,6 +156,10 @@ function Vault:stop_wave_and_kill_bots(drop_loot)
 	self.active_wave_bots = {}
 end
 
+local function round(x)
+	return math.floor(x+0.5)
+end
+
 ---@param size number?
 ---@param freq number?
 ---@param apply_evo boolean?
@@ -178,9 +181,9 @@ function Vault:spawn_wave(size, freq, apply_evo)
 	local var2 = 1 + (math.random()*2-1) * 0.3
 	local var3 = 1 + (math.random()*2-1) * 0.3
 	
-	local s1 = size * var1
-	local s2 = size * var2
-	local s3 = size * var3
+	local s1 = math.max(size * var1, 0)
+	local s2 = math.max(size * var2 - 0.1, 0)
+	local s3 = math.max(size * var3 - 0.3, 0)
 	
 	-- size 4 spawns 4x the bots over 2x the time (2x the rate)
 	-- TODO: could also intentially cluster more around the start?
@@ -196,9 +199,9 @@ function Vault:spawn_wave(size, freq, apply_evo)
 	-- probably want 1-2 distractors and 0 or 1 destroyer even on minimum size
 	
 	-- distractors spawn first, other types delayed
-	self:queue_spawn_drones("defender", 50*s1, delay+1, 15*dur1)
-	self:queue_spawn_drones("distractor", 15*s2, delay+0, 9*dur2)
-	self:queue_spawn_drones("destroyer", 20*s3, delay+2.5, 10*dur3)
+	self:queue_spawn_drones("fulgoran-defender", round(30*s1), delay+1, 15*dur1)
+	self:queue_spawn_drones("fulgoran-distractor", round(15*s2), delay+0, 9*dur2)
+	self:queue_spawn_drones("fulgoran-destroyer", round(20*s3), delay+2.5, 10*dur3)
 	
 	--game.print(serpent.block{ evo=evo, size=size, freq=freq })
 	
@@ -245,7 +248,7 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	local max_time       = settings.global[g.MOD_NAME.."-wave-max-time"].value * variation
 	-- use a second rng to make size and frequency non-correlated
 	local wave_size      = settings.global[g.MOD_NAME.."-wave-size"].value * variation2
-	local min_size = 0.3
+	local min_size = 0.1
 	local max_size = 10
 	
 	local mining_rate = mined_ore / math.max(time_since_last, 0.01)
