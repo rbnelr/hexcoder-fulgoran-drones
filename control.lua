@@ -137,7 +137,7 @@ for _, name in pairs({
 }) do
 	script.on_event(name, function(event)
 		init()
-		local entity = event.entity or event.destination --[[@as LuaEntity]]
+		local entity = event.entity or event.destination --[[@as LuaEntity]] ---@diagnostic disable-line
 		if entity.type == "simple-entity" then
 			-- can't actually be built in game, but still do generic built events
 			if entity.name == g.VAULT_NAME then
@@ -171,11 +171,11 @@ local HARVEST_BOTS = settings.startup[g.MOD_NAME.."-dead-bot-resource"].value
 if HARVEST_BOTS then
 	-- only triggers for hostile prototypes
 	script.on_event(g.MOD_NAME.."-on-create-combat-bot-remnant", function(event)
-		local surface = game.get_surface(event.surface_index)
-		if surface.name == "fulgora" then
+		local surface = game.get_surface(event.surface_index) ---@diagnostic disable-line
+		if surface and surface.name == "fulgora" then
 			init()
 			
-			dead_bots.add_dead_bot_resource(surface, event.target_position, g.DRONE_RESOURCE[event.effect_id], 1)
+			dead_bots.add_dead_bot_resource(surface, event.target_position, g.DRONE_RESOURCE[event.effect_id], 1) ---@diagnostic disable-line
 			-- could selectively spawn normal corpse here, but not needed right now
 		end
 	end)
@@ -250,10 +250,14 @@ script.on_event(defines.events.on_tick, function(event)
 	
 	dmg.on_tick(event)
 	
+	local update_alerts = event.tick % 30 == 0
+	
 	--for id,v in pairs(storage.vaults) do
 	for id,v in pairs(storage.active_vaults) do
 		if v.entity.valid then -- and v:wave_active()
-			v:update_alert()
+			if update_alerts then
+				v:update_alert()
+			end
 			v:update_emerging()
 			
 			movement.update(v)
@@ -332,11 +336,11 @@ if g.DEBUG then
 		
 		local args = command.parameter and string.gmatch(command.parameter, "[^%s]+")
 		local type = args and args() or "destroyer"
-		local count = args and args()
-		count = count and tonumber(count) or 1
+		local countstr = args and args()
+		local count = countstr and tonumber(countstr) or 1
 		
 		-- vault for testing
-		local player = game.get_player(command.player_index)
+		local player = game.get_player(command.player_index) ---@cast player -nil
 		
 		local res_name = g.DRONE_RESOURCE["fulgoran-"..type]
 		dead_bots.add_dead_bot_resource(player.surface, player.position, res_name, count)

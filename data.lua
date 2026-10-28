@@ -152,6 +152,7 @@ if HARVEST_BOTS then
 		{-0.87*0.7, -0.5*0.7 } -- 0.87 ~= sin(120)   -0.5 ~= cos(120)
 	} -- was {{-0.7, -0.7},{-0.7, 0.7},{0.7, -0.7},{0.7, 0.7},{0, 0}} ie. X
 	meld(data.raw["recipe"]["destroyer-capsule"], {
+		energy_required = 18,
 		ingredients = meld.overwrite{
 			{ type="item", name="steel-plate", amount=4 },
 			{ type="item", name="processing-unit", amount=1 },
@@ -220,9 +221,13 @@ if HARVEST_BOTS then
 		
 		local item = table.deepcopy(capsule)
 		meld(item, {
-			name = "dead-"..name.."-capsule",
+			--name = "dead-"..name.."-capsule",
+			name = "dead-"..name,
 			type = "item",
 			icon = wreck_icon,
+			-- item is not craftable and has no autoplace, so maybe game thinks it's not obtainable, so does not show filter or signals
+			-- and shows as red in factoriopedia, this fixes that
+			flags = meld.overwrite{ "always-show" },
 			--subgroup = corpse.subgroup,
 			--order = capsule.order,
 			subgroup = "fulgora-processes",
@@ -235,7 +240,7 @@ if HARVEST_BOTS then
 		local resource = table.deepcopy(data.raw["resource"]["scrap"])
 		meld(resource, {
 			--type = "resource",
-			name = "resource-dead-"..name,
+			name = "dead-"..name,
 			icon = wreck_icon,
 			--flags = {"placeable-neutral"},
 			
@@ -323,9 +328,18 @@ for _, name in pairs({"defender", "distractor", "destroyer"}) do
 	hostile_bot.name = "fulgoran-"..hostile_bot.name
 	hostile_bot.localised_name = {"", {"entity-name."..name}, " (Fulgoran)"}
 	-- If seperate stats, then don't hide?
-	hostile_bot.hidden = true
-	hostile_bot.hidden_in_factoriopedia = true
-	hostile_bot.factoriopedia_alternative = name
+	-- needs to be visible for circuit signals
+	hostile_bot.subgroup = "enemies"
+	hostile_bot.icons = {
+		{ icon = hostile_bot.icon,
+			icon_size = 64, scale = .5 },
+		{ icon = "__base__/graphics/icons/signal/signal-skull.png",
+			icon_size = 64, scale = .25, shift = {10, 11} },
+	}
+	hostile_bot.icon = nil
+	--hostile_bot.hidden = true
+	--hostile_bot.hidden_in_factoriopedia = true
+	--hostile_bot.factoriopedia_alternative = name
 	
 	if HARVEST_BOTS then
 		local dying_trigger = hostile_bot.dying_trigger_effect

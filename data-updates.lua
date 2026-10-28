@@ -53,22 +53,24 @@ local HARVEST_BOTS = settings.startup[g.MOD_NAME.."-dead-bot-resource"].value
 if HARVEST_BOTS then
 	for _, name in pairs({"defender", "distractor", "destroyer"}) do
 		local real_recyc = data.raw["recipe"][name.."-capsule-recycling"]
-		local auto_recyc = data.raw["recipe"]["dead-"..name.."-capsule-recycling"]
-		data.raw["recipe"]["item-dead-"..name.."-recycling"] = nil
+		local auto_recyc = data.raw["recipe"]["dead-"..name.."-recycling"]
 		
-		local dead_recyc = table.deepcopy(real_recyc)
-		meld(dead_recyc, {
+		local dead_recyc = meld(table.deepcopy(real_recyc), {
 			name = auto_recyc.name,
-			ingredients = meld.overwrite{{ type="item", name="dead-"..name.."-capsule", amount=1 }},
+			-- item to recycle is not craftable and has no autoplace, so maybe game thinks it's not obtainable, so does not show filter or signals
+			-- and shows as red in factoriopedia, this fixes that
+			flags = meld.overwrite{ "always-show" },
+			ingredients = meld.overwrite{{ type="item", name="dead-"..name, amount=1 }},
 			icons = auto_recyc.icons,
 			localised_name = auto_recyc.localised_name,
+			enabled = true,
 		})
 		for _,v in pairs(dead_recyc.results) do
-			if v.name:match("-capsule") then
-				v.name = "dead-"..v.name
+			if v.name:find("-capsule") then
+				v.name = "dead-"..v.name:gsub("-capsule", "")
 			end
 		end
-		data:extend{ dead_recyc }
+		data.raw["recipe"]["dead-"..name.."-recycling"] = dead_recyc
 	end
 end
 
@@ -101,6 +103,9 @@ if settings.startup[g.MOD_NAME.."-inf-scrap"].value then
 			--		amount_max = 4, -- avg 2.5
 			--	}}
 			--},
+			minable = {
+				mining_time = 1.25, -- was 0.5
+			},
 			infinite = true,
 			minimum = 16000, -- min 20%
 			normal =  80000, -- fulgora vault scrap tiles seem to average around 100k -> that would be 100% yield
@@ -119,26 +124,27 @@ if settings.startup[g.MOD_NAME.."-nerf-turret-turn"].value then
 	data.raw["electric-turret"]["laser-turret"].rotation_speed = 0.007 -- was 0.01   0.004
 end
 
-for _,planet in pairs{"vulcanus", "fulgora", "gleba", "aquilo"} do
-	data:extend{{
-		type = "item-group",
-		name = planet.."-group",
-		localised_name = {"", {"space-location-name."..planet}},
-		localised_description = {"", {"space-location-description."..planet}},
-		icon = data.raw["planet"][planet].icon,
-		--order = data.raw["item-group"]["intermediate-products"].order.."-b[fulgora]",
-		order = data.raw["item-group"]["combat"].order.."-a[planets]",
-		order_in_recipe = data.raw["item-group"]["intermediate-products"].order_in_recipe,
-	}}
-end
-
-data.raw["item-subgroup"]["vulcanus-processes"].group = "vulcanus-group"
-data.raw["item-subgroup"]["fulgora-processes"].group = "fulgora-group"
-data.raw["item-subgroup"]["agriculture-processes"].group = "gleba-group"
-data.raw["item-subgroup"]["agriculture-products"].group = "gleba-group"
-data.raw["item-subgroup"]["aquilo-processes"].group = "aquilo-group"
-
-data.raw["item-subgroup"]["fluid-recipes"].group = "fluids"
+-- TODO: do this in my overhaul?
+--for _,planet in pairs{"vulcanus", "fulgora", "gleba", "aquilo"} do
+--	data:extend{{
+--		type = "item-group",
+--		name = planet.."-group",
+--		localised_name = {"", {"space-location-name."..planet}},
+--		localised_description = {"", {"space-location-description."..planet}},
+--		icon = data.raw["planet"][planet].icon,
+--		--order = data.raw["item-group"]["intermediate-products"].order.."-b[fulgora]",
+--		order = data.raw["item-group"]["combat"].order.."-a[planets]",
+--		order_in_recipe = data.raw["item-group"]["intermediate-products"].order_in_recipe,
+--	}}
+--end
+--
+--data.raw["item-subgroup"]["vulcanus-processes"].group = "vulcanus-group"
+--data.raw["item-subgroup"]["fulgora-processes"].group = "fulgora-group"
+--data.raw["item-subgroup"]["agriculture-processes"].group = "gleba-group"
+--data.raw["item-subgroup"]["agriculture-products"].group = "gleba-group"
+--data.raw["item-subgroup"]["aquilo-processes"].group = "aquilo-group"
+--
+--data.raw["item-subgroup"]["fluid-recipes"].group = "fluids"
 
 --for _,type in pairs{"entity","item","recipe"} do
 --	for name,proto in pairs(data.raw[type]) do

@@ -2,15 +2,6 @@ local g = require("common")
 ---@class Vault
 local Vault = require("vault")
 
--- This is super dodgy, if there are modded drills with high radius we may miss to update them (they won't mine the newly added bot resource)
-local max_drill_radius = 0
-for _,drill in pairs(prototypes.get_entity_filtered{{filter="type", type="mining-drill"}}) do
-	for quality,_ in pairs(prototypes.quality) do
-		local radius = drill.get_mining_drill_radius(quality)
-		if radius > max_drill_radius then max_drill_radius = radius end
-	end
-end
-
 local dead_bots = {}
 
 -- TODO: quality support, I think I'll have to add quality variants manually
@@ -42,7 +33,7 @@ function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
 		if resource then
 			resource.amount = count
 			
-			local r = max_drill_radius -- square radius!
+			local r = g.max_drill_radius -- square radius!
 			local area = {{position.x-r, position.y-r},
 			              {position.x+r, position.y+r}}
 			-- this includes collision box of drill, not really what we want, but I would have added 1 to radius to make sure anyway

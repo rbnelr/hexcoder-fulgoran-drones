@@ -6,6 +6,7 @@ local dmg = require("disable_on_damage")
 ---@field id obj_id
 ---@field near_wall LuaEntity?
 ---@field targets LuaEntity[] -- NOTE: entities can end up in two vaults target list!
+---@field has_targets boolean -- has any targets (=vulnerable player entities)
 ---@field waypoints LuaEntity[]
 ---@field wave_rng number?
 ---@field wave_rng2 number?
@@ -59,6 +60,10 @@ function Vault.from_entity(vault)
 	-- enemy structures cannot be mined, but decoratives like ruins can
 	vault.force = g.DRONE_FORCE -- vault (simple-entity) can't actually have a force?
 	vault.destructible = false -- can't damage
+	
+	if settings.startup[g.MOD_NAME.."-inf-scrap"].value then
+		v:make_ore_infinite() -- TODO: do where?
+	end
 	
 	v.near_wall = vault.surface.find_entity(g.VAULT_NEAR_WALL_NAME, vault.position)
 	if v.near_wall == nil then
@@ -135,6 +140,7 @@ end
 function Vault:prepare()
 	-- build new list, no cleanup needed for old one
 	self.targets = {}
+	self.has_targets = false
 	
 	local R = g.VAULT_DEFENSE_RADIUS()
 	local p = self.entity.position
@@ -149,22 +155,12 @@ function Vault:prepare()
 				e.is_military_target = true
 				self.targets[e.unit_number] = e
 			end
+			
+			self.has_targets = true
 		end
 	end
 	
 	dmg.fix_all_icons()
-end
-
-function Vault:update_alert()
-	local force = game.forces["player"]
-	local cpos = { self.entity.position.x / 32, self.entity.position.y / 32 }
-	if force.is_chunk_visible(self.entity.surface, cpos) then
-		force.add_custom_alert(self.entity,
-			{type="entity", name=g.VAULT_NAME},
-			{"alert.active-attack",
-			string.format("%.2f", self.wave_size or -1),
-			string.format("%.2f", self.wave_freq or -1)}, true)
-	end
 end
 
 function Vault:start_wave(size, freq)
@@ -173,17 +169,14 @@ function Vault:start_wave(size, freq)
 	-- create new waypoints every attack, takes into account radius changes and ends up more random
 	self:make_waypoints()
 	
-	-- 2.1 only
-	game.forces["player"].add_custom_alert(self.entity,
-		{type="entity", name=g.VAULT_NAME},
-		{"alert.active-attack", string.format("%.2f", size), string.format("%.2f", freq)}, true)
-	
 	self.wave_start_tick = game.tick
 	self.wave_size = size
 	self.wave_freq = freq
 	self.wave_bots_count = {}
 	
 	storage.active_vaults[self.id] = self
+	
+	self:update_alert()
 end
 -- apparently I didn't make this actually stop 
 function Vault:end_wave()
@@ -193,14 +186,37 @@ function Vault:end_wave()
 	self.wave_rng2 = nil
 	self.wave_end_tick = game.tick
 	
-	--if self.entity.valid then
-	--	game.forces["player"].remove_alert{entity=self.entity}
-	--end
-	
 	-- reduce entity count, waypoints only while wave active
 	self:delete_waypoints()
 	
 	storage.active_vaults[self.id] = nil
+	
+	self:remove_alert()
+end
+
+-- do alerts not stay until deleted?
+-- if so need to refresh via this
+function Vault:update_alert()
+	local force = game.forces["player"]
+	
+	--local radar_visible = force.is_chunk_visible(self.entity.surface, { self.entity.position.x / 32, self.entity.position.y / 32 })
+	local built_nearby = self.has_targets
+	
+	-- radar_visible or built_nearby ?
+	if built_nearby or g.DEBUG then -- radar_visible and   or g.DEBUG
+		-- 2.1 only
+		force.add_custom_alert(self.entity,
+			{type="entity", name=g.VAULT_NAME},
+			{"alert.active-attack",
+			 string.format("%.0f", self.wave_size*100 or -1),
+			-- string.format("%.2f", self.wave_freq or -1)
+			}, true)
+	end
+end
+function Vault:remove_alert()
+	if self.entity.valid then
+		game.forces["player"].remove_alert{entity=self.entity}
+	end
 end
 
 return Vault
