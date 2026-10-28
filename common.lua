@@ -13,20 +13,36 @@ g.VAULT_NAME = "fulgoran-ruin-vault"
 g.VAULT_NEAR_WALL_NAME = "fulgoran-ruin-vault-near-wall"
 
 g.DRONES = {
-	"defender",
-	"distractor",
-	"destroyer",
+	"fulgoran-defender",
+	"fulgoran-distractor",
+	"fulgoran-destroyer",
 }
 g.IS_DRONE = {
-	["defender"] = true,
-	["distractor"] = true,
-	["destroyer"] = true,
+	["fulgoran-defender"] = true,
+	["fulgoran-distractor"] = true,
+	["fulgoran-destroyer"] = true,
+}
+
+g.EMERGE_PARTICLES = {
+	["fulgoran-defender"  ] = "hexcoder-defender-emerge",
+	["fulgoran-distractor"] = "hexcoder-distractor-emerge",
+	["fulgoran-destroyer" ] = "hexcoder-destroyer-emerge",
 }
 
 g.DRONE_TINT = {
-	["defender"  ] = {0.29, 0.64, 0.82}, -- TODO: check these tints
-	["distractor"] = {0.57, 0.78, 0.21},
-	["destroyer" ] = {0.85, 0.25, 0.14},
+	["fulgoran-defender"  ] = {0.29, 0.64, 0.82}, -- TODO: check these tints
+	["fulgoran-distractor"] = {0.57, 0.78, 0.21},
+	["fulgoran-destroyer" ] = {0.85, 0.25, 0.14},
+}
+g.DRONE_CORPSE = {
+	["fulgoran-defender"  ] = "defender-remnant",
+	["fulgoran-distractor"] = "distractor-remnant",
+	["fulgoran-destroyer" ] = "destroyer-remnant",
+}
+g.DRONE_RESOURCE = {
+	["fulgoran-defender"  ] = "resource-dead-defender",
+	["fulgoran-distractor"] = "resource-dead-distractor",
+	["fulgoran-destroyer" ] = "resource-dead-destroyer",
 }
 
 -- restrict buildings being attacked to drills, assemblers and military targets, leave inserters, trains, roboports etc alone,

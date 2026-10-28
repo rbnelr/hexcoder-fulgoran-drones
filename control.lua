@@ -15,8 +15,7 @@ function init()
 	-- create enemy drone force
 	if game.forces[g.DRONE_FORCE] == nil then
 		local force = game.create_force(g.DRONE_FORCE)
-		--force.custom_color = {255,215,0}
-		force.custom_color = {230,50,255}
+		force.custom_color = {230,50,255} -- now tinting individually via actual graphic tints
 		-- TODO: can give force robot livetime bonus
 	end
 	
@@ -55,7 +54,12 @@ end
 local function reset()
 	local surface = game.get_surface("fulgora")
 	if surface then
+		-- delete neutral entities
 		for _,e in pairs(surface.find_entities_filtered{name={g.VAULT_NEAR_WALL_NAME,g.WAYPOINT}}) do
+			e.destroy()
+		end
+		-- delete left over hostile drones
+		for _,e in pairs(surface.find_entities_filtered{force=g.DRONE_FORCE}) do
 			e.destroy()
 		end
 	end
@@ -162,41 +166,31 @@ end
 --	--game.remove_alert{type=defines.alert_type.entity_under_attack, surface="fulgora"}
 --end
 
--- could also trigger this via bots dying-particle trigger event?
--- any reason not to just react to on_entity_died?
------@param event EventData.on_entity_died
-local function on_drone_died(event)
-	init()
-	
-	local drone = event.entity or event.robot
-	--if drone.force == g.DRONE_FORCE and g.IS_DRONE[drone.name] then
-	if drone and g.IS_DRONE[drone.name] then
-		-- TODO: position may be of but but not of corpse, would like to get corpse position, use dying-particle trigger after all?
-		dead_bots.add_dead_bot_resource(drone.surface, drone.position, drone.name, 1)
-	end
+local HARVEST_BOTS = settings.startup[g.MOD_NAME.."-dead-bot-resource"].value
+
+if HARVEST_BOTS then
+	-- only triggers for hostile prototypes
+	script.on_event(g.MOD_NAME.."-on-create-combat-bot-remnant", function(event)
+		local surface = game.get_surface(event.surface_index)
+		if surface.name == "fulgora" then
+			init()
+			
+			dead_bots.add_dead_bot_resource(surface, event.target_position, g.DRONE_RESOURCE[event.effect_id], 1)
+			-- could selectively spawn normal corpse here, but not needed right now
+		end
+	end)
 end
 
-local died_filter = g.merge(dmg.event_filter, {
-	{filter="type", type="combat-robot"},
-	{filter="name", name=g.DRONES[1], mode="and"},
-	{filter="type", type="combat-robot"},
-	{filter="name", name=g.DRONES[2], mode="and"},
-	{filter="type", type="combat-robot"},
-	{filter="name", name=g.DRONES[3], mode="and"}
-})
 script.on_event(defines.events.on_entity_died, function(event)
 	if event.entity.surface.name == "fulgora" then
-		if event.entity.type == "combat-robot" then
-			on_drone_died(event) -- combat robot got killed (not if expired due to time!)
-		elseif g.IS_TARGET[event.entity.name] then
+		if g.IS_TARGET[event.entity.name] then
 			-- why am I calling this again? I think to reset non-military state so that revived entity will actually get attacked
 			-- currently entities are prevented from dying to enemies (but player could kill them)
 			dmg.on_entity_event(event.entity)
 		end
 		--remove_alert(event)
 	end
-end, died_filter)
-script.on_event(defines.events.on_combat_robot_expired, on_drone_died)
+end, dmg.event_filter)
 
 --script.on_event(defines.events.on_post_entity_died, function(event)
 --	local surf = game.surfaces["fulgora"]
@@ -344,7 +338,8 @@ if g.DEBUG then
 		-- vault for testing
 		local player = game.get_player(command.player_index)
 		
-		dead_bots.add_dead_bot_resource(player.surface, player.position, type, count)
+		local res_name = g.DRONE_RESOURCE["fulgoran-"..type]
+		dead_bots.add_dead_bot_resource(player.surface, player.position, res_name, count)
 	end)
 end
 

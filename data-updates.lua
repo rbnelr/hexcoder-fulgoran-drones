@@ -49,70 +49,68 @@ data:extend{
 	}
 }
 
-if settings.startup[g.MOD_NAME.."-buff-drones"].value then
-	-- buff HP and resistances by a lot, otherwise very few turret completely defeat even huge swarms
-	-- lengthen time to live
-	-- adjust friction and max_speed to prevent drones moving at unlimited speeds, make movements a bit more visually followable
-	-- separation_range/range_from_player adjust distance from target and each other
+local HARVEST_BOTS = settings.startup[g.MOD_NAME.."-dead-bot-resource"].value
+if HARVEST_BOTS then
+	for _, name in pairs({"defender", "distractor", "destroyer"}) do
+		local real_recyc = data.raw["recipe"][name.."-capsule-recycling"]
+		local auto_recyc = data.raw["recipe"]["dead-"..name.."-capsule-recycling"]
+		data.raw["recipe"]["item-dead-"..name.."-recycling"] = nil
+		
+		local dead_recyc = table.deepcopy(real_recyc)
+		meld(dead_recyc, {
+			name = auto_recyc.name,
+			ingredients = meld.overwrite{{ type="item", name="dead-"..name.."-capsule", amount=1 }},
+			icons = auto_recyc.icons,
+			localised_name = auto_recyc.localised_name,
+		})
+		for _,v in pairs(dead_recyc.results) do
+			if v.name:match("-capsule") then
+				v.name = "dead-"..v.name
+			end
+		end
+		data:extend{ dead_recyc }
+	end
+end
 
-	meld(data.raw["combat-robot"]["defender"], {
-		resistances = meld.overwrite{
-			{ type = "acid",     percent = 50 }, -- was 80 eff HP  400
-			{ type = "fire",     percent = 90 }, -- was 95 eff HP 2000
-			{ type = "physical", percent = 70 }, -- was 0  eff HP  667
-			{ type = "laser",    percent = 80 }, -- was 0  eff HP 1000
-			{ type = "electric", percent = 50 }, -- was 0  eff HP  400
-		},
-		max_health = 200, -- was 60
-		--time_to_live = 65*60, -- was 45sec
-		
-		separation_range = 2,
-		range_from_player = 5,
-		--friction = 0.016,
-		max_speed = 0.3,
-		selection_priority = 55, -- make selectable over buildings, was 35, normal buildings are 50, ore is 40
-		-- can spawn item like this, could probably trigger script too, to add scrap resource, but I don't actually want that anymore
-		--loot =
-		--{
-		--	{
-		--		type = "item",
-		--		name = "stone",
-		--		amount_min = 2,
-		--		amount_max = 10,
-		--		independent_probability = 1
-		--	}
-		--}
-	})
-	meld(data.raw["combat-robot"]["distractor"], {
-		resistances = meld.overwrite{
-			{ type = "acid",     percent = 50 }, -- was 80               eff HP  1100
-			{ type = "fire",     percent = 90 }, -- was 95               eff HP  5500
-			{ type = "physical", percent = 70 }, -- was 0                eff HP  1833
-			{ type = "laser",    percent = 80, decrease = 5 }, -- was 0  eff HP ~2750
-			{ type = "electric", percent = 50 }, -- was 0                eff HP  1100
-		},
-		max_health = 550, -- was 180
-		--time_to_live = 125*60, -- was 90sec
-		selection_priority = 55, -- was 35, normal buildings are 50, ore is 40
-	})
-	meld(data.raw["combat-robot"]["destroyer"], {
-		resistances = meld.overwrite{
-			{ type = "acid",     percent = 50 }, -- was 80                eff HP   800
-			{ type = "fire",     percent = 90 }, -- was 95                eff HP  4000
-			{ type = "physical", percent = 85, decrease = 5 }, -- was 0   eff HP ~2667
-			{ type = "laser",    percent = 80, decrease = 3 }, -- was 0   eff HP ~2000
-			{ type = "electric", percent = 90, decrease = 20 }, -- was 0  eff HP ~4000
-		},
-		max_health = 400, -- was 60, now same as a turret
-		--time_to_live = 120*60, -- was 120sec
-		time_to_live = 70*60, -- shorter than distractors, distractors feel like they should last longest
-		
-		separation_range = 3,
-		range_from_player = 4,
-		friction = 0.020,
-		max_speed = 0.2,
-		selection_priority = 55, -- was 35, normal buildings are 50, ore is 40
-	})
+if settings.startup[g.MOD_NAME.."-inf-scrap"].value then
+	-- TODO: inf ores?
+	-- how to handle ores on non-vault islands? add infinine ore? should I manually replace vault ore?
+	data:extend{
+		meld(table.deepcopy(data.raw["resource"]["scrap"]), {
+			name = "vault-scrap",
+			localised_name = {"", {"entity-name.scrap"}, " (Vault)"},
+			order = "a[scrap]-a[scrap]-b[inf-vault]",
+			--hidden = true,
+			--hidden_from_player_crafting = true,
+			--hidden_in_factoriopedia = true,
+			--factoriopedia_alternative = "scrap",
+			icon = meld.delete(),
+			icons = {
+				{ icon = data.raw["resource"]["scrap"].icon,
+				  icon_size = 64, scale = .5 },
+				{ icon = data.raw["simple-entity"][g.VAULT_NAME].icon,
+				  icon_size = 64, scale = .5, shift = {0, 12} },
+			},
+			--minable = {
+			--	mining_time = 1.25, -- was 0.5
+			--	result = meld.delete(),
+			--	results = {{
+			--		type="item",
+			--		name = "scrap",
+			--		amount_min = 1,
+			--		amount_max = 4, -- avg 2.5
+			--	}}
+			--},
+			infinite = true,
+			minimum = 16000, -- min 20%
+			normal =  80000, -- fulgora vault scrap tiles seem to average around 100k -> that would be 100% yield
+			-- ~20M vault patches
+			-- 20 big miners => 1M at 5/s = 55h to deplete if min was 0
+			-- at depletion_amount=10  => ~5h
+			--infinite_depletion_amount = 2.5 * 10 -- average result then 10x
+			infinite_depletion_amount = 10
+		})
+	}
 end
 
 if settings.startup[g.MOD_NAME.."-nerf-turret-turn"].value then
@@ -121,62 +119,34 @@ if settings.startup[g.MOD_NAME.."-nerf-turret-turn"].value then
 	data.raw["electric-turret"]["laser-turret"].rotation_speed = 0.007 -- was 0.01   0.004
 end
 
-meld(data.raw["combat-robot"]["distractor"], {
-	resistances = meld.overwrite{
-		{ type = "acid",     percent = 50 }, -- was 80               eff HP  1100
-		{ type = "fire",     percent = 90 }, -- was 95               eff HP  5500
-		{ type = "physical", percent = 70 }, -- was 0                eff HP  1833
-		{ type = "laser",    percent = 80, decrease = 5 }, -- was 0  eff HP ~2750
-		{ type = "electric", percent = 50 }, -- was 0                eff HP  1100
-	},
-	max_health = 550, -- was 180
-	--time_to_live = 125*60, -- was 90sec
-	selection_priority = 55, -- was 35, normal buildings are 50, ore is 40
-})
-
-for _, name in pairs({"defender", "distractor", "destroyer"}) do
-	local real_recyc = data.raw["recipe"][name.."-capsule-recycling"]
-	local auto_recyc = data.raw["recipe"]["dead-"..name.."-capsule-recycling"]
-	data.raw["recipe"]["item-dead-"..name.."-recycling"] = nil
-	
-	local dead_recyc = table.deepcopy(real_recyc)
-	meld(dead_recyc, {
-		name = auto_recyc.name,
-		ingredients = meld.overwrite{{ type="item", name="dead-"..name.."-capsule", amount=1 }},
-		icons = auto_recyc.icons,
-		localised_name = auto_recyc.localised_name,
-	})
-	for _,v in pairs(dead_recyc.results) do
-		if v.name:match("-capsule") then
-			v.name = "dead-"..v.name
-		end
-	end
-	data:extend{ dead_recyc }
+for _,planet in pairs{"vulcanus", "fulgora", "gleba", "aquilo"} do
+	data:extend{{
+		type = "item-group",
+		name = planet.."-group",
+		localised_name = {"", {"space-location-name."..planet}},
+		localised_description = {"", {"space-location-description."..planet}},
+		icon = data.raw["planet"][planet].icon,
+		--order = data.raw["item-group"]["intermediate-products"].order.."-b[fulgora]",
+		order = data.raw["item-group"]["combat"].order.."-a[planets]",
+		order_in_recipe = data.raw["item-group"]["intermediate-products"].order_in_recipe,
+	}}
 end
 
--- TODO: inf ores?
--- how to handle ores on non-vault islands? add infinine ore? should I manually replace vault ore?
-local inf_ore = {
-	--minable = {
-	--	mining_time = 1.25, -- was 0.5
-	--	result = meld.delete(),
-	--	results = {{
-	--		type="item",
-	--		name = "scrap",
-	--		amount_min = 1,
-	--		amount_max = 4, -- avg 2.5
-	--	}}
-	--},
-	infinite = true,
-	minimum = 12000, -- min 20%
-	normal =  80000, -- fulgora vault scrap tiles seem to average around 100k -> that would be 100% yield
-	-- ~20M vault patches
-	-- 20 big miners => 1M at 5/s = 55h to deplete if min was 0
-	-- at depletion_amount=10  => ~5h
-	--infinite_depletion_amount = 2.5 * 10 -- average result then 10x
-	infinite_depletion_amount = 10 -- average result then 10x
-}
-meld(data.raw["resource"]["scrap"], inf_ore)
+data.raw["item-subgroup"]["vulcanus-processes"].group = "vulcanus-group"
+data.raw["item-subgroup"]["fulgora-processes"].group = "fulgora-group"
+data.raw["item-subgroup"]["agriculture-processes"].group = "gleba-group"
+data.raw["item-subgroup"]["agriculture-products"].group = "gleba-group"
+data.raw["item-subgroup"]["aquilo-processes"].group = "aquilo-group"
+
+data.raw["item-subgroup"]["fluid-recipes"].group = "fluids"
+
+--for _,type in pairs{"entity","item","recipe"} do
+--	for name,proto in pairs(data.raw[type]) do
+--		if proto.subsgroup_id == "fulgora-processes" then
+--			proto.group_id = "fulgora"
+--		end
+--	end
+--end
 
 -- try to fix the missing vaults
 -- bumping threshold can fix it, but it's not safe to bump by much without causing duplicate vaults!

@@ -114,7 +114,7 @@ function movement.update(vault)
 				end
 				
 				--local DBG_COL = {
-				--	["defender"] = {0,0,1}, ["distractor"] = {0,1,0}, ["destroyer"] = {1,0,0},
+				--	["fulgoran-defender"] = {0,0,1}, ["fulgoran-distractor"] = {0,1,0}, ["fulgoran-destroyer"] = {1,0,0},
 				--}
 				--rendering.draw_line{from=bot, to=bot.combat_robot_owner,
 				--	surface = bot.surface, width = 2, color = DBG_COL[bot.name], time_to_live=1}
