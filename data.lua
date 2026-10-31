@@ -328,7 +328,7 @@ for _, name in pairs({"defender", "distractor", "destroyer"}) do
 	hostile_bot.name = "fulgoran-"..hostile_bot.name
 	hostile_bot.localised_name = {"", {"entity-name."..name}, " (Fulgoran)"}
 	-- If seperate stats, then don't hide?
-	-- needs to be visible for circuit signals
+	-- needs to be visible for circuit signals, but now it's visible for follower robot count, can this be fixed?
 	hostile_bot.subgroup = "enemies"
 	hostile_bot.icons = {
 		{ icon = hostile_bot.icon,
