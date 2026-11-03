@@ -3,6 +3,7 @@ g.MOD_NAME = "hexcoder-fulgoran-drones"
 g.MOD_DIR = "__"..g.MOD_NAME.."__"
 
 g.DEBUG = settings.startup[g.MOD_NAME.."-debug"].value --[[@as boolean]]
+g.INF_SCRAP_ENABLED = settings.startup[g.MOD_NAME.."-inf-scrap"].value --[["@as boolean"]]
 
 ---@type ModStorage
 storage = storage
@@ -91,6 +92,8 @@ if prototypes then
 		end
 	end
 end
+
+g.SCRAP_TYPES = g.INF_SCRAP_ENABLED and {"scrap", "vault-scrap"} or "scrap"
 
 -- vaults missing from not being generated despite being on an ore island
 --g.TRY_SPAWN_MISSING_VAULTS = false

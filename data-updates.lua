@@ -74,7 +74,7 @@ if HARVEST_BOTS then
 	end
 end
 
-if settings.startup[g.MOD_NAME.."-inf-scrap"].value then
+if g.INF_SCRAP_ENABLED then
 	-- TODO: inf ores?
 	-- how to handle ores on non-vault islands? add infinine ore? should I manually replace vault ore?
 	data:extend{

@@ -114,7 +114,7 @@ function gui.update_info_gui_content(vault, gui)
 	local mined_since_last = (vault.wave_start_ore_amount or remain_ore) - remain_ore
 	local mined_total = (initial_ore or remain_ore) - remain_ore
 	if mined_since_last < 0 then mined_since_last = 0 end
-	if mined_total < 0 then mined_total = 0  vault.initial_ore_amount = vault:get_initial_ore() end
+	if mined_total < 0 then mined_total = 0  vault.initial_ore_amount = vault:get_initial_ore_count() end
 	
 	local mining_rate = mined_since_last / time_since_start
 	

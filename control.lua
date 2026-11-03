@@ -12,6 +12,7 @@ local gui = require("gui")
 
 -- 'somewhat lazy' init ideally called in every handler
 function init()
+
 	-- create enemy drone force
 	if game.forces[g.DRONE_FORCE] == nil then
 		local force = game.create_force(g.DRONE_FORCE)
@@ -34,6 +35,9 @@ function init()
 	if init then
 		local surface = game.get_surface("fulgora")
 		if surface then
+			Vault.restore_destroyed_vaults(surface, "all") -- can create a big lag, warn user or make user trigger it manually
+
+			-- This will convert ore to infinite
 			for _,e in pairs(surface.find_entities_filtered{name=g.VAULT_NAME}) do
 				Vault.from_entity(e)
 			end
@@ -214,9 +218,9 @@ script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_
 local function init_chunk(surface, area)
 	local vaults = surface.find_entities_filtered{name=g.VAULT_NAME, area=area}
 	if next(vaults) then
-		for _,e in pairs(surface.find_entities_filtered{name=g.VAULT_NAME, area=area}) do
+		for _,e in pairs(vaults) do
 			local vault = Vault.from_entity(e)
-			-- avoid lag from get_initial_ore() hack if not actually installing in running game
+			-- avoid lag from get_initial_ore_slow() hack if not actually installing in running game
 			-- so initial_ore is just current ore
 			vault.initial_ore_amount = vault:get_ore_remaining()
 		end
@@ -345,7 +349,56 @@ if g.DEBUG then
 		local res_name = g.DRONE_RESOURCE["fulgoran-"..type]
 		dead_bots.add_dead_bot_resource(player.surface, player.position, res_name, count)
 	end)
+
+	commands.add_command("fulg-respawn-vault",
+			"respawn missing vault ruin if it has been destroyed in the past\nchecks in a radius of 60 around the player, or in all chunks if 'all' is passed\nplayer will be moved away and player structures may clip but can still be deconstructed",
+			function(command)
+		init()
+
+		local all = command.parameter and command.parameter == "all"
+		
+		local player = game.get_player(command.player_index)
+		if all then
+			local fulgora = game.get_surface("fulgora")
+			if fulgora then
+				Vault.restore_destroyed_vaults(fulgora, "all")
+			end
+		elseif player then
+			Vault.restore_destroyed_vaults(player.surface, player.position, 60)
+		end
+	end)
 end
+
+-- TODO: not really working, or just mining rate that messes up?
+commands.add_command("fulg-modify-ore",
+		"mofify ore around hovered vault\npass finine/infine/keep to swap resource type (default keep)\npass a number between 0-100 to restore to X% of initial amount or no number to keep",
+		function(command)
+	init()
+	
+	local mode = "keep"
+	local amount = "keep"
+	
+	local args = command.parameter and string.gmatch(command.parameter, "[^%s]+") or {}
+	for arg in args do
+		local num = tonumber(arg)
+		if num then
+			amount = num/100
+		else
+			mode = arg
+		end
+	end
+	
+	local player = game.get_player(command.player_index) ---@cast player -nil
+	local sel = player.selected
+	if sel and sel.valid and sel.name == g.VAULT_NAME then
+		local vault = Vault.from_entity(sel)
+		if vault and Vault.from_entity(sel):modify_ore(mode, amount) == "success" then
+			player.print("ore modified")
+		end
+	else
+		player.print("need to hover a vault!")
+	end
+end)
 
 ---- Init
 
@@ -363,6 +416,7 @@ script.register_metatable("Vault", Vault)
 ---@field poll_prev unit_number?
 ---@field active_vaults table<obj_id, Vault>
 ---@field render_objs table<player_index, LuaRenderObject[]?>
+---@field last_used_fake_fulgora MapTick?
 
 ---@class Damaged
 ---@field entity LuaEntity
@@ -371,6 +425,7 @@ script.register_metatable("Vault", Vault)
 script.on_init(init)
 -- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
 script.on_configuration_changed(function(data)
+	local setting_changed = data.mod_startup_settings_changed
 	local changes = data.mod_changes[g.MOD_NAME]
 	if changes or g.DEBUG then
 		if g.DEBUG then -- dev reset
@@ -389,5 +444,15 @@ script.on_configuration_changed(function(data)
 		-- reset + init, kinda works, but may be arkward
 		reset()
 		init()
+		return
 	end
+	if setting_changed then
+		-- TODO: handle ore swapping?, but ore prototype already deleted
+		-- can do migrations be done on demand?
+		-- if not could also add ore prototype and make it hidden instead, so we can still swap it
+	end
+end)
+
+script.on_event(defines.events.on_runtime_mod_setting_changed, function(event)
+	-- TODO: anything to handler here?
 end)

@@ -61,8 +61,10 @@ function Vault.from_entity(vault)
 	vault.force = g.DRONE_FORCE -- vault (simple-entity) can't actually have a force?
 	vault.destructible = false -- can't damage
 	
-	if settings.startup[g.MOD_NAME.."-inf-scrap"].value then
-		v:make_ore_infinite() -- TODO: do where?
+	-- TODO: do somewhere else instead?
+	-- this will handle new installs with infinite option set
+	if g.INF_SCRAP_ENABLED then
+		v:modify_ore("infinite", "keep")
 	end
 	
 	v.near_wall = vault.surface.find_entity(g.VAULT_NEAR_WALL_NAME, vault.position)
