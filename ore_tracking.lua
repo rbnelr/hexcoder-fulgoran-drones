@@ -215,49 +215,85 @@ function Vault:get_ore_remaining()
 	return count
 end
 
+---@param source_event? string
+function Vault:reset_ore_count(source_event)
+	-- regular playthrough case, all vauls are created by map generator, do not trigger lags from fake_fulgora stuff
+	if source_event ~= "on_chunk_generated" then
+		self.initial_ore_amount = self:get_ore_remaining()
+	end
+	self.wave_start_ore_amount = nil
+end
+
 -- Changing the radius potentially changes total scanned ore
 -- Previously this may have worked since I only used it to trigger waves after x amount of mining
 -- For new mechanics we may want to handle radius changes (TODO: reset wave_start_ore_amount and try to determine new initial amount?)
----@param mode "finite"|"infinite"|"keep"
----@param amount number|"keep" -- restore to x percent or initial or keep
+---@param mode "finite"|"infinite"
+---@param restore number|"keep" -- restore to x percent or initial or keep
 ---@return string
-function Vault:modify_ore(mode, amount)
+function Vault:modify_ore(mode, restore)
 	local circ_r = g.VAULT_DEFENSE_RADIUS()
 	local position = self.entity.position
 	local surface = self.entity.surface
+	local from = {"scrap", "vault-scrap"}
+	local to = mode == "finite" and "scrap" or "vault-scrap"
 
-	if amount == "keep" then 
-		if mode == "keep" then return "success" end
-		
-		local from = mode == "finite" and "vault-scrap" or "scrap"
-		local to = mode == "finite" and "scrap" or "vault-scrap"
-		
-		local ore = surface.find_entities_filtered{position=position, radius=circ_r, type="resource", name=from}
-		for _,ore_tile in pairs(ore) do
-			local new_ore = surface.create_entity{name=to, position=ore_tile.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
-			new_ore.amount = ore_tile.amount
+	local minimum = prototypes.entity["vault-scrap"].minimum_resource_amount
+	local new_count = 0
+	local initial_count = 0
+	
+	-- get old ore before we add new
+	local old_ores = surface.find_entities_filtered{type="resource", name=from, position=position, radius=circ_r}
+	
+	if restore == "keep" then
+		-- a bit weird:
+		-- spawn new ore copied from newly generated fake fulgora, then only check old ore tiles for amount
+		-- do not iterate old_ore, since tiles may be depleted and infinite ores need their initial_amount set, which works best if accurate
+		for _,orig_ore in pairs(self:get_initial_ore_slow()) do
+			local new_ore = surface.create_entity{name=to, position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
+			local old_ore = surface.find_entities_filtered{name=from, position=orig_ore.position} -- check if get_closest(old_ores, ...) actually makes sense here
+			
+			local amount = old_ore and old_ore[1].amount or 0
+			local orig_amount = orig_ore.amount
+			
 			if to == "vault-scrap" then
-				new_ore.initial_amount = ore_tile.amount -- Technically would want get_initial_ore_slow() here too
+				if amount < minimum then amount = minimum end
+				new_ore.initial_amount = orig_amount
 			end
-			ore_tile.destroy()
+			new_ore.amount = amount
+
+			new_count = new_count + amount
+			initial_count = initial_count + orig_amount
 		end
 	else
-		local initial = self:get_initial_ore_slow()
-		local to = mode ~= "infinite" and "scrap" or "vault-scrap"
-		
-		local initial_count = 0
-		for _,ore_tile in pairs(initial) do
-			local new_ore = surface.create_entity{name=to, position=ore_tile.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
-			new_ore.amount = ore_tile.amount * amount
+		-- spawn new ore copied from newly generated fake fulgora
+		-- and simply multiply amount
+		for _,orig_ore in pairs(self:get_initial_ore_slow()) do
+			local new_ore = surface.create_entity{name=to, position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
+			
+			local orig_amount = orig_ore.amount
+			local amount = orig_amount * restore
+			
 			if to == "vault-scrap" then
-				new_ore.initial_amount = ore_tile.amount
+				-- enfore minimum for infinite ores (20% of each tile normal amount, Note: restore=20% is of mapgen amount, which is different)
+				if amount < minimum then amount = minimum end
+				new_ore.initial_amount = orig_amount
 			end
-			initial_count = initial_count + ore_tile.amount
+			new_ore.amount = amount
+			
+			new_count = new_count + amount
+			initial_count = initial_count + orig_amount
 		end
-
-		self.initial_ore_amount = math.floor(initial_count * scrap_result_per_mining_drain())
 	end
 
+	-- actually delete it
+	for _,old_ore in pairs(old_ores) do
+		old_ore.destroy()
+	end
+	
+	-- important!, otherwise we may get negative or positive huge mining rates and trigger huge waves
+	self.wave_start_ore_amount = math.floor(new_count * scrap_result_per_mining_drain())
+	self.initial_ore_amount = math.floor(initial_count * scrap_result_per_mining_drain())
+	
 	local r = circ_r + g.max_drill_radius
 	local area = {{position.x-r, position.y-r},
 	              {position.x+r, position.y+r}}

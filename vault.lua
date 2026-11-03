@@ -34,8 +34,9 @@ local Vault = {}
 Vault.__index = Vault
 
 ---@param vault LuaEntity
+---@param source_event? string
 ---@return Vault
-function Vault.from_entity(vault)
+function Vault.from_entity(vault, source_event)
 	assert(vault.name == g.VAULT_NAME)
 	
 	-- simple entity has no unit_number!
@@ -61,12 +62,6 @@ function Vault.from_entity(vault)
 	vault.force = g.DRONE_FORCE -- vault (simple-entity) can't actually have a force?
 	vault.destructible = false -- can't damage
 	
-	-- TODO: do somewhere else instead?
-	-- this will handle new installs with infinite option set
-	if g.INF_SCRAP_ENABLED then
-		v:modify_ore("infinite", "keep")
-	end
-	
 	v.near_wall = vault.surface.find_entity(g.VAULT_NEAR_WALL_NAME, vault.position)
 	if v.near_wall == nil then
 		v.near_wall = v.entity.surface.create_entity{
@@ -77,6 +72,14 @@ function Vault.from_entity(vault)
 	v.near_wall.destructible = false
 	
 	v:prepare() -- make sure to fix buildings
+	
+	-- TODO: do somewhere else instead?
+	-- this will handle new installs with infinite option set
+	if g.INF_SCRAP_ENABLED then
+		v:modify_ore("infinite", "keep")
+	end
+
+	v:reset_ore_count(source_event)
 	
 	storage.vaults[id] = v
 	

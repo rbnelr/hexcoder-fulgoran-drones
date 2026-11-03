@@ -131,6 +131,7 @@ local built_filter = g.merge(dmg.event_filter, {
 	{filter="type", type="simple-entity"},
 	{filter="name", name=g.VAULT_NAME, mode="and"}
 })
+-- Not triggered by map generator, on_chunk_generated handles newly generated ones
 for _, name in pairs({
 	defines.events.on_built_entity, -- also triggered by editor
 	defines.events.on_robot_built_entity,
@@ -219,7 +220,7 @@ local function init_chunk(surface, area)
 	local vaults = surface.find_entities_filtered{name=g.VAULT_NAME, area=area}
 	if next(vaults) then
 		for _,e in pairs(vaults) do
-			local vault = Vault.from_entity(e)
+			local vault = Vault.from_entity(e, "on_chunk_generated")
 			-- avoid lag from get_initial_ore_slow() hack if not actually installing in running game
 			-- so initial_ore is just current ore
 			vault.initial_ore_amount = vault:get_ore_remaining()
@@ -278,9 +279,6 @@ script.on_event(defines.events.on_selected_entity_changed, function(event)
 	local prev = event.last_entity
 	if (selected and selected.name == g.VAULT_NAME) or (prev and prev.name == g.VAULT_NAME) then
 		init()
-		if g.DEBUG and selected and selected.name == g.VAULT_NAME then
-			--Vault.from_entity(player.selected):dbg_print(player)
-		end
 		gui.update_viz(player)
 		gui.update_info_gui(player)
 	end
@@ -296,21 +294,6 @@ end)
 ---- Commands
 
 if g.DEBUG then
-	--local _prev_ore = nil
-	--commands.add_command("fulg-ore", "", function(command)
-	--	init()
-	--	local player = game.get_player(command.player_index) ---@cast player -nil
-	--	
-	--	local selected = player.selected
-	--	if selected == nil then return end
-	--	
-	--	local count = Vault.from_entity(selected):get_ore_remaining()
-	--	
-	--	local diff = _prev_ore and count - _prev_ore or nil
-	--	_prev_ore = count
-	--	game.print("ore: ".. count .."  (".. (diff or "nil") ..") at ("..selected.position.x..", "..selected.position.y..")")
-	--end)
-	
 	commands.add_command("fulg-attack", "", function(command)
 		init()
 		
@@ -319,8 +302,9 @@ if g.DEBUG then
 		-- vault for testing
 		local sel = game.get_player(command.player_index).selected
 		if sel and sel.valid and sel.name == g.VAULT_NAME then
-			Vault.from_entity(sel):stop_wave_and_kill_bots(true)
-			Vault.from_entity(sel):spawn_wave(size, 1, true)
+			local vault = Vault.from_entity(sel)
+			vault:stop_wave_and_kill_bots(true)
+			vault:spawn_wave(size, 1, true)
 		end
 	end)
 	commands.add_command("fulg-kill-wave", "", function(command)
@@ -371,28 +355,35 @@ end
 
 -- TODO: not really working, or just mining rate that messes up?
 commands.add_command("fulg-modify-ore",
-		"mofify ore around hovered vault\npass finine/infine/keep to swap resource type (default keep)\npass a number between 0-100 to restore to X% of initial amount or no number to keep",
+		"mofify ore around hovered vault\npass finine/infine to swap scrap type around hovered vault ruin\npass a percentage of the initial amount to restore to or no number to keep the current",
 		function(command)
 	init()
 	
-	local mode = "keep"
+	local mode = nil
 	local amount = "keep"
 	
 	local args = command.parameter and string.gmatch(command.parameter, "[^%s]+") or {}
 	for arg in args do
 		local num = tonumber(arg)
 		if num then
-			amount = num/100
+			amount = num/100 -- allow > 100
+			if amount < 0 then amount = 0 end
 		else
 			mode = arg
 		end
 	end
-	
+
 	local player = game.get_player(command.player_index) ---@cast player -nil
+
+	if not (mode == "finite" or mode == "infinite") then
+		player.print("please pass 'finite' or 'infinite'")
+		return
+	end
+	
 	local sel = player.selected
 	if sel and sel.valid and sel.name == g.VAULT_NAME then
 		local vault = Vault.from_entity(sel)
-		if vault and Vault.from_entity(sel):modify_ore(mode, amount) == "success" then
+		if vault and vault:modify_ore(mode, amount) == "success" then
 			player.print("ore modified")
 		end
 	else
