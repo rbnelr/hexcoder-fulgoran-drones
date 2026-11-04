@@ -33,15 +33,7 @@ function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
 		if resource then
 			resource.amount = count
 			
-			local r = g.max_drill_radius -- square radius!
-			local area = {{position.x-r, position.y-r},
-			              {position.x+r, position.y+r}}
-			-- this includes collision box of drill, not really what we want, but I would have added 1 to radius to make sure anyway
-			for _,drill in pairs(surface.find_entities_filtered{area=area, type="mining-drill"}) do
-				--local p = drill.position
-				--rendering.draw_rectangle{left_top={p.x-2.5, p.y-2.5}, right_bottom={p.x+2.5, p.y+2.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
-				drill.update_connections()
-			end
+			Vault.update_drill_connections_near(surface, position)
 			
 			--local p = position
 			--rendering.draw_rectangle{left_top=area[1], right_bottom=area[2], surface=surface, filled=false, color={0,1,0}, time_to_live=60*5}

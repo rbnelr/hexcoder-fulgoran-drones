@@ -2,6 +2,25 @@ local g = require("common")
 ---@class Vault
 local Vault = require("vault")
 
+local INF_SCRAP_PROTO = prototypes.entity["vault-scrap"]
+local INF_SCRAP_NORMAL = INF_SCRAP_PROTO.normal_resource_amount
+local INF_SCRAP_MIN = INF_SCRAP_PROTO.minimum_resource_amount
+local INF_SCRAP_MIN_RATIO = INF_SCRAP_MIN / INF_SCRAP_NORMAL
+
+-- try to bump such that its not visible if floored to yield%
+local INF_SCRAP_DEPLETED_BUMP_AMOUNT = math.max(math.floor(INF_SCRAP_PROTO.normal_resource_amount / 100 / 2), 1)
+
+-- infinite resource minimum amount actually works like this
+---@param ore_tile LuaEntity
+local function get_inf_scrap_minimum (ore_tile)
+	if ore_tile.initial_amount <= INF_SCRAP_NORMAL then
+		return INF_SCRAP_MIN
+	else
+		return ore_tile.initial_amount * INF_SCRAP_MIN_RATIO
+	end
+end
+
+
 -- mods can how much one mining operation actually outputs (on average), for example giving 0-5 ore per mining operation in 2.5x the time
 -- this is actually respected by the value shown in the map view on hover (unlike mining prod or 50% drain on big miners)
 -- so use this to match the map view
@@ -13,8 +32,8 @@ local Vault = require("vault")
 --	-- shared_probability?
 --	return avg_result
 --end
-local function scrap_result_per_mining_drain()
-	local resource = prototypes.entity["scrap"] -- TODO: correct even for inf scrap?
+local function _scrap_result_per_mining_drain(type)
+	local resource = prototypes.entity[type] -- TODO: correct even for inf scrap?
 	local minable = resource.mineable_properties
 	local product = minable.products[1]
 	local factor = product.amount or (product.amount_min + product.amount_max)/2
@@ -27,6 +46,12 @@ local function scrap_result_per_mining_drain()
 	factor = factor / resource.infinite_depletion_resource_amount
 	return factor
 end
+
+-- TODO: remove? we likely want 1 to 1 anyway, instead need to account for infinite ore low yield rng
+local DRAIN_TO_ORE = {
+	["scrap"] = _scrap_result_per_mining_drain("scrap"),
+	["vault-scrap"] = _scrap_result_per_mining_drain("vault-scrap"),
+}
 
 -- We want to know what the original ore amount was per vault scrap patch
 -- We determine the current amount via a (expensive) find_entities_filtered scan
@@ -178,11 +203,10 @@ function Vault:get_initial_ore_count()
 	local count = 0
 	for _,ore_tile in pairs(self:get_initial_ore_slow()) do
 		--rendering.draw_circle{target=ore_tile.position, surface=surface, radius=0.4, width=1, color={0,0,1}, time_to_live=600}
-		count = count + ore_tile.amount
+		count = count + ore_tile.amount * DRAIN_TO_ORE[ore_tile.name]
 	end
 	
-	count = math.floor(count * scrap_result_per_mining_drain())
-	
+	count = math.floor(count)
 	return count
 end
 
@@ -202,10 +226,17 @@ function Vault:get_ore_remaining()
 	local count = 0
 	for _,ore_tile in pairs(e.surface.find_entities_filtered{
 		position=e.position, radius=circ_r, type="resource", name=g.SCRAP_TYPES}) do
-		count = count + ore_tile.amount
+		if ore_tile.name == "vault-scrap" then
+			if ore_tile.amount <= INF_SCRAP_MIN then
+				--ore_tile.amount = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT
+				
+				Vault.update_drill_connections_near(ore_tile.surface, ore_tile.position)
+			end
+		end
+		count = count + ore_tile.amount * DRAIN_TO_ORE[ore_tile.name]
 	end
 	
-	count = math.floor(count * scrap_result_per_mining_drain())
+	count = math.floor(count)
 	
 	if self.initial_ore_amount == nil then
 		--self.initial_ore_amount = count
@@ -213,15 +244,6 @@ function Vault:get_ore_remaining()
 	end
 	
 	return count
-end
-
----@param source_event? string
-function Vault:reset_ore_count(source_event)
-	-- regular playthrough case, all vauls are created by map generator, do not trigger lags from fake_fulgora stuff
-	if source_event ~= "on_chunk_generated" then
-		self.initial_ore_amount = self:get_ore_remaining()
-	end
-	self.wave_start_ore_amount = nil
 end
 
 -- Changing the radius potentially changes total scanned ore
@@ -237,7 +259,7 @@ function Vault:modify_ore(mode, restore)
 	local from = {"scrap", "vault-scrap"}
 	local to = mode == "finite" and "scrap" or "vault-scrap"
 
-	local minimum = prototypes.entity["vault-scrap"].minimum_resource_amount
+	local minimum = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT
 	local new_count = 0
 	local initial_count = 0
 	
@@ -248,8 +270,10 @@ function Vault:modify_ore(mode, restore)
 		-- a bit weird:
 		-- spawn new ore copied from newly generated fake fulgora, then only check old ore tiles for amount
 		-- do not iterate old_ore, since tiles may be depleted and infinite ores need their initial_amount set, which works best if accurate
+		-- TODO: hold on, why do we need to set initial_amount? we don't actually read it and instead track the initial amount per vault on our own
+		-- and yield depends on normal_resource_amount, not this
 		for _,orig_ore in pairs(self:get_initial_ore_slow()) do
-			local new_ore = surface.create_entity{name=to, position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
+			local new_ore = surface.create_entity{name=to, position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true} ---@cast new_ore -nil
 			local old_ore = surface.find_entities_filtered{name=from, position=orig_ore.position} -- check if get_closest(old_ores, ...) actually makes sense here
 			
 			local amount = old_ore and old_ore[1].amount or 0
@@ -261,27 +285,27 @@ function Vault:modify_ore(mode, restore)
 			end
 			new_ore.amount = amount
 
-			new_count = new_count + amount
-			initial_count = initial_count + orig_amount
+			new_count = new_count + amount * DRAIN_TO_ORE[new_ore.name]
+			initial_count = initial_count + orig_amount * DRAIN_TO_ORE[orig_ore.name]
 		end
-	else
+	elseif restore > 0 or to == "vault-scrap" then -- not allowed to set amount=0
 		-- spawn new ore copied from newly generated fake fulgora
 		-- and simply multiply amount
 		for _,orig_ore in pairs(self:get_initial_ore_slow()) do
-			local new_ore = surface.create_entity{name=to, position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
+			local new_ore = surface.create_entity{name=to, position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true} ---@cast new_ore -nil
 			
 			local orig_amount = orig_ore.amount
-			local amount = orig_amount * restore
+			local amount = math.ceil(orig_amount * restore)
 			
 			if to == "vault-scrap" then
 				-- enfore minimum for infinite ores (20% of each tile normal amount, Note: restore=20% is of mapgen amount, which is different)
 				if amount < minimum then amount = minimum end
-				new_ore.initial_amount = orig_amount
+				new_ore.initial_amount = amount > orig_amount and amount or orig_amount
 			end
 			new_ore.amount = amount
 			
-			new_count = new_count + amount
-			initial_count = initial_count + orig_amount
+			new_count = new_count + amount * DRAIN_TO_ORE[new_ore.name]
+			initial_count = initial_count + orig_amount * DRAIN_TO_ORE[orig_ore.name]
 		end
 	end
 
@@ -289,20 +313,234 @@ function Vault:modify_ore(mode, restore)
 	for _,old_ore in pairs(old_ores) do
 		old_ore.destroy()
 	end
+
+	new_count = math.floor(new_count)
+	initial_count = math.floor(initial_count)
 	
-	-- important!, otherwise we may get negative or positive huge mining rates and trigger huge waves
-	self.wave_start_ore_amount = math.floor(new_count * scrap_result_per_mining_drain())
-	self.initial_ore_amount = math.floor(initial_count * scrap_result_per_mining_drain())
-	
-	local r = circ_r + g.max_drill_radius
-	local area = {{position.x-r, position.y-r},
-	              {position.x+r, position.y+r}}
-	for _,drill in pairs(surface.find_entities_filtered{area=area, type="mining-drill"}) do
-		drill.update_connections()
+	-- probably best to inflate original amount in case of restore=>100% to avoid negative drained ore in gui etc.
+	if initial_count < new_count then
+		initial_count = new_count
 	end
+
+	-- important!, otherwise we may get negative or positive huge mining rates and trigger huge waves
+	self:reset_ore_tracking("modify_ore", new_count, initial_count)
+	
+	self:update_drill_connections_near_vault()
 
 	return "success"
 end
+
+function Vault:update_drill_connections_near_vault ()
+	local position = self.entity.position
+	local r = g.max_drill_radius + g.VAULT_DEFENSE_RADIUS() -- square radius!
+	local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
+	for _,drill in pairs(self.entity.surface.find_entities_filtered{area=area, type="mining-drill"}) do
+		drill.update_connections()
+	end
+end
+---@param surface LuaSurface
+---@param position MapPosition
+function Vault.update_drill_connections_near (surface, position)
+	local r = g.max_drill_radius -- square radius!
+	local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
+	-- this includes collision box of drill, not really what we want, but I would have added 1 to radius to make sure anyway
+	for _,drill in pairs(surface.find_entities_filtered{area=area, type="mining-drill"}) do
+		--local p = drill.position
+		--rendering.draw_rectangle{left_top={p.x-2.5, p.y-2.5}, right_bottom={p.x+2.5, p.y+2.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
+		drill.update_connections()
+	end
+end
+
+local lone_drills = {}
+local ore_cache = {}
+
+---@param pos MapPosition
+---@return integer
+local function int_position_key(pos)
+	local x = math.floor(pos.x or pos[1]) ---@cast x integer
+	local y = math.floor(pos.y or pos[2]) ---@cast y integer
+	return y * 65536 + x -- TODO: lookup my old version of this, I remember that for chunks this was possible up to the map bounds
+end
+
+-- Ores don't have unit_numbers, need to key via position (?)
+-- YARM does this: but I'm not sure that this ideal, I would prefer a integer hash instead of a string (allocation?)
+--[[
+---Add an entity to the ore tracker if not already present. The entity must
+---be valid and be a resource type.
+---@param entity LuaEntity Must be a resource entity
+---@return number? index The index of the entity within the ore tracker cache, or nil if the entity could not be added
+function ore_tracker_module.add_entity(entity)
+    if not entity or not entity.valid or entity.type ~= "resource" then
+        return nil
+    end
+
+    -- If it's already in the cache, we just return its index
+    local index = ore_tracker_module.index_of(entity)
+    if index then
+        return index
+    end
+
+    -- Otherwise, create the tracking data and store it, and put it in the position_cache
+    local tracking_data = internal.new_resource_tracking_data(entity)
+
+    local entities = storage.ore_tracker.entities
+    local next_index = #entities + 1
+    entities[next_index] = tracking_data
+
+    local position_key = internal.entity_position_to_string(entity)
+    ore_tracker_module.position_cache[position_key] = next_index
+
+    return next_index
+end
+
+---Get an entity's tracking index (if it's in the cache)
+---@param entity LuaEntity Must be a valid resource entity
+---@return integer? # The tracker index of the given entity
+function ore_tracker_module.index_of(entity)
+    local position_key = internal.entity_position_to_string(entity)
+    local its_index = ore_tracker_module.position_cache[position_key]
+
+    if its_index then
+        -- We're accessing the entity anyway, let's also use this opportunity to
+        -- update the tracker values (and be 1000% certain that it's tracking
+        -- the right entity).
+        internal.update_tracking_data(entity, its_index)
+    end
+
+    return its_index
+end
+
+---Convert an entity's location into a string usable as table key. Like `position_to_string`, but
+---taking the surface into account as well.
+---@param entity LuaEntity
+---@return string # A string like "nauvis@12345,12345" where the coordinates are upscaled 100x
+function internal.entity_position_to_string(entity)
+    -- Scale up x/y so (hopefully) any floating point component disappears, then
+    -- force them to be integer with %d. Not using util.positiontostr as it uses %g
+    -- and keeps the floating point component.
+    return string.format("%s@%d,%d", entity.surface.name, entity.position.x * 100, entity.position.y * 100)
+end
+]]
+
+-- /c local p=game.player local r = p.surface.create_entity{name="scrap", position=p.position} p.selected.update_connections()
+script.on_event(defines.events.on_resource_depleted, function(event)
+	local ore = event.entity
+
+	if ore.name == "vault-scrap" then
+		assert(ore.prototype.infinite_resource)
+		--assert(e.prototype.minimum_resource_amount == e.amount) -- what, why is this not true sometimes? is it inaccurate with the wrong numbers?
+		assert(ore.amount == get_inf_scrap_minimum(ore))
+		
+		--local vaults = ore.surface.find_entities_filtered{name=g.VAULT_NAME, position=position, radius=g.VAULT_DEFENSE_RADIUS()}
+		--if next(vaults) == nil then
+			local bump = INF_SCRAP_DEPLETED_BUMP_AMOUNT
+			local bumped_amount = ore.amount + bump
+
+			game.print("on_resource_depleted ".. serpent.line{e=e,
+				amount=ore.amount,
+				bumped_amount=bumped_amount,
+				initial=ore.initial_amount,
+				minimum=ore.prototype.minimum_resource_amount,
+				normal=ore.prototype.normal_resource_amount,
+				old_yield=ore.amount / INF_SCRAP_NORMAL * 100,
+				new_yield=bumped_amount / INF_SCRAP_NORMAL * 100,
+			})
+
+			--local r = g.max_drill_radius -- square radius!
+			--local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
+			--for _,drill in pairs(ore.surface.find_entities_filtered{area=area, type="mining-drill"}) do
+			--	local data = lone_drills[drill.unit_number] or { e = drill }
+			--	--data.extra_drain = (data.extra_drain or 0) + bump
+			--	lone_drills[drill.unit_number] = data
+			--end
+			
+			ore.amount = bumped_amount
+			-- need to account for bump here
+			-- if we set amount directly, we lose mined amount since last poll, instead also bump whatever latest is
+			local ore_key = int_position_key(ore.position)
+			ore_cache[ore_key] = ore_cache[ore_key] + bump or bumped_amount
+			
+			-- probably should iterate through ores, not through vaults, which has more even cost
+			-- then cache last amount and est. mining rate, in that case bump might be accounted for differently?
+			-- will vaults then iterate their ore, or even store cached lists of ore keys, or should ore tracking lookup vault and accumulate rate?
+			-- it's arkward since ores usually are part of one vault, but rarely can be part of two
+		--end
+	end
+
+	--if e.name == "vault-scrap" then
+	--	
+	--	e.amount = e.amount + INF_SCRAP_DEPLETE_BUMP_AMOUNT
+--
+	--	Vault.update_drill_connections_near(e.surface, e.position)
+	--	
+	--	--local vaults = e.surface.find_entities_filtered{name=g.VAULT_NAME, position=e.position, radius=g.VAULT_DEFENSE_RADIUS()}
+	--	for _,v in pairs(vaults) do
+	--	--for _,v in pairs(e.surface.find_entities_filtered{name=g.VAULT_NAME, position=e.position, radius=g.VAULT_DEFENSE_RADIUS()}) do
+	--		local vault = Vault.from_entity(v)
+	--		vault.extra_ore_drain = vault.extra_ore_drain + INF_SCRAP_DEPLETE_BUMP_AMOUNT * DRAIN_TO_ORE["vault-scrap"]
+	--	end
+	--end
+end)
+script.on_nth_tick(60*10, function(event)
+	--local drains = {}
+
+	local player = game.get_player(1) ---@cast player -nil
+	for _,drill in pairs(player.surface.find_entities_filtered{type="mining-drill", position=player.position, radius=20}) do
+		lone_drills[drill.unit_number] = lone_drills[drill.unit_number] or { e = drill }
+	end
+
+	for uid,drill in pairs(lone_drills) do
+		local drill_e = drill.e
+		if not drill_e.valid then
+			lone_drills[uid] = nil
+		else
+			local position = drill_e.position
+			local r = g.max_drill_radius -- square radius!
+			local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
+			local nearby_ore = drill_e.surface.find_entities_filtered{name=g.SCRAP_TYPES, area=area}
+			local normal = INF_SCRAP_NORMAL
+
+			local total_amount = 0
+			local total_mining_rate = 0
+			for _,ore in pairs(nearby_ore) do
+				local amount = ore.amount
+				total_amount = total_amount + amount
+				
+				local ore_key = int_position_key(ore.position)
+				local last_amount = ore_cache[ore_key] or amount -- todo: adjust last amount on deplection bump, not extra_drain
+				ore_cache[ore_key] = amount
+
+				if amount < last_amount then
+					-- est mining rate based on drain, this does not take into account big drill drain% bonus (nor productivity)
+					-- for infinite resources, drain done 1x per mining op (reduced by drain%)
+					-- but only while yield is about 100%, below that there is an RNG roll that futher skips drain events
+					-- this is likely to make drain proportional with actual production yield
+					-- because drain events are unlikely at low yields, tracking mining rate becomes less accurate (but hopefully evens out over while patch total?)
+					local drain = last_amount - amount
+					if ore.name == "scrap" then
+						total_mining_rate = total_mining_rate + drain
+					else
+						-- est entire timestep based on current yield
+						local yield = amount / normal
+						total_mining_rate = total_mining_rate + (yield < 1 and drain / yield or drain) -- TODO: whats's faster: math.max or this 
+					end
+				end
+			end
+
+			local latest_drain = (drill.last_count or 0) - total_amount + (drill.extra_drain or 0)
+			latest_drain = latest_drain / 10 * 60 -- per minute
+			
+			drill.latest_mining_rate = total_mining_rate / 10 * 60 -- per minute
+			drill.last_count = total_amount
+			
+			game.print("drain: "..serpent.line{uid=uid, drill=drill, latest_drain=latest_drain, ore_cache=ore_cache})
+			
+			drill.extra_drain = 0
+		end
+	end
+
+	--game.print("drains: "..serpent.line(drains))
+end)
 
 ---@param surface LuaSurface
 ---@param where MapPosition|"all"

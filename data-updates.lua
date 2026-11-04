@@ -75,8 +75,6 @@ if HARVEST_BOTS then
 end
 
 if g.INF_SCRAP_ENABLED then
-	-- TODO: inf ores?
-	-- how to handle ores on non-vault islands? add infinine ore? should I manually replace vault ore?
 	data:extend{
 		meld(table.deepcopy(data.raw["resource"]["scrap"]), {
 			name = "vault-scrap",
@@ -104,16 +102,24 @@ if g.INF_SCRAP_ENABLED then
 			--	}}
 			--},
 			minable = {
-				mining_time = 1.25, -- was 0.5
+				-- keep the same to try and make finite and infine mining similar with the same numbers
+				mining_time = 0.5, -- was 0.5
 			},
+
 			infinite = true,
-			minimum = 16000, -- min 20%
-			normal =  80000, -- fulgora vault scrap tiles seem to average around 100k -> that would be 100% yield
+			
 			-- ~20M vault patches
-			-- 20 big miners => 1M at 5/s = 55h to deplete if min was 0
-			-- at depletion_amount=10  => ~5h
-			--infinite_depletion_amount = 2.5 * 10 -- average result then 10x
-			infinite_depletion_amount = 10
+			-- individual fulgora vault scrap tiles seem to average around 100k
+			-- with normal = 50k, we get faster mining initially, then slower mining later
+			-- TODO: estimate time until hitting minimum (not too long if quality is tied to this)
+			-- TODO: test other mapgen settings (siZe/richness) to see if they break things (low richness giving high quality instantly?)
+
+			--minimum = 10000, -- min 20% like crude oil
+			--normal =  50000,
+			-- need to test this, wiki seems wrong/misleading
+			minimum = 50,
+			normal =  500,
+			infinite_depletion_amount = 1 -- don't increase this, under 100 % yield, depletion_amount=1 means about the same actual yield as normal scrap (until minimum)
 		})
 	}
 end

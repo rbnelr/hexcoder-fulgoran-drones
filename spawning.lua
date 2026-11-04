@@ -282,7 +282,7 @@ function Vault:update_waves()
 		self.wave_end_tick = game.tick
 	end
 	
-	local mined_ore = self.wave_start_ore_amount - count
+	local mined_ore = self.wave_start_ore_amount - count + self.extra_ore_drain
 	if mined_ore < 0 then mined_ore = 0 end
 	
 	local time_since_last = (game.tick - (self.wave_start_tick or 0)) / 3600
@@ -293,6 +293,7 @@ function Vault:update_waves()
 	local trigger_wave, size, freq = self:should_spawn_wave(mined_ore, time_since_last, time_between, true)
 	if trigger_wave then
 		self.wave_start_ore_amount = count
+		self.extra_ore_drain = 0
 		
 		self:spawn_wave(size, freq, true)
 	end

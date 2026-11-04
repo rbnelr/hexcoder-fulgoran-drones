@@ -12,6 +12,7 @@ local dmg = require("disable_on_damage")
 ---@field wave_rng2 number?
 ---@field initial_ore_amount integer?
 ---@field wave_start_ore_amount integer?
+---@field extra_ore_drain integer -- when bumping infinite ore on reaching minimum, also bump to to counteract and achieve accurate drain computation
 ---@field wave_size number?
 ---@field wave_freq number?
 ---@field wave_start_tick integer?
@@ -56,6 +57,7 @@ function Vault.from_entity(vault, source_event)
 		wave_emerging_projectiles={},
 		active_wave_bots={},
 		wave_bots_count={},
+		extra_ore_drain = 0,
 	}, Vault)
 	
 	-- enemy structures cannot be mined, but decoratives like ruins can
@@ -79,7 +81,7 @@ function Vault.from_entity(vault, source_event)
 		v:modify_ore("infinite", "keep")
 	end
 
-	v:reset_ore_count(source_event)
+	v:reset_ore_tracking(source_event)
 	
 	storage.vaults[id] = v
 	
@@ -107,6 +109,22 @@ function Vault:destroy()
 	-- targets are not bound to vault, and can be forgotten as well
 	
 	storage.vaults[self.id] = nil
+end
+
+---@param source_event? string
+---@param new_ore_count? number
+---@param new_initial_ore_count? number
+function Vault:reset_ore_tracking(source_event, new_ore_count, new_initial_ore_count)
+	self.initial_ore_amount = new_initial_ore_count
+	-- regular playthrough case, all vauls are created by map generator, do not trigger lags from fake_fulgora stuff
+	if self.initial_ore_amount == nil and not (source_event == "on_chunk_generated" or source_event == "modify_ore") then
+		self.initial_ore_amount = self:get_ore_remaining()
+	end
+	self.wave_start_ore_amount = new_ore_count
+	-- if setting new count, set fake wave tick to make mining rate correct
+	self.wave_start_tick = new_ore_count and (game.tick - 60) or nil
+	self.wave_end_tick = new_ore_count and (game.tick - 60) or nil
+	self.extra_ore_drain = 0
 end
 
 -- create random invisible waypoints to act as drone movement targets
