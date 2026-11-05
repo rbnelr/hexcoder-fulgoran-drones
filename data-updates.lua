@@ -114,11 +114,11 @@ if g.INF_SCRAP_ENABLED then
 			-- TODO: estimate time until hitting minimum (not too long if quality is tied to this)
 			-- TODO: test other mapgen settings (siZe/richness) to see if they break things (low richness giving high quality instantly?)
 
-			--minimum = 10000, -- min 20% like crude oil
-			--normal =  50000,
+			minimum = 10000, -- min 20% like crude oil
+			normal =  50000,
 			-- need to test this, wiki seems wrong/misleading
-			minimum = 50,
-			normal =  500,
+			--minimum = 50,
+			--normal =  500,
 			infinite_depletion_amount = 1 -- don't increase this, under 100 % yield, depletion_amount=1 means about the same actual yield as normal scrap (until minimum)
 		})
 	}

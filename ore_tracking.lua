@@ -12,46 +12,13 @@ local INF_SCRAP_DEPLETED_BUMP_AMOUNT = math.max(math.floor(INF_SCRAP_PROTO.norma
 
 -- infinite resource minimum amount actually works like this
 ---@param ore_tile LuaEntity
-local function get_inf_scrap_minimum (ore_tile)
+local function get_inf_scrap_minimum(ore_tile)
 	if ore_tile.initial_amount <= INF_SCRAP_NORMAL then
 		return INF_SCRAP_MIN
 	else
 		return ore_tile.initial_amount * INF_SCRAP_MIN_RATIO
 	end
 end
-
-
--- mods can how much one mining operation actually outputs (on average), for example giving 0-5 ore per mining operation in 2.5x the time
--- this is actually respected by the value shown in the map view on hover (unlike mining prod or 50% drain on big miners)
--- so use this to match the map view
---local function scrap_result_per_mining_drain()
---	local minable = prototypes.entity["scrap"].mineable_properties
---	local product = minable.products[1]
---	local avg_result = product.amount or (product.amount_min + product.amount_max)/2
---	avg_result = avg_result * (product.independent_probability or 1)
---	-- shared_probability?
---	return avg_result
---end
-local function _scrap_result_per_mining_drain(type)
-	local resource = prototypes.entity[type] -- TODO: correct even for inf scrap?
-	local minable = resource.mineable_properties
-	local product = minable.products[1]
-	local factor = product.amount or (product.amount_min + product.amount_max)/2
-	factor = factor * (product.independent_probability or 1)
-	-- shared_probability?
-	
-	-- currently, avg 8 scrap with mining time 4 and inf drain 80 => 8/10 = 0.1 product per drain
-	-- not taking into account yield!
-	-- observed_drain * factor = mining rate without drain% or productivity
-	factor = factor / resource.infinite_depletion_resource_amount
-	return factor
-end
-
--- TODO: remove? we likely want 1 to 1 anyway, instead need to account for infinite ore low yield rng
-local DRAIN_TO_ORE = {
-	["scrap"] = _scrap_result_per_mining_drain("scrap"),
-	["vault-scrap"] = _scrap_result_per_mining_drain("vault-scrap"),
-}
 
 -- We want to know what the original ore amount was per vault scrap patch
 -- We determine the current amount via a (expensive) find_entities_filtered scan
@@ -203,7 +170,7 @@ function Vault:get_initial_ore_count()
 	local count = 0
 	for _,ore_tile in pairs(self:get_initial_ore_slow()) do
 		--rendering.draw_circle{target=ore_tile.position, surface=surface, radius=0.4, width=1, color={0,0,1}, time_to_live=600}
-		count = count + ore_tile.amount * DRAIN_TO_ORE[ore_tile.name]
+		count = count + ore_tile.amount
 	end
 	
 	count = math.floor(count)
@@ -233,7 +200,7 @@ function Vault:get_ore_remaining()
 				Vault.update_drill_connections_near(ore_tile.surface, ore_tile.position)
 			end
 		end
-		count = count + ore_tile.amount * DRAIN_TO_ORE[ore_tile.name]
+		count = count + ore_tile.amount
 	end
 	
 	count = math.floor(count)
@@ -246,11 +213,17 @@ function Vault:get_ore_remaining()
 	return count
 end
 
--- Changing the radius potentially changes total scanned ore
--- Previously this may have worked since I only used it to trigger waves after x amount of mining
--- For new mechanics we may want to handle radius changes (TODO: reset wave_start_ore_amount and try to determine new initial amount?)
+-- This function can swap out the scrap areound a vault ruin between normal or infinite scrap
+-- it can either keep the amount the same or restore it to a desired percentage of the original ore by regenerating a fake nauvis surface
+-- there are other ways to potentially check the original ore amount but none that work with both finite ores and when installing on running games etc.
+-- when swapping to infinite scrap, the game will show yeild%, but internally keep using the same amount units
+-- note: that for infinite ores, the yield % depends on the "normal" amount as defined in the ore prototype
+--       and that the actual minimum depends on the initial amount
+-- note: restore >100% will inflate the orig_amount to be higher, but <100% will not set it lower
+-- TODO: add parameter (and mod setting) to override richness, so that time to reach say, 20% of scrap can be adjusted for finite ores (max quality at 20%?)
+--       and for inf ores, the richness would increase the normal amount such that 
 ---@param mode "finite"|"infinite"
----@param restore number|"keep" -- restore to x percent or initial or keep
+---@param restore number|"keep" -- restore to x percent of initial (mapgen) amount or keep existing amounts
 ---@return string
 function Vault:modify_ore(mode, restore)
 	local circ_r = g.VAULT_DEFENSE_RADIUS()
@@ -259,7 +232,6 @@ function Vault:modify_ore(mode, restore)
 	local from = {"scrap", "vault-scrap"}
 	local to = mode == "finite" and "scrap" or "vault-scrap"
 
-	local minimum = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT
 	local new_count = 0
 	local initial_count = 0
 	
@@ -270,23 +242,24 @@ function Vault:modify_ore(mode, restore)
 		-- a bit weird:
 		-- spawn new ore copied from newly generated fake fulgora, then only check old ore tiles for amount
 		-- do not iterate old_ore, since tiles may be depleted and infinite ores need their initial_amount set, which works best if accurate
-		-- TODO: hold on, why do we need to set initial_amount? we don't actually read it and instead track the initial amount per vault on our own
-		-- and yield depends on normal_resource_amount, not this
 		for _,orig_ore in pairs(self:get_initial_ore_slow()) do
-			local new_ore = surface.create_entity{name=to, position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true} ---@cast new_ore -nil
 			local old_ore = surface.find_entities_filtered{name=from, position=orig_ore.position} -- check if get_closest(old_ores, ...) actually makes sense here
+			local new_ore = surface.create_entity{name=to, position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true} ---@cast new_ore -nil
 			
 			local amount = old_ore and old_ore[1].amount or 0
 			local orig_amount = orig_ore.amount
 			
 			if to == "vault-scrap" then
-				if amount < minimum then amount = minimum end
 				new_ore.initial_amount = orig_amount
+				-- this enforces minimum if setting to a low percentage
+				-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
+				local minimum = get_inf_scrap_minimum(new_ore) + INF_SCRAP_DEPLETED_BUMP_AMOUNT -- needs to be called after initial_amount is set!
+				if amount < minimum then amount = minimum end
 			end
 			new_ore.amount = amount
 
-			new_count = new_count + amount * DRAIN_TO_ORE[new_ore.name]
-			initial_count = initial_count + orig_amount * DRAIN_TO_ORE[orig_ore.name]
+			new_count = new_count + amount
+			initial_count = initial_count + orig_amount
 		end
 	elseif restore > 0 or to == "vault-scrap" then -- not allowed to set amount=0
 		-- spawn new ore copied from newly generated fake fulgora
@@ -298,14 +271,16 @@ function Vault:modify_ore(mode, restore)
 			local amount = math.ceil(orig_amount * restore)
 			
 			if to == "vault-scrap" then
-				-- enfore minimum for infinite ores (20% of each tile normal amount, Note: restore=20% is of mapgen amount, which is different)
-				if amount < minimum then amount = minimum end
 				new_ore.initial_amount = amount > orig_amount and amount or orig_amount
+				-- this enforces minimum if setting to a low percentage
+				-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
+				local minimum = get_inf_scrap_minimum(new_ore) + INF_SCRAP_DEPLETED_BUMP_AMOUNT -- needs to be called after initial_amount is set!
+				if amount < minimum then amount = minimum end
 			end
 			new_ore.amount = amount
 			
-			new_count = new_count + amount * DRAIN_TO_ORE[new_ore.name]
-			initial_count = initial_count + orig_amount * DRAIN_TO_ORE[orig_ore.name]
+			new_count = new_count + amount
+			initial_count = initial_count + orig_amount
 		end
 	end
 
@@ -330,7 +305,7 @@ function Vault:modify_ore(mode, restore)
 	return "success"
 end
 
-function Vault:update_drill_connections_near_vault ()
+function Vault:update_drill_connections_near_vault()
 	local position = self.entity.position
 	local r = g.max_drill_radius + g.VAULT_DEFENSE_RADIUS() -- square radius!
 	local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
@@ -340,7 +315,7 @@ function Vault:update_drill_connections_near_vault ()
 end
 ---@param surface LuaSurface
 ---@param position MapPosition
-function Vault.update_drill_connections_near (surface, position)
+function Vault.update_drill_connections_near(surface, position)
 	local r = g.max_drill_radius -- square radius!
 	local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
 	-- this includes collision box of drill, not really what we want, but I would have added 1 to radius to make sure anyway
@@ -351,15 +326,25 @@ function Vault.update_drill_connections_near (surface, position)
 	end
 end
 
+local last_count = nil
 local lone_drills = {}
 local ore_cache = {}
+local ore_cache_extra_mining = {}
 
 ---@param pos MapPosition
 ---@return integer
 local function int_position_key(pos)
 	local x = math.floor(pos.x or pos[1]) ---@cast x integer
 	local y = math.floor(pos.y or pos[2]) ---@cast y integer
-	return y * 65536 + x -- TODO: lookup my old version of this, I remember that for chunks this was possible up to the map bounds
+	-- lua docs largest integer number without rounding arror: 100,000,000,000,000
+	-- largest possible double without skipping integers:    9,007,199,254,740,992 (2^53)
+	-- factorio coords are int32, but 8 bit fixed point
+	-- so 8,388,608 (2^23) should be largest absolute coord
+	-- while 16,777,216 (2^24) is the range
+	-- turn x,y into unique number in safe int range of double by multiplying with next power of 10 after 2^24 (use clean decimal number for better debuggability)
+	-- largest +/- is now 838,860,808,388,608 (>2^49 and <2^50) which is outside lua doc range, but inside actual safe range
+	return y * 100000000 + x -- negative x make y part appear smaller
+	--return y * 100000000 + (x + 8388608) -- use this to avoid?
 end
 
 -- Ores don't have unit_numbers, need to key via position (?)
@@ -425,19 +410,20 @@ end
 -- /c local p=game.player local r = p.surface.create_entity{name="scrap", position=p.position} p.selected.update_connections()
 script.on_event(defines.events.on_resource_depleted, function(event)
 	local ore = event.entity
-
 	if ore.name == "vault-scrap" then
-		assert(ore.prototype.infinite_resource)
-		--assert(e.prototype.minimum_resource_amount == e.amount) -- what, why is this not true sometimes? is it inaccurate with the wrong numbers?
-		assert(ore.amount == get_inf_scrap_minimum(ore))
+		--assert(ore.prototype.infinite_resource)
+		assert(ore.amount <= get_inf_scrap_minimum(ore)) -- ore can spawn or be created by modify_ore with lower than minimum amount (bumps will make it end up at minimum, I think)
 		
 		--local vaults = ore.surface.find_entities_filtered{name=g.VAULT_NAME, position=position, radius=g.VAULT_DEFENSE_RADIUS()}
 		--if next(vaults) == nil then
 			local bump = INF_SCRAP_DEPLETED_BUMP_AMOUNT
-			local bumped_amount = ore.amount + bump
+			
+			local amount = ore.amount
+			local bumped_amount = amount + bump
+			ore.amount = bumped_amount
 
 			game.print("on_resource_depleted ".. serpent.line{e=e,
-				amount=ore.amount,
+				amount=amount,
 				bumped_amount=bumped_amount,
 				initial=ore.initial_amount,
 				minimum=ore.prototype.minimum_resource_amount,
@@ -454,11 +440,20 @@ script.on_event(defines.events.on_resource_depleted, function(event)
 			--	lone_drills[drill.unit_number] = data
 			--end
 			
-			ore.amount = bumped_amount
 			-- need to account for bump here
 			-- if we set amount directly, we lose mined amount since last poll, instead also bump whatever latest is
 			local ore_key = int_position_key(ore.position)
-			ore_cache[ore_key] = ore_cache[ore_key] + bump or bumped_amount
+			local latest_amount = ore_cache[ore_key]
+			ore_cache[ore_key] = latest_amount and latest_amount + bump or bumped_amount
+			
+			---- TODO: weirdly once bumps happen est. mining rate underestimates, maybe wrong yield after bump causes numbers to be wrong?
+			---- try to calcualte with pre-bump yield here and instead accumulate it as extra mining rate
+			---- but now I can't get this event to even get called?
+			--ore_cache[ore_key] = bumped_amount
+			--
+			--local yield = amount / INF_SCRAP_NORMAL
+			--local drain = latest_amount - amount
+			--ore_cache_extra_mining[ore_key] = (ore_cache_extra_mining[ore_key] or 0) + (drain / yield)
 			
 			-- probably should iterate through ores, not through vaults, which has more even cost
 			-- then cache last amount and est. mining rate, in that case bump might be accounted for differently?
@@ -466,20 +461,6 @@ script.on_event(defines.events.on_resource_depleted, function(event)
 			-- it's arkward since ores usually are part of one vault, but rarely can be part of two
 		--end
 	end
-
-	--if e.name == "vault-scrap" then
-	--	
-	--	e.amount = e.amount + INF_SCRAP_DEPLETE_BUMP_AMOUNT
---
-	--	Vault.update_drill_connections_near(e.surface, e.position)
-	--	
-	--	--local vaults = e.surface.find_entities_filtered{name=g.VAULT_NAME, position=e.position, radius=g.VAULT_DEFENSE_RADIUS()}
-	--	for _,v in pairs(vaults) do
-	--	--for _,v in pairs(e.surface.find_entities_filtered{name=g.VAULT_NAME, position=e.position, radius=g.VAULT_DEFENSE_RADIUS()}) do
-	--		local vault = Vault.from_entity(v)
-	--		vault.extra_ore_drain = vault.extra_ore_drain + INF_SCRAP_DEPLETE_BUMP_AMOUNT * DRAIN_TO_ORE["vault-scrap"]
-	--	end
-	--end
 end)
 script.on_nth_tick(60*10, function(event)
 	--local drains = {}
@@ -488,54 +469,140 @@ script.on_nth_tick(60*10, function(event)
 	for _,drill in pairs(player.surface.find_entities_filtered{type="mining-drill", position=player.position, radius=20}) do
 		lone_drills[drill.unit_number] = lone_drills[drill.unit_number] or { e = drill }
 	end
-
 	for uid,drill in pairs(lone_drills) do
 		local drill_e = drill.e
 		if not drill_e.valid then
 			lone_drills[uid] = nil
-		else
-			local position = drill_e.position
-			local r = g.max_drill_radius -- square radius!
-			local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
-			local nearby_ore = drill_e.surface.find_entities_filtered{name=g.SCRAP_TYPES, area=area}
-			local normal = INF_SCRAP_NORMAL
+		end
+	end
+	
+	for _,drill in pairs(player.surface.find_entities_filtered{type="mining-drill", position=player.position, radius=20}) do
+		lone_drills[drill.unit_number] = lone_drills[drill.unit_number] or { e = drill }
+	end
 
-			local total_amount = 0
-			local total_mining_rate = 0
-			for _,ore in pairs(nearby_ore) do
-				local amount = ore.amount
-				total_amount = total_amount + amount
-				
-				local ore_key = int_position_key(ore.position)
-				local last_amount = ore_cache[ore_key] or amount -- todo: adjust last amount on deplection bump, not extra_drain
-				ore_cache[ore_key] = amount
-
-				if amount < last_amount then
-					-- est mining rate based on drain, this does not take into account big drill drain% bonus (nor productivity)
-					-- for infinite resources, drain done 1x per mining op (reduced by drain%)
-					-- but only while yield is about 100%, below that there is an RNG roll that futher skips drain events
-					-- this is likely to make drain proportional with actual production yield
-					-- because drain events are unlikely at low yields, tracking mining rate becomes less accurate (but hopefully evens out over while patch total?)
-					local drain = last_amount - amount
-					if ore.name == "scrap" then
-						total_mining_rate = total_mining_rate + drain
-					else
-						-- est entire timestep based on current yield
-						local yield = amount / normal
-						total_mining_rate = total_mining_rate + (yield < 1 and drain / yield or drain) -- TODO: whats's faster: math.max or this 
-					end
-				end
+	local nearby_ore = player.surface.find_entities_filtered{name=g.SCRAP_TYPES, position=player.position, radius=30}
+	local normal = INF_SCRAP_NORMAL
+	
+	local total_amount = 0
+	local total_mining_rate = 0
+	for _,ore in pairs(nearby_ore) do
+		local amount = ore.amount
+		total_amount = total_amount + amount
+		
+		local ore_key = int_position_key(ore.position)
+		local last_amount = ore_cache[ore_key] or amount -- todo: adjust last amount on deplection bump, not extra_drain
+		ore_cache[ore_key] = amount
+		
+		if amount < last_amount then
+			-- est mining rate based on drain, this does not take into account big drill drain% bonus (nor productivity)
+			-- for infinite resources, drain done 1x per mining op (reduced by drain%)
+			-- but only while yield is about 100%, below that there is an RNG roll that futher skips drain events
+			-- this is likely to make drain proportional with actual production yield
+			-- because drain events are unlikely at low yields, tracking mining rate becomes less accurate (but hopefully evens out over while patch total?)
+			local drain = last_amount - amount
+			if ore.name == "scrap" then
+				total_mining_rate = total_mining_rate + drain
+			else
+				-- est entire timestep based on current yield
+				local yield = amount / normal
+				total_mining_rate = total_mining_rate + (yield < 1 and drain / yield or drain) -- TODO: whats's faster: math.max or this
+				-- + (ore_cache_extra_mining[ore_key] or 0)
 			end
+		end
+	end
+	
+	local latest_drain = (last_count or 0) - total_amount
+	latest_drain = latest_drain / 10 * 60 -- per minute
+	
+	last_count = total_amount
+	local last_yield = last_count / INF_SCRAP_NORMAL * 100
+	
+	local num_ore = #nearby_ore
+	local avg_amount = num_ore > 0 and last_count / num_ore or 0
+	local avg_yield = num_ore > 0 and last_yield / num_ore or 0
+	
+	local latest_mining_rate = total_mining_rate / 10 * 60 -- per minute
+	
+	game.print("drain: "..serpent.line{
+		--uid=uid, drill=drill,
+		last_count = last_count,
+		last_yield = last_yield,
+		avg_amount = math.floor(avg_amount),
+		avg_yield = math.floor(avg_yield),
+		latest_mining_rate = latest_mining_rate,
+		latest_drain = latest_drain,
+		--active_ore_amount = active_ore_amount,
+		--ore_cache=ore_cache
+	})
+	
+	--for uid,drill in pairs(lone_drills) do
+	--	local nearby_ore = drill_e.surface.find_entities_filtered{name=g.SCRAP_TYPES, area=drill_e.mining_area}
+	--	local normal = INF_SCRAP_NORMAL
+--
+	--	local total_amount = 0
+	--	local total_mining_rate = 0
+	--	for _,ore in pairs(nearby_ore) do
+	--		local amount = ore.amount
+	--		total_amount = total_amount + amount
+	--		
+	--		local ore_key = int_position_key(ore.position)
+	--		local last_amount = ore_cache[ore_key] or amount -- todo: adjust last amount on deplection bump, not extra_drain
+	--		ore_cache[ore_key] = amount
+--
+	--		if amount < last_amount then
+	--			-- est mining rate based on drain, this does not take into account big drill drain% bonus (nor productivity)
+	--			-- for infinite resources, drain done 1x per mining op (reduced by drain%)
+	--			-- but only while yield is about 100%, below that there is an RNG roll that futher skips drain events
+	--			-- this is likely to make drain proportional with actual production yield
+	--			-- because drain events are unlikely at low yields, tracking mining rate becomes less accurate (but hopefully evens out over while patch total?)
+	--			local drain = last_amount - amount
+	--			if ore.name == "scrap" then
+	--				total_mining_rate = total_mining_rate + drain
+	--			else
+	--				-- est entire timestep based on current yield
+	--				local yield = amount / normal
+	--				total_mining_rate = total_mining_rate + (yield < 1 and drain / yield or drain) -- TODO: whats's faster: math.max or this 
+	--			end
+	--		end
+	--	end
+	--	
+	--	local latest_drain = (drill.last_count or 0) - total_amount
+	--	latest_drain = latest_drain / 10 * 60 -- per minute
+	--	
+	--	drill.latest_mining_rate = total_mining_rate / 10 * 60 -- per minute
+	--	drill.last_count = total_amount
+	--	
+	--	game.print("drain: "..serpent.line{
+	--		--uid=uid, drill=drill,
+	--		last_count = drill.last_count,
+	--		latest_mining_rate = drill.latest_mining_rate,
+	--		latest_drain = latest_drain,
+	--		--active_ore_amount = active_ore_amount,
+	--		--ore_cache=ore_cache
+	--	})
+	--end
 
-			local latest_drain = (drill.last_count or 0) - total_amount + (drill.extra_drain or 0)
-			latest_drain = latest_drain / 10 * 60 -- per minute
+	--game.print("drains: "..serpent.line(drains))
+end)
+script.on_nth_tick(1, function(event)
+	--local drains = {}
+	
+	for uid,drill in pairs(lone_drills) do
+		local drill_e = drill.e
+		if drill_e.valid then
+			local active_ore = drill_e.mining_target
+			local active_ore_amount = active_ore and ore_cache[int_position_key(active_ore.position)] or 0
 			
-			drill.latest_mining_rate = total_mining_rate / 10 * 60 -- per minute
-			drill.last_count = total_amount
-			
-			game.print("drain: "..serpent.line{uid=uid, drill=drill, latest_drain=latest_drain, ore_cache=ore_cache})
-			
-			drill.extra_drain = 0
+			if active_ore then
+				local yield = active_ore_amount / INF_SCRAP_NORMAL
+				local color = yield > 1 and {0,1,0} or {1,1,0}
+				
+				rendering.draw_circle{surface=active_ore.surface, target=active_ore, radius=0.5, color=color, time_to_live=1}
+				rendering.draw_text{text=string.format("%d", active_ore_amount),
+					surface=active_ore.surface, target=active_ore, color=color, time_to_live=1}
+				rendering.draw_text{text=string.format("%d%%", yield * 100),
+					surface=active_ore.surface, target={type="entity", entity=active_ore, offset={0,-.4}}, color=color, time_to_live=1}
+			end
 		end
 	end
 
