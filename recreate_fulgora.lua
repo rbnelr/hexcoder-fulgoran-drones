@@ -1,4 +1,4 @@
-local g = require("common")
+local const = require("const")
 ---@class Vault
 
 local M = {}
@@ -40,7 +40,7 @@ function M.recreate_initial_surface_and_load_chunks(original_fulgora, where, rad
 	-- actually queued to be deleted, so multiple requests should be fine, maybe just worse perf if used every few seconds
 	storage.last_used_fake_fulgora = game.tick
 
-	if g.DEBUG then
+	if const.DEBUG then
 		game.print("Created fake fulgora")
 	end
 	return fake_surface
@@ -51,7 +51,7 @@ script.on_nth_tick(60, function(event)
 		game.delete_surface("hexcoder_fake_fulgora")
 		storage.last_used_fake_fulgora = nil
 		
-		if g.DEBUG then
+		if const.DEBUG then
 			game.print("Deleted fake fulgora")
 		end
 	end

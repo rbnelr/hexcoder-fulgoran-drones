@@ -1,4 +1,5 @@
-local g = require("common")
+local const = require("const")
+local common = require("control.common")
 local dmg = require("disable_on_damage")
 local Vault = require("vault")
 require("ore_tracking")
@@ -13,8 +14,8 @@ local gui = require("gui")
 function init()
 
 	-- create enemy drone force
-	if game.forces[g.DRONE_FORCE] == nil then
-		local force = game.create_force(g.DRONE_FORCE)
+	if game.forces[const.DRONE_FORCE] == nil then
+		local force = game.create_force(const.DRONE_FORCE)
 		force.custom_color = {230,50,255} -- now tinting individually via actual graphic tints
 		-- TODO: can give force robot livetime bonus
 	end
@@ -37,11 +38,11 @@ function init()
 			Vault.restore_destroyed_vaults(surface, "all") -- freezes the game for a bit, warn user or make user trigger it manually?
 
 			-- This will convert ore to infinite
-			for _,e in pairs(surface.find_entities_filtered{name=g.VAULT_NAME}) do
+			for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
 				Vault.from_entity(e)
 			end
 			
-			--if g.TRY_SPAWN_MISSING_VAULTS then
+			--if const.TRY_SPAWN_MISSING_VAULTS then
 			--	for cpos in surface.get_chunks() do
 			--		if surface.is_chunk_generated(cpos) then
 			--			Vault.try_place_missing_vault_ruin(surface, {{cpos.x*32,cpos.y*32}, {cpos.x*32+32,cpos.y*32+32}})
@@ -58,16 +59,16 @@ local function reset()
 	local surface = game.get_surface("fulgora")
 	if surface then
 		-- delete neutral entities
-		for _,e in pairs(surface.find_entities_filtered{name={g.VAULT_NEAR_WALL_NAME,g.WAYPOINT}}) do
+		for _,e in pairs(surface.find_entities_filtered{name={const.VAULT_NEAR_WALL_NAME,const.WAYPOINT}}) do
 			e.destroy()
 		end
 		-- delete left over hostile drones
-		for _,e in pairs(surface.find_entities_filtered{force=g.DRONE_FORCE}) do
+		for _,e in pairs(surface.find_entities_filtered{force=const.DRONE_FORCE}) do
 			e.destroy()
 		end
 	end
 	
-	rendering.clear(g.MOD_NAME)
+	rendering.clear(const.MOD_NAME)
 	
 	for _,player in pairs(game.players) do
 		local existing = player.gui.left["hexcoder_fulgoran_drones_vault"]
@@ -76,7 +77,7 @@ local function reset()
 		end
 	end
 	
-	local drone_force = game.forces[g.DRONE_FORCE]
+	local drone_force = game.forces[const.DRONE_FORCE]
 	if drone_force then
 		-- can't delete forces directly (?), I guess this means that spawned bots now belong to the player until they timeout
 		-- force still exists until next tick or so, may crash if calling init after this but not every tick!
@@ -126,9 +127,9 @@ end)
 ---- Events
 
 -- TODO: explain
-local built_filter = g.merge(dmg.event_filter, {
+local built_filter = common.merge(dmg.event_filter, {
 	{filter="type", type="simple-entity"},
-	{filter="name", name=g.VAULT_NAME, mode="and"}
+	{filter="name", name=const.VAULT_NAME, mode="and"}
 })
 -- Not triggered by map generator, on_chunk_generated handles newly generated ones
 for _, name in pairs({
@@ -144,7 +145,7 @@ for _, name in pairs({
 		local entity = event.entity or event.destination --[[@as LuaEntity]] ---@diagnostic disable-line
 		if entity.type == "simple-entity" then
 			-- can't actually be built in game, but still do generic built events
-			if entity.name == g.VAULT_NAME then
+			if entity.name == const.VAULT_NAME then
 				Vault.from_entity(entity)
 			end
 		else
@@ -170,16 +171,16 @@ end
 --	--game.remove_alert{type=defines.alert_type.entity_under_attack, surface="fulgora"}
 --end
 
-local HARVEST_BOTS = settings.startup[g.MOD_NAME.."-dead-bot-resource"].value
+local HARVEST_BOTS = settings.startup[const.MOD_NAME.."-dead-bot-resource"].value
 
 if HARVEST_BOTS then
 	-- only triggers for hostile prototypes
-	script.on_event(g.MOD_NAME.."-on-create-combat-bot-remnant", function(event)
+	script.on_event(const.MOD_NAME.."-on-create-combat-bot-remnant", function(event)
 		local surface = game.get_surface(event.surface_index) ---@diagnostic disable-line
 		if surface and surface.name == "fulgora" then
 			init()
 			
-			dead_bots.add_dead_bot_resource(surface, event.target_position, g.DRONE_RESOURCE[event.effect_id], 1) ---@diagnostic disable-line
+			dead_bots.add_dead_bot_resource(surface, event.target_position, const.DRONE_RESOURCE[event.effect_id], 1) ---@diagnostic disable-line
 			-- could selectively spawn normal corpse here, but not needed right now
 		end
 	end)
@@ -187,7 +188,7 @@ end
 
 script.on_event(defines.events.on_entity_died, function(event)
 	if event.entity.surface.name == "fulgora" then
-		if g.IS_TARGET[event.entity.name] then
+		if const.IS_TARGET[event.entity.name] then
 			-- why am I calling this again? I think to reset non-military state so that revived entity will actually get attacked
 			-- currently entities are prevented from dying to enemies (but player could kill them)
 			dmg.on_entity_event(event.entity)
@@ -198,7 +199,7 @@ end, dmg.event_filter)
 
 --script.on_event(defines.events.on_post_entity_died, function(event)
 --	local surf = game.surfaces["fulgora"]
---	if event.force.name == g.DRONE_FORCE and
+--	if event.force.name == const.DRONE_FORCE and
 --	   event.surface_index == surf.index then
 --		--remove_alert(event)
 --		
@@ -216,7 +217,7 @@ script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_
 ---@param surface LuaSurface
 ---@param area BoundingBox
 local function init_chunk(surface, area)
-	local vaults = surface.find_entities_filtered{name=g.VAULT_NAME, area=area}
+	local vaults = surface.find_entities_filtered{name=const.VAULT_NAME, area=area}
 	if next(vaults) then
 		for _,e in pairs(vaults) do
 			local vault = Vault.from_entity(e, "on_chunk_generated")
@@ -225,7 +226,7 @@ local function init_chunk(surface, area)
 			vault.initial_ore_amount = vault:get_ore_remaining()
 		end
 	end
-	--elseif g.TRY_SPAWN_MISSING_VAULTS then
+	--elseif const.TRY_SPAWN_MISSING_VAULTS then
 	--	Vault.try_place_missing_vault_ruin(surface, area)
 	--end
 end
@@ -240,13 +241,13 @@ end)
 
 script.on_event(defines.events.on_tick, function(event)
 	--local prof = helpers.create_profiler()
-	--g._dev_reset()
+	--common._dev_reset()
 	init()
 	
 	-- TODO: could skip expensive checks by checking something like (last-get_resource_counts())>1000 first for whole planet?
 	-- how? pause until condition met, then scan every chunk once, then pause again?
 	
-	g.stagger_tick(storage.poll_vaults, storage.vaults, g.ORE_POLL_PERIOD, function(vault)
+	common.stagger_tick(storage.poll_vaults, storage.vaults, const.ORE_POLL_PERIOD, function(vault)
 		if vault.entity.valid then
 			vault:update_waves()
 		end
@@ -276,7 +277,7 @@ script.on_event(defines.events.on_selected_entity_changed, function(event)
 	local player = game.get_player(event.player_index) ---@cast player -nil
 	local selected = player.selected
 	local prev = event.last_entity
-	if (selected and selected.name == g.VAULT_NAME) or (prev and prev.name == g.VAULT_NAME) then
+	if (selected and selected.name == const.VAULT_NAME) or (prev and prev.name == const.VAULT_NAME) then
 		init()
 		gui.update_viz(player)
 		gui.update_info_gui(player)
@@ -292,7 +293,7 @@ end)
 
 ---- Commands
 
-if g.DEBUG then
+if const.DEBUG then
 	commands.add_command("fulg-attack", "", function(command)
 		init()
 		
@@ -300,7 +301,7 @@ if g.DEBUG then
 		
 		-- vault for testing
 		local sel = game.get_player(command.player_index).selected
-		if sel and sel.valid and sel.name == g.VAULT_NAME then
+		if sel and sel.valid and sel.name == const.VAULT_NAME then
 			local vault = Vault.from_entity(sel)
 			vault:stop_wave_and_kill_bots(true)
 			vault:spawn_wave(size, 1, true)
@@ -313,7 +314,7 @@ if g.DEBUG then
 		
 		-- vault for testing
 		local sel = game.get_player(command.player_index).selected
-		if sel and sel.valid and sel.name == g.VAULT_NAME then
+		if sel and sel.valid and sel.name == const.VAULT_NAME then
 			Vault.from_entity(sel):stop_wave_and_kill_bots(true)
 		end
 	end)
@@ -329,7 +330,7 @@ if g.DEBUG then
 		-- vault for testing
 		local player = game.get_player(command.player_index) ---@cast player -nil
 		
-		local res_name = g.DRONE_RESOURCE["fulgoran-"..type]
+		local res_name = const.DRONE_RESOURCE["fulgoran-"..type]
 		dead_bots.add_dead_bot_resource(player.surface, player.position, res_name, count)
 	end)
 
@@ -380,7 +381,7 @@ commands.add_command("fulg-modify-ore",
 	end
 	
 	local sel = player.selected
-	if sel and sel.valid and sel.name == g.VAULT_NAME then
+	if sel and sel.valid and sel.name == const.VAULT_NAME then
 		local vault = Vault.from_entity(sel)
 		if vault and vault:modify_ore(mode, amount) == "success" then
 			player.print("ore modified")
@@ -416,9 +417,9 @@ script.on_init(init)
 -- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
 script.on_configuration_changed(function(data)
 	local setting_changed = data.mod_startup_settings_changed
-	local changes = data.mod_changes[g.MOD_NAME]
-	if changes or g.DEBUG then
-		if g.DEBUG then -- dev reset
+	local changes = data.mod_changes[const.MOD_NAME]
+	if changes or const.DEBUG then
+		if const.DEBUG then -- dev reset
 			reset()
 			init()
 			return

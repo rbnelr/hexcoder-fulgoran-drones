@@ -1,4 +1,6 @@
-local g = require("common")
+local const = require("const")
+local common = require("prototypes.common")
+local meld = require("__core__.lualib.meld")
 
 -- projectile that looks like a drone, to create illusion of drones acending out of hole before they actually become active
 -- TODO: tinting doesn't work for these yet
@@ -10,7 +12,7 @@ local g = require("common")
 for name,bot in pairs(data.raw["combat-robot"]) do
 	local animation = util.table.deepcopy(bot.idle)
 	local animation_shadow = util.table.deepcopy(bot.shadow_idle)
-	local tint = g.DRONE_TINT["fulgoran-"..name]
+	local tint = const.DRONE_TINT["fulgoran-"..name]
 	
 	assert(animation.layers and animation.layers[2] and animation.layers[2].filename:find("-mask"))
 	animation.layers[2].apply_runtime_tint = false
@@ -24,7 +26,7 @@ for name,bot in pairs(data.raw["combat-robot"]) do
 			flags = { "not-on-map" },
 			hidden = true,
 			acceleration = 0.01,
-			max_speed = g.EMERGE_SPEEDS[name] / 60,
+			max_speed = const.EMERGE_SPEEDS[name] / 60,
 			rotatable = true, -- Does this allow me to spawn the projectile with an orientation?
 			action = {
 				type = "direct",
@@ -50,16 +52,15 @@ end
 -- hidden entity to act as a waypoint around the vault for random drone movement, since drone can't move to arbitrary positions
 data:extend{
 	{
-		name = g.WAYPOINT,
+		name = const.WAYPOINT,
 		type = "simple-entity",
-		--picture = g.DEBUG and data.raw["container"]["wooden-chest"].picture or nil,
+		--picture = const.DEBUG and data.raw["container"]["wooden-chest"].picture or nil,
 	}
 }
 
-local meld = require("__core__.lualib.meld")
--- Fits in data-update, but there we don't get automatic recylcling recipies!
+-- Fits in data-update, but there we don't get automatic recylcling recipes!
 
-if settings.startup[g.MOD_NAME.."-buff-drones"].value then
+if settings.startup[const.MOD_NAME.."-buff-drones"].value then
 	-- buff HP and resistances by a lot, otherwise very few turret completely defeat even huge swarms
 	-- lengthen time to live
 	-- adjust friction and max_speed to prevent drones moving at unlimited speeds, make movements a bit more visually followable
@@ -126,7 +127,7 @@ if settings.startup[g.MOD_NAME.."-buff-drones"].value then
 	})
 end
 
-local HARVEST_BOTS = settings.startup[g.MOD_NAME.."-dead-bot-resource"].value
+local HARVEST_BOTS = settings.startup[const.MOD_NAME.."-dead-bot-resource"].value
 if HARVEST_BOTS then
 
 	-- distractor capsule takes 3 defenders, spawns 3 distractors
@@ -141,7 +142,7 @@ if HARVEST_BOTS then
 		}
 	})
 	meld(data.raw["technology"]["distractor"], {
-		prerequisites = g.meld_append_unique{"battery-equipment"}
+		prerequisites = common.meld_add_or_assign{"battery-equipment"}
 	})
 
 	-- destroyer capsule takes 4 distractors, spawns 4 destroyers now instead of 5
@@ -161,12 +162,12 @@ if HARVEST_BOTS then
 		}
 	})
 	meld(data.raw["technology"]["destroyer"], {
-		prerequisites = g.meld_append_unique{"electromagnetic-plant"}
+		prerequisites = common.meld_add_or_assign{"electromagnetic-plant"}
 	})
 	
 	data:extend{{
 		type = "custom-event",
-		name = g.MOD_NAME.."-on-create-combat-bot-remnant",
+		name = const.MOD_NAME.."-on-create-combat-bot-remnant",
 	}}
 
 	local order = {
@@ -193,7 +194,7 @@ if HARVEST_BOTS then
 		local robot = data.raw["combat-robot"][name]
 		local corpse = data.raw["corpse"][name.."-remnants"]
 		local hostile_dying_particle = table.deepcopy(data.raw["optimized-particle"][name.."-dying-particle"])
-		local tint = g.DRONE_TINT["fulgoran-"..name]
+		local tint = const.DRONE_TINT["fulgoran-"..name]
 		
 		-- spawn dead bot resource (or regular remnant) via particle and custom event
 		-- this will look nicer than reacting to on_entity_died|on_combat_robot_expired and also avoid spawning it on oil ocean
@@ -206,7 +207,7 @@ if HARVEST_BOTS then
 		trigger[1] = {
 			type = "script",
 			effect_id = "fulgoran-"..name,
-			custom_event = g.MOD_NAME.."-on-create-combat-bot-remnant",
+			custom_event = const.MOD_NAME.."-on-create-combat-bot-remnant",
 		}
 		
 		for _,pictures in pairs(hostile_dying_particle.pictures) do
@@ -289,7 +290,7 @@ if HARVEST_BOTS then
 				{
 					-- for resources variations (each tile looking different) are frames in animation sheet
 					-- mining depletion advances vertically (variation)
-					filename = g.MOD_DIR.."/graphics/"..name.."-resource.png",
+					filename = const.MOD_DIR.."/graphics/"..name.."-resource.png",
 					priority = "extra-high",
 					width = sprite.base.width, height = sprite.base.height,
 					shift = sprite.base.shift,
@@ -298,7 +299,7 @@ if HARVEST_BOTS then
 					variation_count = 1,
 				},
 				{
-					filename = g.MOD_DIR.."/graphics/"..name.."-resource-mask.png",
+					filename = const.MOD_DIR.."/graphics/"..name.."-resource-mask.png",
 					priority = "extra-high",
 					width = sprite.mask.width, height = sprite.mask.height,
 					shift = sprite.mask.shift,
@@ -357,12 +358,12 @@ for _, name in pairs({"defender", "distractor", "destroyer"}) do
 	
 	local mask = hostile_bot.idle.layers[2]
 	mask.apply_runtime_tint = false -- I think this means no force based tinting
-	mask.tint = g.DRONE_TINT[hostile_bot.name]
+	mask.tint = const.DRONE_TINT[hostile_bot.name]
 	mask.tint_as_overlay = true
 	
 	mask = hostile_bot.in_motion.layers[2]
 	mask.apply_runtime_tint = false -- I think this means no force based tinting
-	mask.tint = g.DRONE_TINT[hostile_bot.name]
+	mask.tint = const.DRONE_TINT[hostile_bot.name]
 	mask.tint_as_overlay = true
 	
 	data:extend{hostile_bot}

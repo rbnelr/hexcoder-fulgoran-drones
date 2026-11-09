@@ -1,4 +1,5 @@
-local g = require("common")
+local const = require("const")
+local common = require("control.common")
 local movement = {}
 
 -- choose bot target when it wants to switch
@@ -7,7 +8,7 @@ local movement = {}
 ---@param bot LuaEntity
 ---@return LuaEntity
 local function choose_next_target(vault, bot)
-	local R = g.VAULT_DEFENSE_RADIUS()
+	local R = common.VAULT_DEFENSE_RADIUS()
 	
 	-- break off = got to waypoint
 	local break_off = math.random() < 0.08
@@ -15,13 +16,13 @@ local function choose_next_target(vault, bot)
 	
 	if not break_off then
 		-- check for close targets
-		local close = vault.entity.surface.find_entities_filtered{position=bot.position, radius=g.RETARGET_DIST, type = g.TARGETS, is_military_target=true}
+		local close = vault.entity.surface.find_entities_filtered{position=bot.position, radius=const.RETARGET_DIST, type = const.TARGETS, is_military_target=true}
 		local count = #close
 		if count > 0 then
 			for i=1,3 do
 				local idx = math.floor(rnd * (count-0.001))+1
 				local targ = close[idx]
-				if g.check_distance(targ.position, vault.entity.position, R) then
+				if common.check_distance(targ.position, vault.entity.position, R) then
 					return targ
 				end
 				rnd = math.random() -- new random to pick other target
@@ -96,7 +97,7 @@ function movement.update(vault)
 				
 				local cur_target = bot.combat_robot_owner
 				if cur_target and not cur_target.valid then cur_target = nil end
-				local is_waypoint = cur_target and cur_target.name == g.WAYPOINT
+				local is_waypoint = cur_target and cur_target.name == const.WAYPOINT
 				local valid_target = cur_target and cur_target.valid and (is_waypoint or cur_target.is_military_target)
 				
 				if switch_target or not valid_target then

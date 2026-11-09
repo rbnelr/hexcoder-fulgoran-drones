@@ -1,4 +1,5 @@
-local g = require("common")
+local const = require("const")
+local common = require("control.common")
 local Vault = require("vault")
 require("gui_util")
 
@@ -21,11 +22,11 @@ function gui.update_viz(player)
 	end
 	
 	local selected = player.selected
-	if selected and selected.name == g.VAULT_NAME then
+	if selected and selected.name == const.VAULT_NAME then
 		draws = {}
 		
 		local surf = selected.surface
-		local r = g.VAULT_DEFENSE_RADIUS()
+		local r = common.VAULT_DEFENSE_RADIUS()
 		local pl = {player}
 		draws[1] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, filled=true, color=VIS_RADIUS_TINT_FILL, render_mode="chart"}
 		draws[2] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, width=80, color=VIS_RADIUS_TINT, render_mode="chart"}
@@ -161,7 +162,7 @@ function gui.update_info_gui(player)
 	end
 	
 	local selected = player.selected
-	if selected and selected.valid and selected.name == g.VAULT_NAME then
+	if selected and selected.valid and selected.name == const.VAULT_NAME then
 		local vault = Vault.from_entity(selected)
 		
 		local window, refs = vauld_gui_def:add_to(player.gui.left)

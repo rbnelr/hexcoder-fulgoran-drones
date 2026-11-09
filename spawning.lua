@@ -1,20 +1,21 @@
 ---@class Vault
 local Vault = require("vault")
-local g = require("common")
+local const = require("const")
+local common = require("control.common")
 
 local function spawn_position()
-	local spawn_r_x = g.VAULT_SPAWN_RADIUS
-	local spawn_r_y = spawn_r_x * g.VAULT_SHAFT_ELLIPSE_K
+	local spawn_r_x = const.VAULT_SPAWN_RADIUS
+	local spawn_r_y = spawn_r_x * const.VAULT_SHAFT_ELLIPSE_K
 	
 	--return random_in_ellipse_center_bias({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
-	return g.random_in_ellipse({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
+	return common.random_in_ellipse({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
 end
 -- project x onto bottom of ellipse, where bot (projectile) can spawn hidden behind VAULT_NEAR_WALL_NAME entity
 ---@param x number
 ---@return number y
 local function emerging_obscured_y_pos(x)
-	local r = g.VAULT_SHAFT_RADIUS
-	return g.VAULT_SHAFT_ELLIPSE_K * math.sqrt(r*r - x*x)
+	local r = const.VAULT_SHAFT_RADIUS
+	return const.VAULT_SHAFT_ELLIPSE_K * math.sqrt(r*r - x*x)
 end
 
 local function get_total_scrap_produced()
@@ -36,7 +37,7 @@ end
 local function get_evolution_factor()
 	local total = get_total_scrap_produced()
 
-	local evo_speed = settings.global[g.MOD_NAME.."-evolution-speed"].value --[[@as number]]
+	local evo_speed = settings.global[const.MOD_NAME.."-evolution-speed"].value --[[@as number]]
 	local x = total * (evo_speed / 10000000)
 	local factor = x / (x + 1) -- like vanilla, squash 0-inf into 0-1 range
 	return factor
@@ -47,7 +48,7 @@ end
 ---@param delay number
 ---@param duration number
 function Vault:queue_spawn_drones(bot_type, count, delay, duration)
-	local name = g.EMERGE_PARTICLES[bot_type]
+	local name = const.EMERGE_PARTICLES[bot_type]
 	for i = 1,count do
 		--local id = self.next_bot_id ---@cast id -nil
 		--self.next_bot_id = id + 1
@@ -68,20 +69,20 @@ function Vault:update_emerging()
 	--	{1,1,0, 0.3})
 	
 	local cur_tick = game.tick
-	local center = { x = g.VAULT_SHAFT_CENTER.x + self.entity.position.x,
-	                 y = g.VAULT_SHAFT_CENTER.y + self.entity.position.y }
+	local center = { x = const.VAULT_SHAFT_CENTER.x + self.entity.position.x,
+	                 y = const.VAULT_SHAFT_CENTER.y + self.entity.position.y }
 	for id,e in pairs(self.wave_emerging_queued) do
 		if cur_tick >= e.tick then
 			local x = center.x + e.final_pos.x
 			local y = center.y + e.final_pos.y
-			local sy = center.y + emerging_obscured_y_pos(e.final_pos.x) + g.BOT_FLOAT_HEIGHT
+			local sy = center.y + emerging_obscured_y_pos(e.final_pos.x) + const.BOT_FLOAT_HEIGHT
 			
 			--rendering.draw_line{from={x,sy}, to={x,y}, width=1, surface=self.entity.surface, time_to_live=30, color={1,1,0.5}}
 			
 			local projectile = self.entity.surface.create_entity{
 				name=e.name,
 				position = {x=x, y=sy}, target = {x=x, y=y}, snap_to_grid = false,
-				force=g.DRONE_FORCE,
+				force=const.DRONE_FORCE,
 				source = self.entity, -- track which vault this came from
 				preserve_ghosts_and_corpses = true, -- ??
 			} ---@cast projectile - nil
@@ -105,7 +106,7 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 	local bot = event.entity
 	local source = event.source
 	-- we are not actually being told the projectile, which makes things harder as I can't associate an id with the spawned bot
-	if bot.type == "combat-robot" and source and source.name == g.VAULT_NAME then
+	if bot.type == "combat-robot" and source and source.name == const.VAULT_NAME then
 		init()
 		
 		bot.combat_robot_owner = source
@@ -115,7 +116,7 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 		
 		-- set force again, already set on projectile and _should_ have spawned bot with correct force, but does not
 		-- force is neutral for some reason, possibly because source==vault (simple-entity) can't actually have a force?
-		bot.force = g.DRONE_FORCE
+		bot.force = const.DRONE_FORCE
 		
 		local variation = 1.0 - math.random()*0.2
 		bot.time_to_live = bot.time_to_live * variation
@@ -225,7 +226,7 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	-- esp with this not even being time_between, but time_since_last (did I make this change for consistency)?
 	-- in fact, at high mining rates/evo/settings, having attacks literally uninterruppted may be cool
 	-- TODO: just remove this?
-	local min_time = settings.global[g.MOD_NAME.."-wave-min-time"].value * variation
+	local min_time = settings.global[const.MOD_NAME.."-wave-min-time"].value * variation
 	if time_since_last < min_time and early_out then
 		return false -- not enough time has elapsed, no wave
 	end
@@ -244,10 +245,10 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	local freq_exp = 0.6 -- was 0.5
 	local size_exp = 0.7 -- was 0.5
 	
-	local wave_frequency = settings.global[g.MOD_NAME.."-wave-freq"].value / variation * base_frequency
-	local max_time       = settings.global[g.MOD_NAME.."-wave-max-time"].value * variation
+	local wave_frequency = settings.global[const.MOD_NAME.."-wave-freq"].value / variation * base_frequency
+	local max_time       = settings.global[const.MOD_NAME.."-wave-max-time"].value * variation
 	-- use a second rng to make size and frequency non-correlated
-	local wave_size      = settings.global[g.MOD_NAME.."-wave-size"].value * variation2
+	local wave_size      = settings.global[const.MOD_NAME.."-wave-size"].value * variation2
 	local min_size = 0.1
 	local max_size = 10
 	

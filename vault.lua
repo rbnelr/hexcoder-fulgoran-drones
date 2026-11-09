@@ -1,4 +1,5 @@
-local g = require("common")
+local const = require("const")
+local common = require("control.common")
 local dmg = require("disable_on_damage")
 
 ---@class Vault
@@ -38,7 +39,7 @@ Vault.__index = Vault
 ---@param source_event? string
 ---@return Vault
 function Vault.from_entity(vault, source_event)
-	assert(vault.name == g.VAULT_NAME)
+	assert(vault.name == const.VAULT_NAME)
 	
 	-- simple entity has no unit_number!
 	--local id = vault.unit_number ---@cast id -nil
@@ -61,13 +62,13 @@ function Vault.from_entity(vault, source_event)
 	}, Vault)
 	
 	-- enemy structures cannot be mined, but decoratives like ruins can
-	vault.force = g.DRONE_FORCE -- vault (simple-entity) can't actually have a force?
+	vault.force = const.DRONE_FORCE -- vault (simple-entity) can't actually have a force?
 	vault.destructible = false -- can't damage
 	
-	v.near_wall = vault.surface.find_entity(g.VAULT_NEAR_WALL_NAME, vault.position)
+	v.near_wall = vault.surface.find_entity(const.VAULT_NEAR_WALL_NAME, vault.position)
 	if v.near_wall == nil then
 		v.near_wall = v.entity.surface.create_entity{
-			name = g.VAULT_NEAR_WALL_NAME, position = v.entity.position,
+			name = const.VAULT_NEAR_WALL_NAME, position = v.entity.position,
 			preserve_ghosts_and_corpses = true, -- ??
 		}
 	end
@@ -77,7 +78,7 @@ function Vault.from_entity(vault, source_event)
 	
 	-- TODO: do somewhere else instead?
 	-- this will handle new installs with infinite option set
-	if g.INF_SCRAP_ENABLED then
+	if const.INF_SCRAP_ENABLED then
 		v:modify_ore("infinite", "keep")
 	end
 
@@ -85,7 +86,7 @@ function Vault.from_entity(vault, source_event)
 	
 	storage.vaults[id] = v
 	
-	if g.DEBUG then
+	if const.DEBUG then
 		--rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
 		--	surface=vault.surface, filled=true, color={0,1,0}, time_to_live=60}
 		game.print("init vault ".. serpent.line{vault})
@@ -141,13 +142,13 @@ function Vault:make_waypoints()
 	self:delete_waypoints()
 	
 	local count = 30
-	local R = g.VAULT_DEFENSE_RADIUS()*0.8
+	local R = common.VAULT_DEFENSE_RADIUS()*0.8
 	
 	self.waypoints = {}
 	for i=1,count do
 		local waypoint = self.entity.surface.create_entity{
-			name=g.WAYPOINT,
-			position = g.random_in_circle(self.entity.position, R),
+			name=const.WAYPOINT,
+			position = common.random_in_circle(self.entity.position, R),
 			preserve_ghosts_and_corpses = true, -- ??
 		}
 		waypoint.destructible = false
@@ -165,13 +166,13 @@ function Vault:prepare()
 	self.targets = {}
 	self.has_targets = false
 	
-	local R = g.VAULT_DEFENSE_RADIUS()
+	local R = common.VAULT_DEFENSE_RADIUS()
 	local p = self.entity.position
 	for _,e in pairs(self.entity.surface.find_entities_filtered{
-						position=p, radius=R, type = g.TARGETS }) do
+						position=p, radius=R, type = const.TARGETS }) do
 		--game.print(serpent.line(e))
 		
-		if g.check_distance(e.position, p, R) then
+		if common.check_distance(e.position, p, R) then
 			dmg.fix_building(e.unit_number, e)
 			
 			if not e.disabled_by_script then
@@ -226,10 +227,10 @@ function Vault:update_alert()
 	local built_nearby = self.has_targets
 	
 	-- radar_visible or built_nearby ?
-	if built_nearby or g.DEBUG then -- radar_visible and   or g.DEBUG
+	if built_nearby or const.DEBUG then -- radar_visible and   or const.DEBUG
 		-- 2.1 only
 		force.add_custom_alert(self.entity,
-			{type="entity", name=g.VAULT_NAME},
+			{type="entity", name=const.VAULT_NAME},
 			{"alert.active-attack",
 			 string.format("%.0f", self.wave_size*100 or -1),
 			-- string.format("%.2f", self.wave_freq or -1)

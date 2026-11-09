@@ -1,4 +1,24 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.2.0
+Date: ??. ??. 2026
+  Major Features:
+    - dead drones are now harvestable by mining drills and recycle into useful resources
+    - optional infinite vault scrap
+  Features:
+    - info gui for vault ruin on hover
+    - vault ruins that were destroyed or mined in the past are restored when the mod is added to an existing save
+    - added command /fulg-modify-ore to switch scrap vault between finite and infinite, or restore it to a percentage of the original amount meant to be used when adding the mod to existing saves
+  Balancing:
+    - distractor capsules now take personal battery, requiring the tech if harvestable drones enabled
+    - destroyer capsules now take supercapacitors and a processing unit, requiring the EM plant tech if harvestable drones enabled
+    - adjusted drone counts in waves
+    - destroyer lifetime nerfed 120s -> 70s, defender and distractor lifetimes equal to vanilla again
+    - default vault defense radius lowered from 60 to 55
+  Graphics:
+    - fixed tints for drones: emerging, active and dead drones have blue, green and red tints like the icons, while player combat bots are still tinted by force color
+  Changes:
+    - Active wave alert now only shows when the vault has player buildings in range
+---------------------------------------------------------------------------------------------------
 Version: 1.0.1
 Date: 01. 09. 2026
   Bugfixes:

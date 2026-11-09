@@ -1,4 +1,3 @@
-local g = require("common")
 ---@class Vault
 local Vault = require("vault")
 

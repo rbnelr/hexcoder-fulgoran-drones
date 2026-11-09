@@ -1,4 +1,5 @@
-local g = require("common")
+local const = require("const")
+local common = require("control.common")
 ---@class Vault
 local Vault = require("vault")
 local recreare_fulgora = require("recreate_fulgora")
@@ -26,7 +27,7 @@ end
 ---@param position MapPosition
 ---@param radius? number -- default to 0
 function Vault.update_drill_connections_near(surface, position, radius)
-	local r = g.max_drill_radius + (radius or 0) -- square radius!
+	local r = const.max_drill_radius + (radius or 0) -- square radius!
 	local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
 	-- this includes collision box of drill, not really what we want, but I would have added 1 to radius to make sure anyway
 	for _,drill in pairs(surface.find_entities_filtered{area=area, type="mining-drill"}) do
@@ -37,7 +38,7 @@ function Vault.update_drill_connections_near(surface, position, radius)
 end
 function Vault:update_drill_connections_near_vault()
 	local e = self.entity
-	Vault.update_drill_connections_near(e.surface, e.position, g.VAULT_DEFENSE_RADIUS())
+	Vault.update_drill_connections_near(e.surface, e.position, common.VAULT_DEFENSE_RADIUS())
 end
 
 -- We want to know what the original ore amount was per vault scrap patch
@@ -53,7 +54,7 @@ end
 ---@return integer
 function Vault:get_initial_ore_slow()
 	-- TODO: profile, and if at all significant, split it into smaller chunks to rotate through
-	local circ_r = g.VAULT_DEFENSE_RADIUS()
+	local circ_r = common.VAULT_DEFENSE_RADIUS()
 	
 	local vx = self.entity.position.x
 	local vy = self.entity.position.y
@@ -73,7 +74,7 @@ function Vault:get_initial_ore_slow()
 	
 	--for x=x0,x1 do
 	--	for y=y0,y1 do
-	--		if g.check_distance2(x,y, vx,vy, circ_r) then
+	--		if common.check_distance2(x,y, vx,vy, circ_r) then
 	--			tile_pos[1] = {x, y} -- is center correct here?
 	--			local props = surface.calculate_tile_properties(prop_names, tile_pos)
 	--			
@@ -91,7 +92,7 @@ function Vault:get_initial_ore_slow()
 	-- way faster than individual calculate_tile_properties calls
 	for x=x0,x1 do
 		for y=y0,y1 do
-			if g.check_distance2(x,y, vx,vy, circ_r) then
+			if common.check_distance2(x,y, vx,vy, circ_r) then
 				-- orignal probability_expression = "(min(fulgora_spots, (1 - fulgora_starting_vault_cone) / 2) < 0.015) * min(fulgora_vaults_and_starting_vault, 1 - fulgora_starting_mask)"
 				-- don't bother trying to evaluate starting area
 				table.insert(tile_pos, {x, y})
@@ -111,7 +112,7 @@ function Vault:get_initial_ore_slow()
 		end
 	end
 	
-	for _,ore_tile in pairs(surface.find_entities_filtered{position=self.entity.position, radius=circ_r, type="resource", name=g.SCRAP_TYPES}) do
+	for _,ore_tile in pairs(surface.find_entities_filtered{position=self.entity.position, radius=circ_r, type="resource", name=const.SCRAP_TYPES}) do
 		rendering.draw_circle{target=ore_tile.position, surface=surface, radius=0.4, width=1, color={0,0,1}, time_to_live=30}
 	end
 	
@@ -125,10 +126,10 @@ end]]
 ---@return LuaEntity[]
 function Vault:get_initial_ore_slow()
 	local position = self.entity.position
-	local circ_r = g.VAULT_DEFENSE_RADIUS()
+	local circ_r = common.VAULT_DEFENSE_RADIUS()
 	local fake_surface = recreare_fulgora.recreate_initial_surface_and_load_chunks(self.entity.surface, position, circ_r)
 	
-	return fake_surface.find_entities_filtered{position=position, radius=circ_r, type="resource", name=g.SCRAP_TYPES}
+	return fake_surface.find_entities_filtered{position=position, radius=circ_r, type="resource", name=const.SCRAP_TYPES}
 end
 
 ---@return integer
@@ -149,7 +150,7 @@ end
 ---@return integer
 function Vault:get_ore_remaining()
 	-- TODO: profile, and if at all significant, split it into smaller chunks to rotate through
-	local circ_r = g.VAULT_DEFENSE_RADIUS()
+	local circ_r = common.VAULT_DEFENSE_RADIUS()
 	
 	-- actually it's a circle?
 	--local square_r = circ_r * 0.71 + 5 -- can only check rectangle, don't check outside visual circle, so radius*cos(pi/4)
@@ -158,7 +159,7 @@ function Vault:get_ore_remaining()
 	
 	local count = 0
 	for _,ore_tile in pairs(e.surface.find_entities_filtered{
-		position=e.position, radius=circ_r, type="resource", name=g.SCRAP_TYPES}) do
+		position=e.position, radius=circ_r, type="resource", name=const.SCRAP_TYPES}) do
 		--if ore_tile.name == "vault-scrap" then
 		--	if ore_tile.amount <= INF_SCRAP_MIN then
 		--		--ore_tile.amount = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT
@@ -192,7 +193,7 @@ end
 ---@param restore number|"keep" -- restore to x percent of initial (mapgen) amount or keep existing amounts
 ---@return string
 function Vault:modify_ore(mode, restore)
-	local circ_r = g.VAULT_DEFENSE_RADIUS()
+	local circ_r = common.VAULT_DEFENSE_RADIUS()
 	local position = self.entity.position
 	local surface = self.entity.surface
 	local from = {"scrap", "vault-scrap"}
@@ -360,7 +361,7 @@ script.on_event(defines.events.on_resource_depleted, function(event)
 		
 		-- need to account for bump here
 		-- if we set amount directly, we lose mined amount since last poll, instead also bump whatever latest is
-		local ore_key = g.int_position_key(ore.position)
+		local ore_key = common.int_position_key(ore.position)
 		local latest_amount = ore_cache[ore_key]
 		ore_cache[ore_key] = latest_amount and latest_amount + bump or bumped_amount
 	end
@@ -368,7 +369,7 @@ end)
 script.on_nth_tick(60*10, function(event)
 	local player = game.get_player(1) ---@cast player -nil
 	
-	local nearby_ore = player.surface.find_entities_filtered{name=g.SCRAP_TYPES, position=player.position, radius=30}
+	local nearby_ore = player.surface.find_entities_filtered{name=const.SCRAP_TYPES, position=player.position, radius=30}
 	local normal = INF_SCRAP_NORMAL
 	
 	local total_amount = 0
@@ -377,7 +378,7 @@ script.on_nth_tick(60*10, function(event)
 		local amount = ore.amount
 		total_amount = total_amount + amount
 		
-		local ore_key = g.int_position_key(ore.position)
+		local ore_key = common.int_position_key(ore.position)
 		local last_amount = ore_cache[ore_key] or amount -- todo: adjust last amount on deplection bump, not extra_drain
 		ore_cache[ore_key] = amount
 		
@@ -435,7 +436,7 @@ script.on_nth_tick(1, function(event)
 		local drill_e = drill.e
 		if drill_e.valid then
 			local active_ore = drill_e.mining_target
-			local active_ore_amount = active_ore and ore_cache[g.int_position_key(active_ore.position)] or 0
+			local active_ore_amount = active_ore and ore_cache[common.int_position_key(active_ore.position)] or 0
 			
 			if active_ore then
 				local yield = active_ore_amount / INF_SCRAP_NORMAL
@@ -465,8 +466,8 @@ function Vault.restore_destroyed_vaults(surface, where, radius)
 	local fake_surfase = recreare_fulgora.recreate_initial_surface_and_load_chunks(surface, where, radius)
 	
 	local initial_vaults = where == "all" and
-		fake_surfase.find_entities_filtered{name=g.VAULT_NAME} or
-		fake_surfase.find_entities_filtered{position=where, radius=radius, name=g.VAULT_NAME}
+		fake_surfase.find_entities_filtered{name=const.VAULT_NAME} or
+		fake_surfase.find_entities_filtered{position=where, radius=radius, name=const.VAULT_NAME}
 
 	-- this is conventient, but ignores existing vaults and just overlaps them
 	--fake_surfase.clone_entities{entities=initial_vaults,
@@ -475,7 +476,7 @@ function Vault.restore_destroyed_vaults(surface, where, radius)
 	--	create_build_effect_smoke=true}
 	
 	for _,v in pairs(initial_vaults) do
-		if surface.find_entity(g.VAULT_NAME, v.position) == nil then
+		if surface.find_entity(const.VAULT_NAME, v.position) == nil then
 			-- Missing entity!
 			-- need to use create_entity() not Entity.clone(), as described above
 			local new_vault = surface.create_entity{
@@ -506,8 +507,8 @@ function Vault.restore_destroyed_vaults(surface, where, radius)
 	--end
 	--
 	--if surface then
-	--	--surface.regenerate_decorative(g.VAULT_NAME, chunks) -- vaults are not decorations (at least my version?)
-	--	surface.regenerate_entity(g.VAULT_NAME, chunks)
+	--	--surface.regenerate_decorative(const.VAULT_NAME, chunks) -- vaults are not decorations (at least my version?)
+	--	surface.regenerate_entity(const.VAULT_NAME, chunks)
 	--	-- regenerate_entity does not return sucess or number of entities actually added!
 	--end
 	---- TODO: recreate_initial_surface_and_load_chunks
@@ -525,7 +526,7 @@ local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
 	
 	-- scan more ore around the chunk, I think this makes sense
 	--local r = 10
-	--local near_ore_tiles = surf.find_entities_filtered{type="resource", name=g.SCRAP_TYPES,
+	--local near_ore_tiles = surf.find_entities_filtered{type="resource", name=const.SCRAP_TYPES,
 	--	area={{area.left_top.x-r, area.left_top.y-r}, {area.right_bottom.x+r, area.right_bottom.y+r}}
 	--}
 	
@@ -557,7 +558,7 @@ local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
 	-- I assume this has to be because the neighbouring chunk is not actually generated yet?
 	-- so we manually spawn vaults that would not actually be missing, but this works out ok actually
 	if found then
-		local near_vaults = surface.find_entities_filtered{name=g.VAULT_NAME, position=pos, radius=25}
+		local near_vaults = surface.find_entities_filtered{name=const.VAULT_NAME, position=pos, radius=25}
 		if next(near_vaults) then
 			-- chunk area did not contain a vault, but in neighbouring chunk (next to suitable vault pos) there already is one
 			found = nil
@@ -567,7 +568,7 @@ local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
 	if found then
 		--game.print("Spawning missing vault ruin: "..serpent.line(found))
 		
-		local bb = prototypes.entity[g.VAULT_NAME].collision_box
+		local bb = prototypes.entity[const.VAULT_NAME].collision_box
 		local p0 = {pos.x+bb.left_top.x, pos.y+bb.left_top.y}
 		local p1 = {pos.x+bb.right_bottom.x, pos.y+bb.right_bottom.y}
 		local colliding = surface.find_entities_filtered{
@@ -589,7 +590,7 @@ local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
 				e.destroy()
 			end
 			
-			local vault = surface.create_entity{name=g.VAULT_NAME, position=pos, snap_to_grid=false, raise_built=true, move_stuck_players=true} -- preserve_ghosts_and_corpses ?
+			local vault = surface.create_entity{name=const.VAULT_NAME, position=pos, snap_to_grid=false, raise_built=true, move_stuck_players=true} -- preserve_ghosts_and_corpses ?
 			if vault ~= nil then
 				game.print("Spawned missing vault ruin: "..serpent.line(vault))
 			end
@@ -607,7 +608,7 @@ function Vault.try_place_missing_vault_ruin(surface, area)
 	
 	-- no vault ruin, count total scrap in chunk
 	local count = 0
-	local ore_tiles = surface.find_entities_filtered{type="resource", name=g.SCRAP_TYPES, area=area}
+	local ore_tiles = surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES, area=area}
 	for _,ore_tile in pairs(ore_tiles) do
 		count = count + ore_tile.amount
 	end
