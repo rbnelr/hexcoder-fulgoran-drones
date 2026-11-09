@@ -3,11 +3,12 @@ Version: 1.2.0
 Date: ??. ??. 2026
   Major Features:
     - dead drones are now harvestable by mining drills and recycle into useful resources
-    - optional infinite vault scrap
+    - optional infinite vault scrap (startup setting, on by default): scrap on vault islands never runs out, but its yield drops as it is mined
   Features:
     - info gui for vault ruin on hover
     - vault ruins that were destroyed or mined in the past are restored when the mod is added to an existing save
-    - added command /fulg-modify-ore to switch scrap vault between finite and infinite, or restore it to a percentage of the original amount meant to be used when adding the mod to existing saves
+    - vault island scrap is converted automatically when the mod is added to an existing save or the infinite scrap setting is changed, fully mined vault tiles come back as infinite scrap
+    - added command /fulg-restore-ore <percent> to restore the scrap around the hovered vault ruin to a percentage of its original amount, including fully mined tiles
   Balancing:
     - distractor capsules now take personal battery, requiring the tech if harvestable drones enabled
     - destroyer capsules now take supercapacitors and a processing unit, requiring the EM plant tech if harvestable drones enabled

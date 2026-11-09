@@ -6,11 +6,9 @@ local common = {}
 storage = storage
 
 ---- Runtime settings TODO: cache this and update on settings change?
--- TODO: make startup setting to avoid messing up mining rate? but need to update initial amounts anyway if this changes
--- either add the code to make sure changing this works or remove the setting (?)
-
+-- vault defense radius is a startup setting (was runtime-global): a change resets and reinits everything, including the ore trackers
 function common.VAULT_DEFENSE_RADIUS()
-	return settings.global[const.MOD_NAME.."-vault-defense-radius"].value --[[@as number]]
+	return settings.startup[const.MOD_NAME.."-vault-defense-radius"].value --[[@as number]]
 end
 
 ---- Infinite vault scrap

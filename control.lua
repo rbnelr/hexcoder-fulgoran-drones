@@ -396,16 +396,16 @@ commands.add_command("fulg-restore-ore",
 
 	local percent = tonumber(command.parameter or "")
 	if not percent or percent < 0 then
-		player.print("please pass a percentage >= 0")
+		player.print(const.PRINT_PREFIX.."please pass a percentage >= 0")
 		return
 	end
 
 	local sel = player.selected
 	if sel and sel.valid and sel.name == const.VAULT_NAME then
 		ore.restore_ore(Vault.from_entity(sel), percent / 100)
-		player.print("ore restored")
+		player.print(const.PRINT_PREFIX.."ore restored")
 	else
-		player.print("need to hover a vault!")
+		player.print(const.PRINT_PREFIX.."need to hover a vault!")
 	end
 end)
 

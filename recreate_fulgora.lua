@@ -77,7 +77,7 @@ function M.recreate_initial_surface_and_load_chunks(original_fulgora, where, rad
 		
 		prof_filter.stop()
 		if const.DEBUG then
-			log({"", string.format("fake fulgora: requested %d chunks, vault island filter ", requested), prof_filter})
+			log({"", const.PRINT_PREFIX, string.format("fake fulgora: requested %d chunks, vault island filter ", requested), prof_filter})
 		end
 	else
 		-- generate around "where", is radius square or circular?
@@ -91,7 +91,7 @@ function M.recreate_initial_surface_and_load_chunks(original_fulgora, where, rad
 	storage.last_used_fake_fulgora = game.tick
 
 	if const.DEBUG then
-		game.print("Created fake fulgora")
+		game.print(const.PRINT_PREFIX.."Created fake fulgora")
 	end
 	return fake_surface, requested
 end
@@ -102,7 +102,7 @@ function M.delete_fake_fulgora()
 		storage.last_used_fake_fulgora = nil
 		
 		if const.DEBUG then
-			game.print("Deleted fake fulgora")
+			game.print(const.PRINT_PREFIX.."Deleted fake fulgora")
 		end
 	end
 end
@@ -166,7 +166,7 @@ local function respawn_vaults(surface, fake_surface, where, radius)
 			}
 
 			-- Print for user
-			game.print("Respawned vault ".. serpent.line{new_vault})
+			game.print(const.PRINT_PREFIX.."Respawned vault ".. serpent.line{new_vault})
 			respawned = respawned + 1
 		end
 	end
@@ -301,12 +301,12 @@ function M.convert_ore_and_restore_vaults(surface)
 	local respawned = respawn_vaults(surface, fake_surface, "all")
 	prof_vaults.stop()
 
-	game.print({"", "Fulgoran drones: restored map, fake fulgora ", prof_fake})
-	log({"", "Fulgoran drones: restored map, fake fulgora ", prof_fake})
-	game.print({"", string.format("  respawned %d vaults ", respawned), prof_vaults})
-	log({"", string.format("  respawned %d vaults ", respawned), prof_vaults})
-	game.print({"", string.format("  converted %d vault scrap tiles to %s ", converted, const.INF_SCRAP_ENABLED and "infinite" or "finite"), prof_scrap})
-	log({"", string.format("  converted %d vault scrap tiles to %s ", converted, const.INF_SCRAP_ENABLED and "infinite" or "finite"), prof_scrap})
+	game.print({"", const.PRINT_PREFIX, "restored map, fake fulgora ", prof_fake})
+	log({"", const.PRINT_PREFIX, "restored map, fake fulgora ", prof_fake})
+	game.print({"", const.PRINT_PREFIX, string.format("respawned %d vaults ", respawned), prof_vaults})
+	log({"", const.PRINT_PREFIX, string.format("respawned %d vaults ", respawned), prof_vaults})
+	game.print({"", const.PRINT_PREFIX, string.format("converted %d vault scrap tiles to %s ", converted, const.INF_SCRAP_ENABLED and "infinite" or "finite"), prof_scrap})
+	log({"", const.PRINT_PREFIX, string.format("converted %d vault scrap tiles to %s ", converted, const.INF_SCRAP_ENABLED and "infinite" or "finite"), prof_scrap})
 end
 
 -- experimental way of spawning vaults in rare case where vault island is missing its ruin
@@ -385,7 +385,7 @@ local function try_place_missing_vault_ruin2(surface, area, ore_tiles)
 			
 			local vault = surface.create_entity{name=const.VAULT_NAME, position=pos, snap_to_grid=false, raise_built=true, move_stuck_players=true} -- preserve_ghosts_and_corpses ?
 			if vault ~= nil then
-				game.print("Spawned missing vault ruin: "..serpent.line(vault))
+				game.print(const.PRINT_PREFIX.."Spawned missing vault ruin: "..serpent.line(vault))
 			end
 		end
 	end

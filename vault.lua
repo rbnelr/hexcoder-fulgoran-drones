@@ -95,7 +95,7 @@ function Vault.from_entity(vault, source_event)
 	if const.DEBUG then
 		--rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
 		--	surface=vault.surface, filled=true, color={0,1,0}, time_to_live=60}
-		game.print("init vault ".. serpent.line{vault})
+		game.print(const.PRINT_PREFIX.."init vault ".. serpent.line{vault})
 	end
 	
 	return v

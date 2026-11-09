@@ -2,16 +2,44 @@ local MOD_NAME = "hexcoder-fulgoran-drones"
 
 data:extend({
 	{
+		type = "bool-setting",
+		name = MOD_NAME.."-debug",
+		order = "a",
+		localised_name = "Debug mode",
+		setting_type = "startup",
+		default_value = false,
+	},
+	{
 		type = "double-setting",
 		name = MOD_NAME.."-vault-defense-radius",
+		order = "b",
 		localised_name = "Vault Defense radius",
 		localised_description = "",
-		setting_type = "runtime-global",
+		setting_type = "startup", -- was runtime-global, changing it needs the ore trackers rebuilt, which the reset on startup setting changes does
 		default_value = 55,
+	},
+	{
+		type = "bool-setting",
+		name = MOD_NAME.."-inf-scrap",
+		order = "b2",
+		localised_name = "Infinite vault scrap",
+		localised_description = "Scrap on vault islands becomes an infinite resource like crude oil.\nStarts out mining faster than normal, but ends up slower once depleted to minimum yield.\nChanging this setting automatically converts the existing vault island scrap on the next load.\nCurrent amounts are kept, and fully mined tiles come back as minimum when switching to infinite.\nOn large maps this can freeze the game for a few seconds on the first load.\nBefore removing the mod, turn this off and save once, otherwise vault islands lose all their scrap.",
+		setting_type = "startup",
+		default_value = true,
+	},
+	{
+		type = "bool-setting",
+		name = MOD_NAME.."-dead-bot-resource",
+		order = "b3",
+		localised_name = "Harvestable drones",
+		localised_description = "Dead enemy drones can be mined and recycled for valuable ingredients like batteries and supercapacitors.\nAlso changes player combat robot recipes.",
+		setting_type = "startup",
+		default_value = true,
 	},
 	{
 		type = "double-setting",
 		name = MOD_NAME.."-wave-freq",
+		order = "c1",
 		localised_name = "Wave frequency multiplier",
 		localised_description = "",
 		setting_type = "runtime-global",
@@ -22,6 +50,7 @@ data:extend({
 	{
 		type = "double-setting",
 		name = MOD_NAME.."-wave-size",
+		order = "c2",
 		localised_name = "Wave size multiplier",
 		localised_description = "",
 		setting_type = "runtime-global",
@@ -32,6 +61,7 @@ data:extend({
 	{
 		type = "double-setting",
 		name = MOD_NAME.."-wave-min-time",
+		order = "c3",
 		localised_name = "Minimum time between waves",
 		localised_description = "in minutes\n1 should result in about 1 wave every 10 minutes at 3k/min scrap depletion rate",
 		setting_type = "runtime-global",
@@ -42,6 +72,7 @@ data:extend({
 	{
 		type = "double-setting",
 		name = MOD_NAME.."-wave-max-time",
+		order = "c4",
 		localised_name = "Maximum time between waves",
 		localised_description = "in minutes\nSmall waves will spawn even without mining",
 		setting_type = "runtime-global",
@@ -52,6 +83,7 @@ data:extend({
 	{
 		type = "double-setting",
 		name = MOD_NAME.."-evolution-speed",
+		order = "d1",
 		localised_name = "Evolution speed",
 		localised_description = "1=50% evolution at 10M scrap produced, 5=50% at 2M, 0.5=50% at 20M\nEvolution effects wave size",
 		setting_type = "runtime-global",
@@ -62,6 +94,7 @@ data:extend({
 	{
 		type = "bool-setting",
 		name = MOD_NAME.."-buff-drones",
+		order = "e1",
 		localised_name = "Buff drones",
 		localised_description = "Buff combat robot HP, resistances and time to live to balance around drones being fought by player turrets, will affect player-thrown combat robots too",
 		setting_type = "startup",
@@ -70,32 +103,10 @@ data:extend({
 	{
 		type = "bool-setting",
 		name = MOD_NAME.."-nerf-turret-turn",
+		order = "e2",
 		localised_name = "Nerf turret turn rate",
 		localised_description = "Nerf ammo and laser turret turn rate to make them a bit less effective at destroying drones",
 		setting_type = "startup",
 		default_value = false,
-	},
-	{
-		type = "bool-setting",
-		name = MOD_NAME.."-debug",
-		localised_name = "Debug mode",
-		setting_type = "startup",
-		default_value = false,
-	},
-	{
-		type = "bool-setting",
-		name = MOD_NAME.."-inf-scrap",
-		localised_name = "Infinite vault scrap",
-		localised_description = "Make scrap around vault ruins a infinite resource like crude oil.",
-		setting_type = "startup",
-		default_value = true,
-	},
-	{
-		type = "bool-setting",
-		name = MOD_NAME.."-dead-bot-resource",
-		localised_name = "Harvestable drones",
-		localised_description = "Dead enemy drones can be mined and recycled for valuable ingredients like batteries and supercapacitors.\nAlso changes player combat robot recipes.",
-		setting_type = "startup",
-		default_value = true,
 	},
 })

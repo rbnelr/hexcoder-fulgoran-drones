@@ -11,6 +11,8 @@ const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value -
 -- at 50% drain it takes 1/50%=2x as long to drain, integral from 0.2 to 1 for (1/x) is 1.61, so at 100% initial yield it takes 50% longer than expected
 -- with any ore above 100%, it will actually take closer to the expected
 const.INF_DEPLETION_RATE = 10 -- make setting?
+
+const.PRINT_PREFIX = "[Vault Drones] " -- prefix for all prints and log lines of this mod
 -- TODO: setting for quality and attack size curve
 const.ALLOW_DRILLS_WITHOUT_ORE = true
 

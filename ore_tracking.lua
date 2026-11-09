@@ -210,7 +210,7 @@ script.on_event(defines.events.on_resource_depleted, function(event)
 		end
 		
 		if const.DEBUG then
-			game.print("on_resource_depleted ".. serpent.line{
+			game.print(const.PRINT_PREFIX.."on_resource_depleted ".. serpent.line{
 				old_amount=old_amount,
 				bamount=ore.amount,
 				initial=ore.initial_amount,
@@ -222,7 +222,7 @@ script.on_event(defines.events.on_resource_depleted, function(event)
 		end
 	else
 		if const.DEBUG then
-			game.print("on_resource_depleted ".. serpent.line{ore})
+			game.print(const.PRINT_PREFIX.."on_resource_depleted ".. serpent.line{ore})
 		end
 		
 		-- finite ore depleted, removed by the game after this
