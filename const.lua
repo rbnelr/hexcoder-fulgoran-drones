@@ -1,10 +1,16 @@
 local const = {}
 const.MOD_NAME = "hexcoder-fulgoran-drones"
 const.MOD_DIR = "__"..const.MOD_NAME.."__"
+const.PRINT_PREFIX = "[Vault Drones] " -- prefix for all prints and log lines of this mod
 
 ---- Startup settings
 const.DEBUG = settings.startup[const.MOD_NAME.."-debug"].value --[[@as boolean]]
+const.VAULT_DEFENSE_RADIUS = settings.startup[const.MOD_NAME.."-vault-defense-radius"].value --[[@as number]]
 const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value --[["@as boolean"]]
+
+-- TODO: setting for quality and attack size curve
+const.ALLOW_DRILLS_WITHOUT_ORE = true
+
 -- 20M patch, at 20% min has 16M available
 -- 24 Drills 1.25 mining speed / 0.5s mining time = 60 mining/s at 50% drain = 1800/min
 -- 1800/s*10 = 1M/h = ~16h to deplete (more due to mining deed bots and <100% drain slowing down)
@@ -12,9 +18,10 @@ const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value -
 -- with any ore above 100%, it will actually take closer to the expected
 const.INF_DEPLETION_RATE = 10 -- make setting?
 
-const.PRINT_PREFIX = "[Vault Drones] " -- prefix for all prints and log lines of this mod
--- TODO: setting for quality and attack size curve
-const.ALLOW_DRILLS_WITHOUT_ORE = true
+const.SCRAP_TYPES = {"scrap", "vault-scrap"} -- vault-scrap always defined, hidden if inf scrap is off
+-- inf scrap is a hard toggle and vault islands get converted on load, so ore tracking only looks at this type
+-- both types (SCRAP_TYPES) only in the conversion code and when reading fake fulgora
+const.ACTIVE_SCRAP = const.INF_SCRAP_ENABLED and "vault-scrap" or "scrap"
 
 -- restrict buildings being attacked to drills, assemblers and military targets, leave inserters, trains, roboports etc alone,
 -- so repair and defense can be safely automated
@@ -98,7 +105,5 @@ if prototypes then
 		end
 	end
 end
-
-const.SCRAP_TYPES = {"scrap", "vault-scrap"} -- vault-scrap always defined, hidden if inf scrap is off
 
 return const

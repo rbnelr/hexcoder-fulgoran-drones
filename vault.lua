@@ -7,12 +7,13 @@ local ore = require("ore_tracking")
 ---@field entity LuaEntity
 ---@field id obj_id
 ---@field near_wall LuaEntity?
+---@field dirty_ores boolean -- tiles may have been mined before tracking started (existing save, restored vault), see get_or_init_scrap
+---@field scrap OreTracking? -- created on demand, see get_or_init_scrap
 ---@field targets LuaEntity[] -- NOTE: entities can end up in two vaults target list!, TODO: is currently only used for bot movement, and not ideal for it, want a list of vaild target that changes
 ---@field has_targets boolean -- has any targets (=vulnerable player entities)
 ---@field waypoints LuaEntity[]
 ---@field wave_rng number?
 ---@field wave_rng2 number?
----@field scrap OreTracking
 ---@field wave_size number?
 ---@field wave_freq number?
 ---@field wave_start_tick MapTick
@@ -88,7 +89,9 @@ function Vault.from_entity(vault, source_event)
 	end
 	v.near_wall.destructible = false
 	
-	v.scrap = ore.OreTracking.new(vault.surface, vault.position, common.VAULT_DEFENSE_RADIUS(), source_event ~= "on_chunk_generated")
+	-- ore tracking is created on demand (get_or_init_scrap), vaults nobody builds near or looks at never need it
+	-- new chunk: nothing mined yet, so no fake fulgora needed for finite initial amounts
+	v.dirty_ores = source_event ~= "on_chunk_generated"
 	
 	v:prepare() -- make sure to fix buildings
 	
@@ -118,10 +121,21 @@ function Vault:destroy()
 	storage.vaults[self.id] = nil
 end
 
+-- ore tracking on demand: update_waves only scans with player buildings in range, gui forces it
+-- update_initial needs fake fulgora (slow), only done once here, and naturally staggered by the vault polling
+---@return OreTracking
+function Vault:get_or_init_scrap()
+	if self.scrap == nil then
+		local e = self.entity
+		self.scrap = ore.OreTracking.new(e.surface, e.position, const.VAULT_DEFENSE_RADIUS, self.dirty_ores)
+	end
+	return self.scrap
+end
+
 ---@return OreScan
 function Vault:scan_ore()
 	local e = self.entity
-	return self.scrap:scan(e.surface, e.position, common.VAULT_DEFENSE_RADIUS())
+	return self:get_or_init_scrap():scan(e.surface, e.position, const.VAULT_DEFENSE_RADIUS)
 end
 
 -- create random invisible waypoints to act as drone movement targets
@@ -138,7 +152,7 @@ function Vault:make_waypoints()
 	self:delete_waypoints()
 	
 	local count = 30
-	local R = common.VAULT_DEFENSE_RADIUS()*0.8
+	local R = const.VAULT_DEFENSE_RADIUS*0.8
 	
 	self.waypoints = {}
 	for i=1,count do
@@ -162,7 +176,7 @@ function Vault:prepare()
 	self.targets = {}
 	self.has_targets = false
 	
-	local R = common.VAULT_DEFENSE_RADIUS()
+	local R = const.VAULT_DEFENSE_RADIUS
 	local p = self.entity.position
 	for _,e in pairs(self.entity.surface.find_entities_filtered{
 						position=p, radius=R, type = const.TARGETS }) do
@@ -213,8 +227,8 @@ function Vault:end_wave()
 	self:remove_alert()
 end
 
-function Vault:_reset_wave_for_mining_rate()
-	self:end_wave()
+function Vault:_reset_wave_for_mining_rate() -- for restore-ore
+	--self:end_wave()
 	self.wave_start_tick = game.tick
 	self.wave_end_tick = game.tick
 end

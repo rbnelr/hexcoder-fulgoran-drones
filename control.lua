@@ -152,7 +152,7 @@ for _, name in pairs({
 			
 			-- start ore scans for vaults this is near, see update_waves (cleared again by prepare at wave start)
 			if entity.surface.name == "fulgora" then
-				for _,e in pairs(entity.surface.find_entities_filtered{name=const.VAULT_NAME, position=entity.position, radius=common.VAULT_DEFENSE_RADIUS()}) do
+				for _,e in pairs(entity.surface.find_entities_filtered{name=const.VAULT_NAME, position=entity.position, radius=const.VAULT_DEFENSE_RADIUS}) do
 					local vault = storage.vaults[script.register_on_object_destroyed(e)]
 					if vault then
 						vault.has_targets = true

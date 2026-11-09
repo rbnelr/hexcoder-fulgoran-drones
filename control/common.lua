@@ -5,12 +5,6 @@ local common = {}
 ---@type ModStorage
 storage = storage
 
----- Runtime settings TODO: cache this and update on settings change?
--- vault defense radius is a startup setting (was runtime-global): a change resets and reinits everything, including the ore trackers
-function common.VAULT_DEFENSE_RADIUS()
-	return settings.startup[const.MOD_NAME.."-vault-defense-radius"].value --[[@as number]]
-end
-
 ---- Infinite vault scrap
 
 local INF_SCRAP_PROTO = prototypes.entity["vault-scrap"]

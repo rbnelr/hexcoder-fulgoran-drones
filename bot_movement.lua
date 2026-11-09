@@ -8,7 +8,7 @@ local movement = {}
 ---@param bot LuaEntity
 ---@return LuaEntity
 local function choose_next_target(vault, bot)
-	local R = common.VAULT_DEFENSE_RADIUS()
+	local R = const.VAULT_DEFENSE_RADIUS
 	
 	-- break off = got to waypoint
 	local break_off = math.random() < 0.08

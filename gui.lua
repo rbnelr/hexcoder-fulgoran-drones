@@ -27,7 +27,7 @@ function gui.update_viz(player)
 		draws = {}
 		
 		local surf = selected.surface
-		local r = common.VAULT_DEFENSE_RADIUS()
+		local r = const.VAULT_DEFENSE_RADIUS
 		local pl = {player}
 		draws[1] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, filled=true, color=VIS_RADIUS_TINT_FILL, render_mode="chart"}
 		draws[2] = rendering.draw_circle{target=selected, radius=r, surface=surf, players=pl, width=80, color=VIS_RADIUS_TINT, render_mode="chart"}
