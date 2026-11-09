@@ -34,7 +34,7 @@ function init()
 	if init then
 		local surface = game.get_surface("fulgora")
 		if surface then
-			Vault.restore_destroyed_vaults(surface, "all") -- can create a big lag, warn user or make user trigger it manually
+			Vault.restore_destroyed_vaults(surface, "all") -- freezes the game for a bit, warn user or make user trigger it manually?
 
 			-- This will convert ore to infinite
 			for _,e in pairs(surface.find_entities_filtered{name=g.VAULT_NAME}) do

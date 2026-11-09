@@ -159,13 +159,13 @@ function Vault:get_ore_remaining()
 	local count = 0
 	for _,ore_tile in pairs(e.surface.find_entities_filtered{
 		position=e.position, radius=circ_r, type="resource", name=g.SCRAP_TYPES}) do
-		if ore_tile.name == "vault-scrap" then
-			if ore_tile.amount <= INF_SCRAP_MIN then
-				--ore_tile.amount = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT
-				
-				Vault.update_drill_connections_near(ore_tile.surface, ore_tile.position)
-			end
-		end
+		--if ore_tile.name == "vault-scrap" then
+		--	if ore_tile.amount <= INF_SCRAP_MIN then
+		--		--ore_tile.amount = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT
+		--		
+		--		Vault.update_drill_connections_near(ore_tile.surface, ore_tile.position)
+		--	end
+		--end
 		count = count + ore_tile.amount
 	end
 	

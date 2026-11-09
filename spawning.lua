@@ -255,7 +255,7 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	local mining_factor = mining_rate / base_mining_rate
 	
 	wave_frequency = wave_frequency * mining_factor ^ freq_exp
-	wave_size = mining_factor ^ size_exp
+	wave_size = wave_size * mining_factor ^ size_exp
 	
 	wave_size = math.max(wave_size, min_size)
 	wave_size = math.min(wave_size, max_size)
