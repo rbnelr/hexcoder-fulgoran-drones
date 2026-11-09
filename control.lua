@@ -303,48 +303,48 @@ if const.DEBUG then
 	-- /c local s = game.player.surface; s.clear();
 	-- /c local s = game.player.surface; s.request_to_generate_chunks({0, 0}, 20); s.force_generate_chunk_requests(); game.player.force.chart_all(s)
 	
-	-- TEMPORARY: compare whole map conversion variants (recreate_fulgora.debug_convert_all), use a test save
+	-- TEMPORARY (disabled, recreate_fulgora.debug_convert_all was removed): compare whole map conversion variants, use a test save
 	-- converts away from the setting and back, so the map ends up as before (finite tiles below the inf minimum stay raised)
 	-- "full": fake fulgora for all chunks instead of only vault islands, to compare counts and time
-	commands.add_command("fulg-bench-convert", "[chunks|single|single-lookup] [full] (default: all three, vault island chunks only)", function(command)
-		init()
-		local player = game.get_player(command.player_index) ---@cast player -nil
-		local surface = game.get_surface("fulgora")
-		if not surface then
-			player.print("no fulgora")
-			return
-		end
+	--commands.add_command("fulg-bench-convert", "[single|single-find-entity|single-lookup|chunks] [full] (default: all, vault island chunks only)", function(command)
+		--init()
+		--local player = game.get_player(command.player_index) ---@cast player -nil
+		--local surface = game.get_surface("fulgora")
+		--if not surface then
+			--player.print("no fulgora")
+			--return
+		--end
 
-		local variants, all_chunks = {}, false
-		for arg in string.gmatch(command.parameter or "", "%S+") do
-			if arg == "full" then all_chunks = true else variants[#variants+1] = arg end
-		end
-		if #variants == 0 then variants = {"chunks", "single", "single-lookup"} end
+		--local variants, all_chunks = {}, false
+		--for arg in string.gmatch(command.parameter or "", "%S+") do
+			--if arg == "full" then all_chunks = true else variants[#variants+1] = arg end
+		--end
+		--if #variants == 0 then variants = {"single", "single-find-entity", "single-lookup", "chunks"} end
 
-		-- fresh fake surface for a fair time, deletion is queued until the end of the tick
-		if game.surfaces["hexcoder_fake_fulgora"] then
-			recreate_fulgora.delete_fake_fulgora()
-			player.print("deleted existing fake fulgora, run the command again")
-			return
-		end
+		---- fresh fake surface for a fair time, deletion is queued until the end of the tick
+		--if game.surfaces["hexcoder_fake_fulgora"] then
+			--recreate_fulgora.delete_fake_fulgora()
+			--player.print("deleted existing fake fulgora, run the command again")
+			--return
+		--end
 
-		local prof_fake = helpers.create_profiler()
-		local fake_surface, requested = recreate_fulgora.recreate_initial_surface_and_load_chunks(surface, "all", nil, all_chunks)
-		prof_fake.stop()
-		local msg_fake = {"", string.format("fake fulgora (%s, %d chunks) ", all_chunks and "full" or "vault islands", requested or 0), prof_fake}
-		player.print(msg_fake)
-		log(msg_fake)
+		--local prof_fake = helpers.create_profiler()
+		--local fake_surface, requested = recreate_fulgora.recreate_initial_surface_and_load_chunks(surface, "all", nil, all_chunks)
+		--prof_fake.stop()
+		--local msg_fake = {"", string.format("fake fulgora (%s, %d chunks) ", all_chunks and "full" or "vault islands", requested or 0), prof_fake}
+		--player.print(msg_fake)
+		--log(msg_fake)
 
-		local current = const.INF_SCRAP_ENABLED and "vault-scrap" or "scrap"
-		local other = const.INF_SCRAP_ENABLED and "scrap" or "vault-scrap"
-		for _,variant in ipairs(variants) do
-			local c1, p1 = recreate_fulgora.debug_convert_all(surface, fake_surface, variant, other)
-			local c2, p2 = recreate_fulgora.debug_convert_all(surface, fake_surface, variant, current)
-			local msg = {"", string.format("%s: to %s %d ", variant, other, c1), p1, string.format("  back to %s %d ", current, c2), p2}
-			player.print(msg)
-			log(msg)
-		end
-	end)
+		--local current = const.INF_SCRAP_ENABLED and "vault-scrap" or "scrap"
+		--local other = const.INF_SCRAP_ENABLED and "scrap" or "vault-scrap"
+		--for _,variant in ipairs(variants) do
+			--local c1, p1 = recreate_fulgora.debug_convert_all(surface, fake_surface, variant, other)
+			--local c2, p2 = recreate_fulgora.debug_convert_all(surface, fake_surface, variant, current)
+			--local msg = {"", string.format("%s: to %s %d ", variant, other, c1), p1, string.format("  back to %s %d ", current, c2), p2}
+			--player.print(msg)
+			--log(msg)
+		--end
+	--end)
 
 	commands.add_command("fulg-attack", "", function(command)
 		init()
@@ -388,15 +388,15 @@ if const.DEBUG then
 end
 
 commands.add_command("fulg-restore-ore",
-		"<percent>\nrestore the scrap around the hovered vault ruin to a percentage of its original amount (> 0, may be > 100)\nalso recreates fully mined tiles",
+		"<percent>\nrestore the scrap around the hovered vault ruin to a percentage of its original amount (>= 0, may be > 100; infinite scrap clamps to its minimum, finite to 1)\nalso recreates fully mined tiles",
 		function(command)
 	init()
 
 	local player = game.get_player(command.player_index) ---@cast player -nil
 
 	local percent = tonumber(command.parameter or "")
-	if not percent or percent <= 0 then
-		player.print("please pass a percentage > 0")
+	if not percent or percent < 0 then
+		player.print("please pass a percentage >= 0")
 		return
 	end
 

@@ -21,24 +21,34 @@ local VAULT_MASK_NOISE = "fulgora_vaults_and_starting_vault"
 ---@return integer? requested -- chunks requested for "all"
 function M.recreate_initial_surface_and_load_chunks(original_fulgora, where, radius, all_chunks)
 	--game.print("regenerating fulgora entities, please be patient...") obviously this won't be seen until this is done
-	
+
 	-- lazy create surface
 	local fake_surface = game.surfaces["hexcoder_fake_fulgora"]
 	if fake_surface == nil then
+		-- tried trimming the autoplace (only scrap and vaults, no decoratives/cliffs): changes positions and amounts (even vault count) and is not faster
+		-- should not matter if map_gen_settings with or without inf-scrap is used, so hopefully reusing old fake_surface is fine
 		fake_surface = game.create_surface("hexcoder_fake_fulgora", original_fulgora.map_gen_settings)
 	end
 	
-	-- A later find_entities_filtered won't generate chunks for us (I think?)
+	-- find_entities_filtered on this surface won't generate chunks for us, we need to do this
 	local requested
 	if where == "all" then
+		-- all chunks on map
+		local prof_filter = helpers.create_profiler()
 		requested = 0
-		local chunks, positions = {}, {}
-		for cpos in original_fulgora.get_chunks() do
-			if original_fulgora.is_chunk_generated(cpos) then
-				if all_chunks then
+		if all_chunks then
+			-- generate all chunks that real surface has
+			for cpos in original_fulgora.get_chunks() do
+				if original_fulgora.is_chunk_generated(cpos) then
 					fake_surface.request_to_generate_chunks({ cpos.x*32+16, cpos.y*32+16 })
 					requested = requested + 1
-				else
+				end
+			end
+		else
+			local chunks, positions = {}, {}
+			-- generate all chunks that a test shows have vault islands tiles, this test should be unlikely to miss any scrap meant for vaults
+			for cpos in original_fulgora.get_chunks() do
+				if original_fulgora.is_chunk_generated(cpos) then
 					chunks[#chunks+1] = cpos
 					local x, y = cpos.x*32, cpos.y*32
 					for gy = 4, 28, 8 do
@@ -48,23 +58,29 @@ function M.recreate_initial_surface_and_load_chunks(original_fulgora, where, rad
 					end
 				end
 			end
-		end
-
-		if next(positions) then
-			-- one batched query for all chunks, 16 points each
-			local mask = original_fulgora.calculate_tile_properties({VAULT_MASK_NOISE}, positions)[VAULT_MASK_NOISE]
-			assert(mask, "calculate_tile_properties does not know "..VAULT_MASK_NOISE)
-			for i,cpos in ipairs(chunks) do
-				for j = (i-1)*16+1, i*16 do
-					if mask[j] > 0.5 then
-						fake_surface.request_to_generate_chunks({ cpos.x*32+16, cpos.y*32+16 })
-						requested = requested + 1
-						break
+			
+			if next(positions) then
+				-- one batched query for all chunks, 16 points each
+				local mask = original_fulgora.calculate_tile_properties({VAULT_MASK_NOISE}, positions)[VAULT_MASK_NOISE]
+				assert(mask, "calculate_tile_properties does not know "..VAULT_MASK_NOISE)
+				for i,cpos in ipairs(chunks) do
+					for j = (i-1)*16+1, i*16 do
+						if mask[j] > 0.5 then
+							fake_surface.request_to_generate_chunks({ cpos.x*32+16, cpos.y*32+16 })
+							requested = requested + 1
+							break
+						end
 					end
 				end
 			end
 		end
+		
+		prof_filter.stop()
+		if const.DEBUG then
+			log({"", string.format("fake fulgora: requested %d chunks, vault island filter ", requested), prof_filter})
+		end
 	else
+		-- generate around "where", is radius square or circular?
 		fake_surface.request_to_generate_chunks(where, radius/32+1)
 	end
 	fake_surface.force_generate_chunk_requests()
@@ -80,11 +96,14 @@ function M.recreate_initial_surface_and_load_chunks(original_fulgora, where, rad
 	return fake_surface, requested
 end
 function M.delete_fake_fulgora()
-	game.delete_surface("hexcoder_fake_fulgora")
-	storage.last_used_fake_fulgora = nil
-	
-	if const.DEBUG then
-		game.print("Deleted fake fulgora")
+	local fake_surface = game.surfaces["hexcoder_fake_fulgora"]
+	if fake_surface ~= nil then
+		game.delete_surface("hexcoder_fake_fulgora")
+		storage.last_used_fake_fulgora = nil
+		
+		if const.DEBUG then
+			game.print("Deleted fake fulgora")
+		end
 	end
 end
 -- actually delete fake fulgora after multiple requests could use it (unused for some seconds)
@@ -110,7 +129,8 @@ function M.update_autoplace_settings(surface)
 		surface.map_gen_settings = mgs
 		
 		-- delete to be sure recreate_initial_surface_and_load_chunks() generates correct surface, but we check both SCRAP_TYPES here anyway
-		M.delete_fake_fulgora()
+		-- actually this is bad because it keep existing for this tick, ugh...
+		--M.delete_fake_fulgora()
 	end
 end
 
@@ -183,9 +203,8 @@ end
 ---@param surface LuaSurface
 ---@param orig_ores LuaEntity[] -- from fake fulgora
 ---@param to "scrap"|"vault-scrap"
----@param real_ores? table<tile_key, LuaEntity> -- current ores on surface by int_position_key, avoids a search per tile (benchmark variant)
 ---@return integer converted
-local function convert_ores(surface, orig_ores, to, real_ores)
+local function convert_ores(surface, orig_ores, to)
 	local converted = 0
 	if #orig_ores == 0 then return 0 end
 
@@ -199,12 +218,8 @@ local function convert_ores(surface, orig_ores, to, real_ores)
 	for i,orig_ore in ipairs(orig_ores) do
 		if mask[i] > 0.5 then
 			local position = positions[i]
-			local old_ore
-			if real_ores then
-				old_ore = real_ores[common.int_position_key(position)]
-			else
-				old_ore = surface.find_entities_filtered{position=position, type="resource", name=const.SCRAP_TYPES}[1] -- actually, why not find_entity?
-			end
+			-- measured: same speed as find_entity, a prebuilt position key lookup was slower
+			local old_ore = surface.find_entities_filtered{position=position, type="resource", name=const.SCRAP_TYPES}[1]
 
 			-- fake fulgora may have chunks the surface does not, never create ore there
 			if old_ore == nil and not surface.is_chunk_generated{x=math.floor(position.x / 32), y=math.floor(position.y / 32)} then
@@ -240,7 +255,8 @@ local function convert_ores(surface, orig_ores, to, real_ores)
 	return converted
 end
 
--- swap scrap on vault islands to the inf scrap setting, around where or on the whole map (per chunk)
+-- swap scrap on vault islands to the inf scrap setting, around where or on the whole map
+-- one find on fake fulgora and one mask query, measured ~2.5x faster than per chunk
 ---@param surface LuaSurface
 ---@param fake_surface LuaSurface -- with the chunks generated
 ---@param to "scrap"|"vault-scrap"
@@ -248,61 +264,21 @@ end
 ---@param radius? number
 ---@return integer converted
 local function convert_vault_scrap(surface, fake_surface, to, where, radius)
-	if where ~= "all" then
-		local converted = convert_ores(surface, fake_surface.find_entities_filtered{position=where, radius=radius, type="resource", name=const.SCRAP_TYPES}, to)
-		if converted > 0 then
-			common.update_drill_connections_near(surface, where, radius)
-		end
-		return converted
-	end
+	local orig_ores = where == "all" and
+		fake_surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES} or
+		fake_surface.find_entities_filtered{position=where, radius=radius, type="resource", name=const.SCRAP_TYPES}
 
-	local converted = 0
-	for cpos in surface.get_chunks() do
-		if surface.is_chunk_generated(cpos) then
-			local x, y = cpos.x * 32, cpos.y * 32
-			local chunk_converted = convert_ores(surface, fake_surface.find_entities_filtered{area={{x, y}, {x+32, y+32}}, type="resource", name=const.SCRAP_TYPES}, to)
-			if chunk_converted > 0 then
-				common.update_drill_connections_near(surface, {x=x+16, y=y+16}, 16)
-				converted = converted + chunk_converted
-			end
-		end
-	end
-	return converted
-end
-
--- TEMPORARY: benchmark whole map conversion variants, see /fulg-bench-convert (all variants work with the vault island filtered fake surface)
--- "chunks": current code (convert_vault_scrap "all"), per chunk find + mask query, per tile find on the surface
--- "single": one find on fake fulgora, one mask query, per tile find on the surface
--- "single-lookup": like single, but one find on the surface and a position key lookup instead of the per tile find
----@param surface LuaSurface
----@param fake_surface LuaSurface -- with all chunks generated
----@param variant "chunks"|"single"|"single-lookup"
----@param to "scrap"|"vault-scrap"
----@return integer converted
----@return LuaProfiler
-function M.debug_convert_all(surface, fake_surface, variant, to)
-	local prof = helpers.create_profiler()
-	local converted
-	if variant == "chunks" then
-		converted = convert_vault_scrap(surface, fake_surface, to, "all")
-	else
-		local orig_ores = fake_surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES}
-		local real_ores
-		if variant == "single-lookup" then
-			real_ores = {}
-			for _,e in pairs(surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES}) do
-				real_ores[common.int_position_key(e.position)] = e
-			end
-		end
-		converted = convert_ores(surface, orig_ores, to, real_ores)
-		if converted > 0 then
+	local converted = convert_ores(surface, orig_ores, to)
+	if converted > 0 then
+		if where == "all" then
 			for _,drill in pairs(surface.find_entities_filtered{type="mining-drill"}) do
 				drill.update_connections()
 			end
+		else
+			common.update_drill_connections_near(surface, where, radius)
 		end
 	end
-	prof.stop()
-	return converted, prof
+	return converted
 end
 
 -- everything needed when the mod is added to a running game, updated, or the inf scrap setting changed

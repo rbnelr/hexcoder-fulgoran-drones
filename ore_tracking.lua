@@ -245,7 +245,7 @@ end)
 -- TODO: add parameter (and mod setting) to override richness, so that time to reach say, 20% of scrap can be adjusted for finite ores (max quality at 20%?)
 --       and for inf ores, the richness would increase the normal amount such that
 ---@param vault Vault
----@param restore number -- fraction of the original amount, > 0, may be > 1
+---@param restore number -- fraction of the original amount, >= 0, may be > 1 (infinite clamps to its minimum, finite to 1)
 function ore.restore_ore(vault, restore)
 	local position = vault.entity.position
 	local surface = vault.entity.surface
@@ -256,7 +256,7 @@ function ore.restore_ore(vault, restore)
 
 	for _,orig_ore in pairs(orig_ores) do
 		local orig_amount = orig_ore.amount
-		local amount = math.max(math.ceil(orig_amount * restore), 1) -- not allowed to set amount=0, and 0 would deplete finite tiles without on_resource_depleted
+		local amount = math.ceil(orig_amount * restore)
 
 		local old_ore = surface.find_entities_filtered{position=orig_ore.position, type="resource", name=const.SCRAP_TYPES}[1] -- TODO: why not find_entity?
 		if old_ore == nil then
@@ -273,6 +273,8 @@ function ore.restore_ore(vault, restore)
 			-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
 			local minimum = get_inf_scrap_minimum(initial) + INF_SCRAP_DEPLETED_BUMP_AMOUNT
 			if amount < minimum then amount = minimum end
+		elseif amount < 1 then
+			amount = 1 -- not allowed to set amount=0, and 0 would deplete finite tiles without on_resource_depleted
 		end
 		old_ore.amount = amount
 	end
