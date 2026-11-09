@@ -90,10 +90,12 @@ if const.ALLOW_DRILLS_WITHOUT_ORE then
 	end
 end
 
-if const.INF_SCRAP_ENABLED then
+-- always defined (hidden when off), so turning the setting off does not delete existing vault-scrap, control converts it back
+do
 	data:extend{
 		meld(table.deepcopy(data.raw["resource"]["scrap"]), {
 			name = "vault-scrap",
+			hidden = not const.INF_SCRAP_ENABLED,
 			localised_name = {"", {"entity-name.scrap"}, " (Vault)"},
 			order = "a[scrap]-a[scrap]-b[inf-vault]",
 			--hidden = true,
@@ -136,6 +138,26 @@ if const.INF_SCRAP_ENABLED then
 			infinite_depletion_amount = const.INF_DEPLETION_RATE,
 		})
 	}
+	
+	-- split the scrap autoplace into normal scrap and vault-scrap (vault islands only)
+	-- fulgora_vaults_and_starting_vault is 0 or 1 (built only from comparisons), so positions and amounts stay identical, only the type changes
+	-- existing surfaces keep their own map_gen_settings, control (recreate_fulgora.update_autoplace_settings) adds/removes vault-scrap there
+	local VAULT_MASK_NOISE = "fulgora_vaults_and_starting_vault"
+	local scrap = data.raw["resource"]["scrap"]
+	local vault_scrap = data.raw["resource"]["vault-scrap"]
+	if const.INF_SCRAP_ENABLED and scrap.autoplace then
+		local prob = tostring(scrap.autoplace.probability_expression)
+		
+		vault_scrap.autoplace = table.deepcopy(scrap.autoplace)
+		vault_scrap.autoplace.probability_expression = "("..prob..") * "..VAULT_MASK_NOISE
+		scrap.autoplace.probability_expression = "("..prob..") * (1 - "..VAULT_MASK_NOISE..")"
+		
+		local entity_settings = data.raw["planet"]["fulgora"].map_gen_settings.autoplace_settings.entity.settings
+		entity_settings["vault-scrap"] = entity_settings["scrap"] or {}
+	else
+		-- no autoplace when off, the prototype only exists so existing vault-scrap can be converted back
+		vault_scrap.autoplace = nil
+	end
 end
 
 if settings.startup[const.MOD_NAME.."-nerf-turret-turn"].value then

@@ -1,4 +1,4 @@
-local ore = require("ore_tracking")
+local common = require("control.common")
 
 local dead_bots = {}
 
@@ -31,7 +31,7 @@ function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
 		if resource then
 			resource.amount = count
 			
-			ore.update_drill_connections_near(surface, position)
+			common.update_drill_connections_near(surface, position)
 			
 			--local p = position
 			--rendering.draw_rectangle{left_top=area[1], right_bottom=area[2], surface=surface, filled=false, color={0,1,0}, time_to_live=60*5}

@@ -97,6 +97,6 @@ if prototypes then
 	end
 end
 
-const.SCRAP_TYPES = const.INF_SCRAP_ENABLED and {"scrap", "vault-scrap"} or "scrap"
+const.SCRAP_TYPES = {"scrap", "vault-scrap"} -- vault-scrap always defined, hidden if inf scrap is off
 
 return const

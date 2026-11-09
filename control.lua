@@ -23,10 +23,7 @@ function init()
 	
 	local s = storage
 	local init = next(s) == nil
-	--if s == nil then -- I was setting storage to nil, apparently default is {} though, so this should not be needed!
-	--	s = {} ---@diagnostic disable-line
-	--	storage = s
-	--end
+	
 	if s.vaults == nil then s.vaults = {} end
 	if s.poll_vaults == nil then s.poll_vaults = {} end
 	if s.poll_repaired == nil then s.poll_repaired = {} end
@@ -37,9 +34,9 @@ function init()
 	if init then
 		local surface = game.get_surface("fulgora")
 		if surface then
-			recreate_fulgora.restore_destroyed_vaults(surface, "all") -- freezes the game for a bit, warn user or make user trigger it manually?
-
-			-- This will convert ore to infinite
+			-- respawn vaults, vault scrap to inf scrap setting
+			recreate_fulgora.convert_ore_and_restore_vaults(surface) -- freezes the game for a bit, warn user or make user trigger it manually?
+			
 			for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
 				Vault.from_entity(e)
 			end
@@ -152,6 +149,16 @@ for _, name in pairs({
 			end
 		else
 			dmg.on_entity_event(entity)
+			
+			-- start ore scans for vaults this is near, see update_waves (cleared again by prepare at wave start)
+			if entity.surface.name == "fulgora" then
+				for _,e in pairs(entity.surface.find_entities_filtered{name=const.VAULT_NAME, position=entity.position, radius=common.VAULT_DEFENSE_RADIUS()}) do
+					local vault = storage.vaults[script.register_on_object_destroyed(e)]
+					if vault then
+						vault.has_targets = true
+					end
+				end
+			end
 		end
 	end, built_filter)
 end
@@ -293,6 +300,52 @@ end)
 ---- Commands
 
 if const.DEBUG then
+	-- /c local s = game.player.surface; s.clear();
+	-- /c local s = game.player.surface; s.request_to_generate_chunks({0, 0}, 20); s.force_generate_chunk_requests(); game.player.force.chart_all(s)
+	
+	-- TEMPORARY: compare whole map conversion variants (recreate_fulgora.debug_convert_all), use a test save
+	-- converts away from the setting and back, so the map ends up as before (finite tiles below the inf minimum stay raised)
+	-- "full": fake fulgora for all chunks instead of only vault islands, to compare counts and time
+	commands.add_command("fulg-bench-convert", "[chunks|single|single-lookup] [full] (default: all three, vault island chunks only)", function(command)
+		init()
+		local player = game.get_player(command.player_index) ---@cast player -nil
+		local surface = game.get_surface("fulgora")
+		if not surface then
+			player.print("no fulgora")
+			return
+		end
+
+		local variants, all_chunks = {}, false
+		for arg in string.gmatch(command.parameter or "", "%S+") do
+			if arg == "full" then all_chunks = true else variants[#variants+1] = arg end
+		end
+		if #variants == 0 then variants = {"chunks", "single", "single-lookup"} end
+
+		-- fresh fake surface for a fair time, deletion is queued until the end of the tick
+		if game.surfaces["hexcoder_fake_fulgora"] then
+			recreate_fulgora.delete_fake_fulgora()
+			player.print("deleted existing fake fulgora, run the command again")
+			return
+		end
+
+		local prof_fake = helpers.create_profiler()
+		local fake_surface, requested = recreate_fulgora.recreate_initial_surface_and_load_chunks(surface, "all", nil, all_chunks)
+		prof_fake.stop()
+		local msg_fake = {"", string.format("fake fulgora (%s, %d chunks) ", all_chunks and "full" or "vault islands", requested or 0), prof_fake}
+		player.print(msg_fake)
+		log(msg_fake)
+
+		local current = const.INF_SCRAP_ENABLED and "vault-scrap" or "scrap"
+		local other = const.INF_SCRAP_ENABLED and "scrap" or "vault-scrap"
+		for _,variant in ipairs(variants) do
+			local c1, p1 = recreate_fulgora.debug_convert_all(surface, fake_surface, variant, other)
+			local c2, p2 = recreate_fulgora.debug_convert_all(surface, fake_surface, variant, current)
+			local msg = {"", string.format("%s: to %s %d ", variant, other, c1), p1, string.format("  back to %s %d ", current, c2), p2}
+			player.print(msg)
+			log(msg)
+		end
+	end)
+
 	commands.add_command("fulg-attack", "", function(command)
 		init()
 		
@@ -318,72 +371,39 @@ if const.DEBUG then
 		end
 	end)
 	
-	commands.add_command("fulg-spawn-bot-res", "", function(command)
-		init()
-		
-		local args = command.parameter and string.gmatch(command.parameter, "[^%s]+")
-		local type = args and args() or "destroyer"
-		local countstr = args and args()
-		local count = countstr and tonumber(countstr) or 1
-		
-		-- vault for testing
-		local player = game.get_player(command.player_index) ---@cast player -nil
-		
-		local res_name = const.DRONE_RESOURCE["fulgoran-"..type]
-		dead_bots.add_dead_bot_resource(player.surface, player.position, res_name, count)
-	end)
-
-	commands.add_command("fulg-respawn-vault",
-			"respawn missing vault ruin if it has been destroyed in the past\nchecks in a radius of 60 around the player, or in all chunks if 'all' is passed\nplayer will be moved away and player structures may clip but can still be deconstructed",
-			function(command)
-		init()
-
-		local all = command.parameter and command.parameter == "all"
-		
-		local player = game.get_player(command.player_index)
-		if all then
-			local fulgora = game.get_surface("fulgora")
-			if fulgora then
-				recreate_fulgora.restore_destroyed_vaults(fulgora, "all")
-			end
-		elseif player then
-			recreate_fulgora.restore_destroyed_vaults(player.surface, player.position, 60)
-		end
-	end)
+	--commands.add_command("fulg-spawn-bot-res", "", function(command)
+	--	init()
+	--	
+	--	local args = command.parameter and string.gmatch(command.parameter, "[^%s]+")
+	--	local type = args and args() or "destroyer"
+	--	local countstr = args and args()
+	--	local count = countstr and tonumber(countstr) or 1
+	--	
+	--	-- vault for testing
+	--	local player = game.get_player(command.player_index) ---@cast player -nil
+	--	
+	--	local res_name = const.DRONE_RESOURCE["fulgoran-"..type]
+	--	dead_bots.add_dead_bot_resource(player.surface, player.position, res_name, count)
+	--end)
 end
 
--- TODO: not really working, or just mining rate that messes up?
-commands.add_command("fulg-modify-ore",
-		"mofify ore around hovered vault\npass finine/infine to swap scrap type around hovered vault ruin\npass a percentage of the initial amount to restore to or no number to keep the current",
+commands.add_command("fulg-restore-ore",
+		"<percent>\nrestore the scrap around the hovered vault ruin to a percentage of its original amount (> 0, may be > 100)\nalso recreates fully mined tiles",
 		function(command)
 	init()
-	
-	local mode = nil
-	local amount = "keep"
-	
-	local args = command.parameter and string.gmatch(command.parameter, "[^%s]+") or {}
-	for arg in args do
-		local num = tonumber(arg)
-		if num then
-			amount = num/100 -- allow > 100
-			if amount < 0 then amount = 0 end
-		else
-			mode = arg
-		end
-	end
 
 	local player = game.get_player(command.player_index) ---@cast player -nil
 
-	if not (mode == "finite" or mode == "infinite") then
-		player.print("please pass 'finite' or 'infinite'")
+	local percent = tonumber(command.parameter or "")
+	if not percent or percent <= 0 then
+		player.print("please pass a percentage > 0")
 		return
 	end
-	
+
 	local sel = player.selected
 	if sel and sel.valid and sel.name == const.VAULT_NAME then
-		if ore.modify_ore(Vault.from_entity(sel), mode, amount) == "success" then
-			player.print("ore modified")
-		end
+		ore.restore_ore(Vault.from_entity(sel), percent / 100)
+		player.print("ore restored")
 	else
 		player.print("need to hover a vault!")
 	end
@@ -421,7 +441,7 @@ script.on_configuration_changed(function(data)
 	local setting_changed = data.mod_startup_settings_changed
 	local changes = data.mod_changes[const.MOD_NAME]
 	local dev_reset = const.DEBUG and DEV_REINIT_EACH_LOAD
-	if changes or dev_reset then
+	if changes or setting_changed or dev_reset then
 		if dev_reset then -- dev reset
 			reset()
 			init()
@@ -440,11 +460,8 @@ script.on_configuration_changed(function(data)
 		init()
 		return
 	end
-	if setting_changed then
-		-- TODO: handle ore swapping?, but ore prototype already deleted
-		-- can do migrations be done on demand?
-		-- if not could also add ore prototype and make it hidden instead, so we can still swap it
-	end
+	-- setting_changed: inf scrap toggle handled by reset + init (recreate_fulgora.convert_ore_and_restore_vaults)
+	-- vault-scrap prototype is always defined (hidden when off), so it is not deleted
 end)
 
 script.on_event(defines.events.on_runtime_mod_setting_changed, function(event)

@@ -274,8 +274,15 @@ end
 function Vault:update_waves()
 	if self:wave_active() then return end
 	
-	local scan = self:scan_ore()
-	local mined_ore = scan.total_mined
+	-- skip the ore scan without player structures (nothing can be mining), rare min size waves still happen
+	-- has_targets is set by prepare (vault init, wave start) and when building near the vault
+	-- TODO: player could be near and mine by hand but well, probably does not matter
+	local scan
+	local mined_ore = 0
+	if self.has_targets then
+		scan = self:scan_ore()
+		mined_ore = scan.total_mined
+	end
 	
 	local time_since_last = (game.tick - self.wave_start_tick) / 3600
 	local time_between = (game.tick - self.wave_end_tick) / 3600
@@ -284,7 +291,9 @@ function Vault:update_waves()
 	
 	local trigger_wave, size, freq = self:should_spawn_wave(mined_ore, time_since_last, time_between, true)
 	if trigger_wave then
-		self.scrap:commit(scan)
+		if scan then
+			self.scrap:commit(scan)
+		end
 		
 		self:spawn_wave(size, freq, true)
 	end

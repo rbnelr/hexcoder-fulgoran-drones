@@ -62,6 +62,8 @@ function Vault.from_entity(vault, source_event)
 		active_wave_bots={},
 		wave_bots_count={},
 	}, Vault)
+	storage.vaults[id] = v
+	
 	-- enemy structures cannot be mined, but decoratives like ruins can
 	vault.force = const.DRONE_FORCE -- vault (simple-entity) can't actually have a force?
 	vault.destructible = false -- can't damage
@@ -85,14 +87,6 @@ function Vault.from_entity(vault, source_event)
 		}
 	end
 	v.near_wall.destructible = false
-	
-	storage.vaults[id] = v
-	
-	-- TODO: do somewhere else instead?
-	-- this will handle new installs with infinite option set
-	if const.INF_SCRAP_ENABLED then
-		ore.modify_ore(v, "infinite", "keep", source_event)
-	end
 	
 	v.scrap = ore.OreTracking.new(vault.surface, vault.position, common.VAULT_DEFENSE_RADIUS(), source_event ~= "on_chunk_generated")
 	

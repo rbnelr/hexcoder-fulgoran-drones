@@ -4,41 +4,11 @@ local recreare_fulgora = require("recreate_fulgora")
 
 local ore = {}
 
-local INF_SCRAP_PROTO = prototypes.entity["vault-scrap"]
-local INF_SCRAP_NORMAL = INF_SCRAP_PROTO.normal_resource_amount
-local INF_SCRAP_MIN = INF_SCRAP_PROTO.minimum_resource_amount
-local INF_SCRAP_MIN_RATIO = INF_SCRAP_MIN / INF_SCRAP_NORMAL
-
--- try to bump such that its not visible in gui (yield floored to %)
-local INF_SCRAP_DEPLETED_BUMP_AMOUNT = math.max(math.floor(INF_SCRAP_PROTO.normal_resource_amount / 100 / 2), 1)
-
--- we drain faster so inf scrap does not last 100h until it reaches minimum, this does not change yield (other than reducing yield faster)
-local INF_SCRAP_DEPLETION_TO_MINING = 1 / INF_SCRAP_PROTO.infinite_depletion_resource_amount -- == const.INF_DEPLETION_RATE
-
--- infinite resource minimum amount is actually increased if initial yield > 100%
----@param initial_amount integer
-local function get_inf_scrap_minimum(initial_amount)
-	if initial_amount <= INF_SCRAP_NORMAL then
-		return INF_SCRAP_MIN -- 20% of normal
-	else
-		return math.floor(initial_amount * INF_SCRAP_MIN_RATIO) -- 20% of initial amount, is floored correct?
-	end
-end
-
--- update drills which touch tile at position, or in position+square radius (for vault)
----@param surface LuaSurface
----@param position MapPosition
----@param radius? number -- default to 0
-function ore.update_drill_connections_near(surface, position, radius)
-	local r = const.max_drill_radius + (radius or 0) -- square radius!
-	local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
-	-- this includes collision box of drill, not really what we want, but I would have added 1 to radius to make sure anyway
-	for _,drill in pairs(surface.find_entities_filtered{area=area, type="mining-drill"}) do
-		--local p = drill.position
-		--rendering.draw_rectangle{left_top={p.x-2.5, p.y-2.5}, right_bottom={p.x+2.5, p.y+2.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
-		drill.update_connections()
-	end
-end
+local INF_SCRAP_NORMAL = common.INF_SCRAP_NORMAL
+local INF_SCRAP_MIN = common.INF_SCRAP_MIN
+local INF_SCRAP_DEPLETED_BUMP_AMOUNT = common.INF_SCRAP_DEPLETED_BUMP_AMOUNT
+local INF_SCRAP_DEPLETION_TO_MINING = common.INF_SCRAP_DEPLETION_TO_MINING
+local get_inf_scrap_minimum = common.get_inf_scrap_minimum
 
 ---- Per-vault ore tracking
 
@@ -115,7 +85,7 @@ function OreTracking:scan(surface, position, radius)
 			total_remaining = total_remaining + amount
 		end
 		
-		-- recreated by modify_ore, why do this here and not just in modify_ore?
+		-- recreated by restore_ore or convert_ore_and_restore_vaults, why do this here and not just there?
 		if depleted_finite[key] then
 			depleted_finite[key] = nil
 		end
@@ -160,7 +130,7 @@ end
 
 -- take current amounts as baseline without counting anything as mined
 -- from_original: also rebuild finite initial amounts and mined out finite tiles from fake fulgora (slow)
---   needed when tiles may have been mined or replaced while not tracked (radius change, existing save, modify_ore)
+--   needed when tiles may have been mined or replaced while not tracked (radius change, existing save, restore_ore)
 ---@param surface LuaSurface
 ---@param position MapPosition
 ---@param radius number
@@ -198,7 +168,7 @@ function OreTracking:update_finite_initial(surface, position, radius)
 			finite_initial[key] = orig.amount
 			depleted_finite[key] = true
 		else
-			finite_initial[key] = math.max(orig.amount, ore.amount) -- modify_ore restore > 100%
+			finite_initial[key] = math.max(orig.amount, ore.amount) -- restore_ore > 100%
 		end
 	end
 	self.depleted_finite = depleted_finite
@@ -219,7 +189,7 @@ script.on_event(defines.events.on_resource_depleted, function(event)
 	if name ~= "vault-scrap" and name ~= "scrap" then return end
 	init()
 	
-	--assert(ore.amount <= get_inf_scrap_minimum(ore.initial_amount)) -- ore can spawn or be created by modify_ore with lower than minimum amount (bumps will make it end up at minimum, I think)
+	--assert(ore.amount <= get_inf_scrap_minimum(ore.initial_amount)) -- ore can spawn or be created by restore_ore with lower than minimum amount (bumps will make it end up at minimum, I think)
 	
 	local key = common.int_position_key(ore.position)
 	if name == "vault-scrap" then
@@ -266,114 +236,49 @@ script.on_event(defines.events.on_resource_depleted, function(event)
 	end
 end)
 
--- This function can swap out the scrap areound a vault ruin between normal or infinite scrap
--- it can either keep the amount the same or restore it to a desired percentage of the original ore by regenerating a fake nauvis surface
--- there are other ways to potentially check the original ore amount but none that work with both finite ores and when installing on running games etc.
--- when swapping to infinite scrap, the game will show yeild%, but internally keep using the same amount units
--- note: that for infinite ores, the yield % depends on the "normal" amount as defined in the ore prototype
---       and that the actual minimum depends on the initial amount
--- note: restore >100% will inflate the orig_amount to be higher, but <100% will not set it lower
+-- Restore the scrap around a vault ruin to a percentage of the original (mapgen) amount, read from fake fulgora
+-- only changes amounts, never the type (that is recreate_fulgora.convert_ore_and_restore_vaults, from the inf scrap setting)
+-- fully drained (finite) tiles are recreated as finite scrap
+-- note: for infinite ores, the yield % depends on the "normal" amount as defined in the ore prototype
+--       and the actual minimum depends on the initial amount
+-- note: restore >100% will inflate the initial amount to be higher, but <100% will not set it lower
 -- TODO: add parameter (and mod setting) to override richness, so that time to reach say, 20% of scrap can be adjusted for finite ores (max quality at 20%?)
---       and for inf ores, the richness would increase the normal amount such that 
+--       and for inf ores, the richness would increase the normal amount such that
 ---@param vault Vault
----@param mode "finite"|"infinite"
----@param restore number|"keep" -- restore to x percent of initial (mapgen) amount or keep existing amounts
----@param source_event string?
----@return string
-function ore.modify_ore(vault, mode, restore, source_event)
-	local from = {"scrap", "vault-scrap"}
-	local to = mode == "finite" and "scrap" or "vault-scrap"
-	
+---@param restore number -- fraction of the original amount, > 0, may be > 1
+function ore.restore_ore(vault, restore)
 	local position = vault.entity.position
 	local surface = vault.entity.surface
 	local radius = common.VAULT_DEFENSE_RADIUS()
 
-	local new_count = 0
-	local initial_count = 0
-	
-	-- get old ore before we add new
-	local old_ores = surface.find_entities_filtered{type="resource", name=from, position=position, radius=radius}
-	
 	local fake_surface = recreare_fulgora.recreate_initial_surface_and_load_chunks(surface, position, radius)
-	local initial_ores = fake_surface.find_entities_filtered{position=position, radius=radius, type="resource", name=const.SCRAP_TYPES}
-	
-	if restore == "keep" then
-		-- a bit weird:
-		-- spawn new ore copied from newly generated fake fulgora, then only check old ore tiles for amount
-		-- do not iterate old_ore, since tiles may be depleted and infinite ores need their initial_amount set, which works best if accurate
-		for _,orig_ore in pairs(initial_ores) do
-			local old_ore = surface.find_entities_filtered{name=from, position=orig_ore.position} -- check if get_closest(old_ores, ...) actually makes sense here
-			
-			local amount = old_ore[1] and old_ore[1].amount or 0
-			local orig_amount = orig_ore.amount
-			
-			local new_initial_amount
-			
-			if to == "vault-scrap" then
-				if orig_amount < INF_SCRAP_MIN then orig_amount = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT end -- important to avoid depth bug (?)
-				
-				new_initial_amount = orig_amount
-				-- this enforces minimum if setting to a low percentage
-				-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
-				local minimum = get_inf_scrap_minimum(new_initial_amount) + INF_SCRAP_DEPLETED_BUMP_AMOUNT -- needs to be called after initial_amount is set!
-				if amount < minimum then amount = minimum end
-				
-				assert(amount <= new_initial_amount)
-			end
-			
-			if amount > 0 then
-				local new_ore = surface.create_entity{name=to, position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true} ---@cast new_ore -nil
-				
-				if new_initial_amount then
-					new_ore.initial_amount = new_initial_amount 
-				end
-				new_ore.amount = amount
-			end
-			
-			if source_event == "on_chunk_generated" then
-				--assert(old_ore[1] and amount == orig_amount) -- probably triggers because neighbour chunks are not loaded yet
-			end
-				
-			new_count = new_count + amount
-			initial_count = initial_count + orig_amount
+	local orig_ores = fake_surface.find_entities_filtered{position=position, radius=radius, type="resource", name=const.SCRAP_TYPES}
+
+	for _,orig_ore in pairs(orig_ores) do
+		local orig_amount = orig_ore.amount
+		local amount = math.max(math.ceil(orig_amount * restore), 1) -- not allowed to set amount=0, and 0 would deplete finite tiles without on_resource_depleted
+
+		local old_ore = surface.find_entities_filtered{position=orig_ore.position, type="resource", name=const.SCRAP_TYPES}[1] -- TODO: why not find_entity?
+		if old_ore == nil then
+			-- fully drained, only finite tiles can deplete
+			old_ore = surface.create_entity{name="scrap", position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true} ---@cast old_ore -nil
 		end
-	else
-		-- spawn new ore copied from newly generated fake fulgora
-		-- and simply multiply amount
-		for _,orig_ore in pairs(initial_ores) do
-			local new_ore = surface.create_entity{name=to, position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true} ---@cast new_ore -nil
-			
-			local orig_amount = orig_ore.amount
-			local amount = math.max(math.ceil(orig_amount * restore), 1) -- not allowed to set amount=0, and 0 would deplete finite tiles without on_resource_depleted
-			orig_amount = amount > orig_amount and amount or orig_amount
-			
-			if to == "vault-scrap" then
-				if orig_amount < INF_SCRAP_MIN then orig_amount = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT end -- important to avoid depth bug (?)
-				
-				new_ore.initial_amount = orig_amount
-				-- this enforces minimum if setting to a low percentage
-				-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
-				local minimum = get_inf_scrap_minimum(orig_amount) + INF_SCRAP_DEPLETED_BUMP_AMOUNT -- needs to be called after initial_amount is set!
-				if amount < minimum then amount = minimum end
-				
-				assert(amount <= new_ore.initial_amount)
-			end
-			new_ore.amount = amount
-			
-			new_count = new_count + amount
-			initial_count = initial_count + orig_amount
+
+		if old_ore.name == "vault-scrap" then
+			local initial = math.max(orig_amount, amount)
+			if initial < INF_SCRAP_MIN then initial = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT end -- important to avoid depth bug (?)
+			old_ore.initial_amount = initial -- before amount, the minimum depends on it
+
+			-- this enforces minimum if setting to a low percentage
+			-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
+			local minimum = get_inf_scrap_minimum(initial) + INF_SCRAP_DEPLETED_BUMP_AMOUNT
+			if amount < minimum then amount = minimum end
 		end
+		old_ore.amount = amount
 	end
 
-	assert(new_count <= initial_count)
-	
-	-- actually delete it
-	for _,old_ore in pairs(old_ores) do
-		old_ore.destroy()
-	end
-
-	-- find overlapping vaults (ore is part of more than one radius)
-	-- and update their initial amounts
+	-- important!, otherwise we may get negative or positive huge mining rates and trigger huge waves
+	-- find overlapping vaults (ore is part of more than one radius) and update their initial amounts (finite initial raised for restore > 100%, drained tiles)
 	for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME, position=position, radius=radius*2}) do
 		local vault = storage.vaults[script.register_on_object_destroyed(e)] -- HACK: to get vault witout require("vault")
 		if vault and vault.scrap then
@@ -381,11 +286,9 @@ function ore.modify_ore(vault, mode, restore, source_event)
 			vault:_reset_wave_for_mining_rate() -- reset wave_end_tick so gui shows new mining rate for convenience
 		end
 	end
-	
-	-- updates all possible drills
-	ore.update_drill_connections_near(surface, position, radius)
 
-	return "success"
+	-- recreated drained tiles
+	common.update_drill_connections_near(surface, position, radius)
 end
 
 local VIS_DRAIN = true
