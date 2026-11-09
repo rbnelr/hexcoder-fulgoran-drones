@@ -1,6 +1,7 @@
 local g = require("common")
 ---@class Vault
 local Vault = require("vault")
+local recreare_fulgora = require("recreate_fulgora")
 
 local INF_SCRAP_PROTO = prototypes.entity["vault-scrap"]
 local INF_SCRAP_NORMAL = INF_SCRAP_PROTO.normal_resource_amount
@@ -18,6 +19,25 @@ local function get_inf_scrap_minimum(ore_tile)
 	else
 		return ore_tile.initial_amount * INF_SCRAP_MIN_RATIO
 	end
+end
+
+-- update drills which touch tile at position, or in position+square radius (for vault)
+---@param surface LuaSurface
+---@param position MapPosition
+---@param radius? number -- default to 0
+function Vault.update_drill_connections_near(surface, position, radius)
+	local r = g.max_drill_radius + (radius or 0) -- square radius!
+	local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
+	-- this includes collision box of drill, not really what we want, but I would have added 1 to radius to make sure anyway
+	for _,drill in pairs(surface.find_entities_filtered{area=area, type="mining-drill"}) do
+		--local p = drill.position
+		--rendering.draw_rectangle{left_top={p.x-2.5, p.y-2.5}, right_bottom={p.x+2.5, p.y+2.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
+		drill.update_connections()
+	end
+end
+function Vault:update_drill_connections_near_vault()
+	local e = self.entity
+	Vault.update_drill_connections_near(e.surface, e.position, g.VAULT_DEFENSE_RADIUS())
 end
 
 -- We want to know what the original ore amount was per vault scrap patch
@@ -102,65 +122,11 @@ function Vault:get_initial_ore_slow()
 	return count
 end]]
 
----@param original_fulgora LuaSurface
----@param where MapPosition|"all"
----@param radius? number
----@return LuaSurface
-function Vault.recreate_initial_surface_and_load_chunks(original_fulgora, where, radius)
-	--game.print("regenerating fulgora entities, please be patient...") obviously this won't be seen until this is done
-	
-	-- lazy create surface
-	local fake_surface = game.surfaces["hexcoder_fake_fulgora"]
-	if fake_surface == nil then
-		fake_surface = game.create_surface("hexcoder_fake_fulgora", original_fulgora.map_gen_settings)
-	end
-	
-	-- A later find_entities_filtered won't generate chunks for us (I think?)
-	if where == "all" then
-		for cpos in original_fulgora.get_chunks() do
-			if original_fulgora.is_chunk_generated(cpos) then
-				fake_surface.request_to_generate_chunks({ cpos.x*32+16, cpos.y*32+16 })
-			end
-		end
-	else
-		fake_surface.request_to_generate_chunks(where, radius/32+1)
-	end
-	fake_surface.force_generate_chunk_requests()
-	
-	--local test = {}
-	--for cpos in fake_surface.get_chunks() do
-	--	if fake_surface.is_chunk_generated(cpos) then
-	--		table.insert(test, cpos)
-	--	end
-	--end
-
-	-- do not delete fake fulgora in case multiple requests are made
-	-- hopefully better perf? and safer?
-	-- actually queued to be deleted, so multiple requests should be fine, maybe just worse perf if used every few seconds
-	storage.last_used_fake_fulgora = game.tick
-
-	if g.DEBUG then
-		game.print("Created fake fulgora")
-	end
-	return fake_surface
-end
-script.on_nth_tick(60, function(event)
-	local last_use = storage.last_used_fake_fulgora
-	if last_use and event.tick - last_use > 11*60 then
-		game.delete_surface("hexcoder_fake_fulgora")
-		storage.last_used_fake_fulgora = nil
-		
-		if g.DEBUG then
-			game.print("Deleted fake fulgora")
-		end
-	end
-end)
-
 ---@return LuaEntity[]
 function Vault:get_initial_ore_slow()
 	local position = self.entity.position
 	local circ_r = g.VAULT_DEFENSE_RADIUS()
-	local fake_surface = Vault.recreate_initial_surface_and_load_chunks(self.entity.surface, position, circ_r)
+	local fake_surface = recreare_fulgora.recreate_initial_surface_and_load_chunks(self.entity.surface, position, circ_r)
 	
 	return fake_surface.find_entities_filtered{position=position, radius=circ_r, type="resource", name=g.SCRAP_TYPES}
 end
@@ -305,47 +271,9 @@ function Vault:modify_ore(mode, restore)
 	return "success"
 end
 
-function Vault:update_drill_connections_near_vault()
-	local position = self.entity.position
-	local r = g.max_drill_radius + g.VAULT_DEFENSE_RADIUS() -- square radius!
-	local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
-	for _,drill in pairs(self.entity.surface.find_entities_filtered{area=area, type="mining-drill"}) do
-		drill.update_connections()
-	end
-end
----@param surface LuaSurface
----@param position MapPosition
-function Vault.update_drill_connections_near(surface, position)
-	local r = g.max_drill_radius -- square radius!
-	local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
-	-- this includes collision box of drill, not really what we want, but I would have added 1 to radius to make sure anyway
-	for _,drill in pairs(surface.find_entities_filtered{area=area, type="mining-drill"}) do
-		--local p = drill.position
-		--rendering.draw_rectangle{left_top={p.x-2.5, p.y-2.5}, right_bottom={p.x+2.5, p.y+2.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
-		drill.update_connections()
-	end
-end
-
+if true then
 local last_count = nil
-local lone_drills = {}
 local ore_cache = {}
-local ore_cache_extra_mining = {}
-
----@param pos MapPosition
----@return integer
-local function int_position_key(pos)
-	local x = math.floor(pos.x or pos[1]) ---@cast x integer
-	local y = math.floor(pos.y or pos[2]) ---@cast y integer
-	-- lua docs largest integer number without rounding arror: 100,000,000,000,000
-	-- largest possible double without skipping integers:    9,007,199,254,740,992 (2^53)
-	-- factorio coords are int32, but 8 bit fixed point
-	-- so 8,388,608 (2^23) should be largest absolute coord
-	-- while 16,777,216 (2^24) is the range
-	-- turn x,y into unique number in safe int range of double by multiplying with next power of 10 after 2^24 (use clean decimal number for better debuggability)
-	-- largest +/- is now 838,860,808,388,608 (>2^49 and <2^50) which is outside lua doc range, but inside actual safe range
-	return y * 100000000 + x -- negative x make y part appear smaller
-	--return y * 100000000 + (x + 8388608) -- use this to avoid?
-end
 
 -- Ores don't have unit_numbers, need to key via position (?)
 -- YARM does this: but I'm not sure that this ideal, I would prefer a integer hash instead of a string (allocation?)
@@ -414,72 +342,32 @@ script.on_event(defines.events.on_resource_depleted, function(event)
 		--assert(ore.prototype.infinite_resource)
 		assert(ore.amount <= get_inf_scrap_minimum(ore)) -- ore can spawn or be created by modify_ore with lower than minimum amount (bumps will make it end up at minimum, I think)
 		
-		--local vaults = ore.surface.find_entities_filtered{name=g.VAULT_NAME, position=position, radius=g.VAULT_DEFENSE_RADIUS()}
-		--if next(vaults) == nil then
-			local bump = INF_SCRAP_DEPLETED_BUMP_AMOUNT
-			
-			local amount = ore.amount
-			local bumped_amount = amount + bump
-			ore.amount = bumped_amount
+		local bump = INF_SCRAP_DEPLETED_BUMP_AMOUNT
+		
+		local amount = ore.amount
+		local bumped_amount = amount + bump
+		ore.amount = bumped_amount
 
-			game.print("on_resource_depleted ".. serpent.line{e=e,
-				amount=amount,
-				bumped_amount=bumped_amount,
-				initial=ore.initial_amount,
-				minimum=ore.prototype.minimum_resource_amount,
-				normal=ore.prototype.normal_resource_amount,
-				old_yield=ore.amount / INF_SCRAP_NORMAL * 100,
-				new_yield=bumped_amount / INF_SCRAP_NORMAL * 100,
-			})
-
-			--local r = g.max_drill_radius -- square radius!
-			--local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
-			--for _,drill in pairs(ore.surface.find_entities_filtered{area=area, type="mining-drill"}) do
-			--	local data = lone_drills[drill.unit_number] or { e = drill }
-			--	--data.extra_drain = (data.extra_drain or 0) + bump
-			--	lone_drills[drill.unit_number] = data
-			--end
-			
-			-- need to account for bump here
-			-- if we set amount directly, we lose mined amount since last poll, instead also bump whatever latest is
-			local ore_key = int_position_key(ore.position)
-			local latest_amount = ore_cache[ore_key]
-			ore_cache[ore_key] = latest_amount and latest_amount + bump or bumped_amount
-			
-			---- TODO: weirdly once bumps happen est. mining rate underestimates, maybe wrong yield after bump causes numbers to be wrong?
-			---- try to calcualte with pre-bump yield here and instead accumulate it as extra mining rate
-			---- but now I can't get this event to even get called?
-			--ore_cache[ore_key] = bumped_amount
-			--
-			--local yield = amount / INF_SCRAP_NORMAL
-			--local drain = latest_amount - amount
-			--ore_cache_extra_mining[ore_key] = (ore_cache_extra_mining[ore_key] or 0) + (drain / yield)
-			
-			-- probably should iterate through ores, not through vaults, which has more even cost
-			-- then cache last amount and est. mining rate, in that case bump might be accounted for differently?
-			-- will vaults then iterate their ore, or even store cached lists of ore keys, or should ore tracking lookup vault and accumulate rate?
-			-- it's arkward since ores usually are part of one vault, but rarely can be part of two
-		--end
+		game.print("on_resource_depleted ".. serpent.line{
+			amount=amount,
+			bumped_amount=bumped_amount,
+			initial=ore.initial_amount,
+			minimum=ore.prototype.minimum_resource_amount,
+			normal=ore.prototype.normal_resource_amount,
+			old_yield=ore.amount / INF_SCRAP_NORMAL * 100,
+			new_yield=bumped_amount / INF_SCRAP_NORMAL * 100,
+		})
+		
+		-- need to account for bump here
+		-- if we set amount directly, we lose mined amount since last poll, instead also bump whatever latest is
+		local ore_key = g.int_position_key(ore.position)
+		local latest_amount = ore_cache[ore_key]
+		ore_cache[ore_key] = latest_amount and latest_amount + bump or bumped_amount
 	end
 end)
 script.on_nth_tick(60*10, function(event)
-	--local drains = {}
-
 	local player = game.get_player(1) ---@cast player -nil
-	for _,drill in pairs(player.surface.find_entities_filtered{type="mining-drill", position=player.position, radius=20}) do
-		lone_drills[drill.unit_number] = lone_drills[drill.unit_number] or { e = drill }
-	end
-	for uid,drill in pairs(lone_drills) do
-		local drill_e = drill.e
-		if not drill_e.valid then
-			lone_drills[uid] = nil
-		end
-	end
 	
-	for _,drill in pairs(player.surface.find_entities_filtered{type="mining-drill", position=player.position, radius=20}) do
-		lone_drills[drill.unit_number] = lone_drills[drill.unit_number] or { e = drill }
-	end
-
 	local nearby_ore = player.surface.find_entities_filtered{name=g.SCRAP_TYPES, position=player.position, radius=30}
 	local normal = INF_SCRAP_NORMAL
 	
@@ -489,7 +377,7 @@ script.on_nth_tick(60*10, function(event)
 		local amount = ore.amount
 		total_amount = total_amount + amount
 		
-		local ore_key = int_position_key(ore.position)
+		local ore_key = g.int_position_key(ore.position)
 		local last_amount = ore_cache[ore_key] or amount -- todo: adjust last amount on deplection bump, not extra_drain
 		ore_cache[ore_key] = amount
 		
@@ -534,64 +422,20 @@ script.on_nth_tick(60*10, function(event)
 		--active_ore_amount = active_ore_amount,
 		--ore_cache=ore_cache
 	})
-	
-	--for uid,drill in pairs(lone_drills) do
-	--	local nearby_ore = drill_e.surface.find_entities_filtered{name=g.SCRAP_TYPES, area=drill_e.mining_area}
-	--	local normal = INF_SCRAP_NORMAL
---
-	--	local total_amount = 0
-	--	local total_mining_rate = 0
-	--	for _,ore in pairs(nearby_ore) do
-	--		local amount = ore.amount
-	--		total_amount = total_amount + amount
-	--		
-	--		local ore_key = int_position_key(ore.position)
-	--		local last_amount = ore_cache[ore_key] or amount -- todo: adjust last amount on deplection bump, not extra_drain
-	--		ore_cache[ore_key] = amount
---
-	--		if amount < last_amount then
-	--			-- est mining rate based on drain, this does not take into account big drill drain% bonus (nor productivity)
-	--			-- for infinite resources, drain done 1x per mining op (reduced by drain%)
-	--			-- but only while yield is about 100%, below that there is an RNG roll that futher skips drain events
-	--			-- this is likely to make drain proportional with actual production yield
-	--			-- because drain events are unlikely at low yields, tracking mining rate becomes less accurate (but hopefully evens out over while patch total?)
-	--			local drain = last_amount - amount
-	--			if ore.name == "scrap" then
-	--				total_mining_rate = total_mining_rate + drain
-	--			else
-	--				-- est entire timestep based on current yield
-	--				local yield = amount / normal
-	--				total_mining_rate = total_mining_rate + (yield < 1 and drain / yield or drain) -- TODO: whats's faster: math.max or this 
-	--			end
-	--		end
-	--	end
-	--	
-	--	local latest_drain = (drill.last_count or 0) - total_amount
-	--	latest_drain = latest_drain / 10 * 60 -- per minute
-	--	
-	--	drill.latest_mining_rate = total_mining_rate / 10 * 60 -- per minute
-	--	drill.last_count = total_amount
-	--	
-	--	game.print("drain: "..serpent.line{
-	--		--uid=uid, drill=drill,
-	--		last_count = drill.last_count,
-	--		latest_mining_rate = drill.latest_mining_rate,
-	--		latest_drain = latest_drain,
-	--		--active_ore_amount = active_ore_amount,
-	--		--ore_cache=ore_cache
-	--	})
-	--end
-
-	--game.print("drains: "..serpent.line(drains))
 end)
 script.on_nth_tick(1, function(event)
-	--local drains = {}
+	local player = game.get_player(1) ---@cast player -nil
+	local lone_drills = {}
+	
+	for _,drill in pairs(player.surface.find_entities_filtered{type="mining-drill", position=player.position, radius=20}) do
+		lone_drills[drill.unit_number] = lone_drills[drill.unit_number] or { e = drill }
+	end
 	
 	for uid,drill in pairs(lone_drills) do
 		local drill_e = drill.e
 		if drill_e.valid then
 			local active_ore = drill_e.mining_target
-			local active_ore_amount = active_ore and ore_cache[int_position_key(active_ore.position)] or 0
+			local active_ore_amount = active_ore and ore_cache[g.int_position_key(active_ore.position)] or 0
 			
 			if active_ore then
 				local yield = active_ore_amount / INF_SCRAP_NORMAL
@@ -608,6 +452,7 @@ script.on_nth_tick(1, function(event)
 
 	--game.print("drains: "..serpent.line(drains))
 end)
+end
 
 ---@param surface LuaSurface
 ---@param where MapPosition|"all"
@@ -617,7 +462,7 @@ function Vault.restore_destroyed_vaults(surface, where, radius)
 	
 	game.print("Respawning destroyed vaults...")
 
-	local fake_surfase = Vault.recreate_initial_surface_and_load_chunks(surface, where, radius)
+	local fake_surfase = recreare_fulgora.recreate_initial_surface_and_load_chunks(surface, where, radius)
 	
 	local initial_vaults = where == "all" and
 		fake_surfase.find_entities_filtered{name=g.VAULT_NAME} or

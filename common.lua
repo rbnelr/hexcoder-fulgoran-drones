@@ -145,6 +145,22 @@ function g.draw_ellipse(target, surface, offset, radius, color)
 	rendering.draw_polygon{target=target, surface=surface, vertices=vertices, color=color, time_to_live=1 }
 end
 
+---@param pos MapPosition
+---@return integer
+function g.int_position_key(pos)
+	local x = math.floor(pos.x or pos[1]) ---@cast x integer
+	local y = math.floor(pos.y or pos[2]) ---@cast y integer
+	-- lua docs largest integer number without rounding arror: 100,000,000,000,000
+	-- largest possible double without skipping integers:    9,007,199,254,740,992 (2^53)
+	-- factorio coords are int32, but 8 bit fixed point
+	-- so 8,388,608 (2^23) should be largest absolute coord
+	-- while 16,777,216 (2^24) is the range
+	-- turn x,y into unique number in safe int range of double by multiplying with next power of 10 after 2^24 (use clean decimal number for better debuggability)
+	-- largest +/- is now 838,860,808,388,608 (>2^49 and <2^50) which is outside lua doc range, but inside actual safe range
+	return y * 100000000 + x -- negative x make y part appear smaller
+	--return y * 100000000 + (x + 8388608) -- use this to avoid?
+end
+
 ---@param list table
 ---@param items table<integer, table>
 ---@param period integer

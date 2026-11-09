@@ -1,5 +1,4 @@
 local g = require("common")
-local util = require("util")
 local dmg = require("disable_on_damage")
 local Vault = require("vault")
 require("ore_tracking")
