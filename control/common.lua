@@ -70,7 +70,7 @@ function common.draw_ellipse(target, surface, offset, radius, color)
 end
 
 ---@param pos MapPosition
----@return integer
+---@return tile_key
 function common.int_position_key(pos)
 	local x = math.floor(pos.x or pos[1]) ---@cast x integer
 	local y = math.floor(pos.y or pos[2]) ---@cast y integer

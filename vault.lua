@@ -1,23 +1,22 @@
 local const = require("const")
 local common = require("control.common")
 local dmg = require("disable_on_damage")
+local ore = require("ore_tracking")
 
 ---@class Vault
 ---@field entity LuaEntity
 ---@field id obj_id
 ---@field near_wall LuaEntity?
----@field targets LuaEntity[] -- NOTE: entities can end up in two vaults target list!
+---@field targets LuaEntity[] -- NOTE: entities can end up in two vaults target list!, TODO: is currently only used for bot movement, and not ideal for it, want a list of vaild target that changes
 ---@field has_targets boolean -- has any targets (=vulnerable player entities)
 ---@field waypoints LuaEntity[]
 ---@field wave_rng number?
 ---@field wave_rng2 number?
----@field initial_ore_amount integer?
----@field wave_start_ore_amount integer?
----@field extra_ore_drain integer -- when bumping infinite ore on reaching minimum, also bump to to counteract and achieve accurate drain computation
+---@field scrap OreTracking
 ---@field wave_size number?
 ---@field wave_freq number?
----@field wave_start_tick integer?
----@field wave_end_tick integer?
+---@field wave_start_tick MapTick
+---@field wave_end_tick MapTick
 ---@field wave_bots_count table<string, integer>
 -- TODO: track sorted into buckets by tick or sort list?
 ---@field wave_emerging_queued table<integer, Emerging> -- current attack wave emerging bots (not yet spawned anything)
@@ -48,22 +47,35 @@ function Vault.from_entity(vault, source_event)
 	local v = storage.vaults[id]
 	if v then return v end
 	
+	local tick = game.tick
+	
 	local v = setmetatable({
 		entity = vault,
 		id = id,
 		targets={},
+		wave_start_tick = tick,
+		wave_end_tick = tick,
 		waypoints={},
 		wave_bots={},
 		wave_emerging_queued={},
 		wave_emerging_projectiles={},
 		active_wave_bots={},
 		wave_bots_count={},
-		extra_ore_drain = 0,
 	}, Vault)
-	
 	-- enemy structures cannot be mined, but decoratives like ruins can
 	vault.force = const.DRONE_FORCE -- vault (simple-entity) can't actually have a force?
 	vault.destructible = false -- can't damage
+	
+	-- snap to grid (but manually because engine assumes everything is odd number of tiles????)
+	-- so we can comfortably build around it and are guaranteed to get full covereage with big mining drills
+	-- (13x13 coverage gives 4 past drill edge, and vault is now exactly 14x8)
+	local pos = vault.position
+	pos.x = math.floor(pos.x+0.5) -- even width, center on integer (odd would be: math.floor(pos.x)+0.5)
+	pos.y = math.floor(pos.y+0.5) -- even height, center on integer
+	vault.teleport(pos,
+		nil, -- same surface
+		true, -- raise_teleported
+		false) -- snap_to_grid
 	
 	v.near_wall = vault.surface.find_entity(const.VAULT_NEAR_WALL_NAME, vault.position)
 	if v.near_wall == nil then
@@ -74,17 +86,17 @@ function Vault.from_entity(vault, source_event)
 	end
 	v.near_wall.destructible = false
 	
-	v:prepare() -- make sure to fix buildings
+	storage.vaults[id] = v
 	
 	-- TODO: do somewhere else instead?
 	-- this will handle new installs with infinite option set
 	if const.INF_SCRAP_ENABLED then
-		v:modify_ore("infinite", "keep")
+		ore.modify_ore(v, "infinite", "keep", source_event)
 	end
-
-	v:reset_ore_tracking(source_event)
 	
-	storage.vaults[id] = v
+	v.scrap = ore.OreTracking.new(vault.surface, vault.position, common.VAULT_DEFENSE_RADIUS(), source_event ~= "on_chunk_generated")
+	
+	v:prepare() -- make sure to fix buildings
 	
 	if const.DEBUG then
 		--rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
@@ -112,20 +124,10 @@ function Vault:destroy()
 	storage.vaults[self.id] = nil
 end
 
----@param source_event? string
----@param new_ore_count? number
----@param new_initial_ore_count? number
-function Vault:reset_ore_tracking(source_event, new_ore_count, new_initial_ore_count)
-	self.initial_ore_amount = new_initial_ore_count
-	-- regular playthrough case, all vauls are created by map generator, do not trigger lags from fake_fulgora stuff
-	if self.initial_ore_amount == nil and not (source_event == "on_chunk_generated" or source_event == "modify_ore") then
-		self.initial_ore_amount = self:get_ore_remaining()
-	end
-	self.wave_start_ore_amount = new_ore_count
-	-- if setting new count, set fake wave tick to make mining rate correct
-	self.wave_start_tick = new_ore_count and (game.tick - 60) or nil
-	self.wave_end_tick = new_ore_count and (game.tick - 60) or nil
-	self.extra_ore_drain = 0
+---@return OreScan
+function Vault:scan_ore()
+	local e = self.entity
+	return self.scrap:scan(e.surface, e.position, common.VAULT_DEFENSE_RADIUS())
 end
 
 -- create random invisible waypoints to act as drone movement targets
@@ -172,7 +174,7 @@ function Vault:prepare()
 						position=p, radius=R, type = const.TARGETS }) do
 		--game.print(serpent.line(e))
 		
-		if common.check_distance(e.position, p, R) then
+		if common.check_distance(e.position, p, R) then -- TODO: distance check is not actually needed? since radius is circular?
 			dmg.fix_building(e.unit_number, e)
 			
 			if not e.disabled_by_script then
@@ -202,7 +204,6 @@ function Vault:start_wave(size, freq)
 	
 	self:update_alert()
 end
--- apparently I didn't make this actually stop 
 function Vault:end_wave()
 	--self.next_bot_id = nil
 	
@@ -216,6 +217,12 @@ function Vault:end_wave()
 	storage.active_vaults[self.id] = nil
 	
 	self:remove_alert()
+end
+
+function Vault:_reset_wave_for_mining_rate()
+	self:end_wave()
+	self.wave_start_tick = game.tick
+	self.wave_end_tick = game.tick
 end
 
 -- do alerts not stay until deleted?

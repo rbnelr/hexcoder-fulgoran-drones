@@ -5,6 +5,14 @@ const.MOD_DIR = "__"..const.MOD_NAME.."__"
 ---- Startup settings
 const.DEBUG = settings.startup[const.MOD_NAME.."-debug"].value --[[@as boolean]]
 const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value --[["@as boolean"]]
+-- 20M patch, at 20% min has 16M available
+-- 24 Drills 1.25 mining speed / 0.5s mining time = 60 mining/s at 50% drain = 1800/min
+-- 1800/s*10 = 1M/h = ~16h to deplete (more due to mining deed bots and <100% drain slowing down)
+-- at 50% drain it takes 1/50%=2x as long to drain, integral from 0.2 to 1 for (1/x) is 1.61, so at 100% initial yield it takes 50% longer than expected
+-- with any ore above 100%, it will actually take closer to the expected
+const.INF_DEPLETION_RATE = 10 -- make setting?
+-- TODO: setting for quality and attack size curve
+const.ALLOW_DRILLS_WITHOUT_ORE = true
 
 -- restrict buildings being attacked to drills, assemblers and military targets, leave inserters, trains, roboports etc alone,
 -- so repair and defense can be safely automated

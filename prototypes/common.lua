@@ -6,6 +6,31 @@ local common = {}
 -- concat lists into new list
 -- does not deduplicate
 ---@param list any[]
+---@param values any[]|any
+---@return any[]
+function common.list_contains(list, values)
+	if type(values) == "table" then
+		for _,value in pairs(values) do
+			for _,item in pairs(list) do
+				if value == item then
+					return true
+				end
+			end
+		end
+	else
+		local value = values
+		for _,item in pairs(list) do
+			if value == item then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- concat lists into new list
+-- does not deduplicate
+---@param list any[]
 ---@param list2 any[]
 ---@return any[]
 function common.list_concat(list, list2)

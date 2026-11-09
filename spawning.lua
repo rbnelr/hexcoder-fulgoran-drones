@@ -274,27 +274,17 @@ end
 function Vault:update_waves()
 	if self:wave_active() then return end
 	
-	local count = self:get_ore_remaining()
+	local scan = self:scan_ore()
+	local mined_ore = scan.total_mined
 	
-	if self.wave_start_ore_amount == nil then
-		-- initially it takes one period for waves to appear
-		self.wave_start_ore_amount = count
-		self.wave_start_tick = game.tick
-		self.wave_end_tick = game.tick
-	end
-	
-	local mined_ore = self.wave_start_ore_amount - count + self.extra_ore_drain
-	if mined_ore < 0 then mined_ore = 0 end
-	
-	local time_since_last = (game.tick - (self.wave_start_tick or 0)) / 3600
-	local time_between = (game.tick - (self.wave_end_tick or 0)) / 3600
+	local time_since_last = (game.tick - self.wave_start_tick) / 3600
+	local time_between = (game.tick - self.wave_end_tick) / 3600
 	
 	--game.print(serpent.line{ ore=count, diff=diff, --[[id=self.id, tick=game.tick,]] at=self.entity})
 	
 	local trigger_wave, size, freq = self:should_spawn_wave(mined_ore, time_since_last, time_between, true)
 	if trigger_wave then
-		self.wave_start_ore_amount = count
-		self.extra_ore_drain = 0
+		self.scrap:commit(scan)
 		
 		self:spawn_wave(size, freq, true)
 	end

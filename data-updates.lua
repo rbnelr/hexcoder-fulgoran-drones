@@ -1,4 +1,5 @@
 local const = require("const")
+local common = require("prototypes.common")
 local meld = require("__core__.lualib.meld")
 
 -- for disable_on_damage to work
@@ -14,6 +15,10 @@ meld(data.raw["simple-entity"][const.VAULT_NAME], {
 	minable = meld.delete(),--meld.overwrite{minable=false, mining_time=999999999},
 	max_health = 1000000, healing_per_tick = 1000000/60,
 	loot = meld.delete(),
+	-- was {-6.88,-4}, {6.88,4} effectively (14x8)
+	-- now effectively (13x8), (a bit cleaner and) which still allows full coverage with big mining drills (but I have to snap it to grid at runtime!)
+	collision_box = {{-6.8,-3.8}, {6.8,3.8}},
+	selection_box = {{-7,-4}, {7,4}}, -- was 7.08x4.2
 })
 -- cannot mine vault ruin, need to adjust tech trigger
 meld(data.raw["technology"]["recycling"], {
@@ -72,6 +77,17 @@ if HARVEST_BOTS then
 		end
 		data.raw["recipe"]["dead-"..name.."-recycling"] = dead_recyc
 	end
+	
+end
+
+-- allow all drills to be placed on spots without ore so we can actually build mining setups that catch dead bots
+-- this may be annoying, would be great as a hotkey or at least toggable at runtime
+if const.ALLOW_DRILLS_WITHOUT_ORE then
+	for _,drill in pairs(data.raw["mining-drill"]) do
+		if common.list_contains(drill.resource_categories, "basic-solid") then -- not pumpjack
+			drill.require_resources_to_place = false
+		end
+	end
 end
 
 if const.INF_SCRAP_ENABLED then
@@ -116,10 +132,8 @@ if const.INF_SCRAP_ENABLED then
 
 			minimum = 10000, -- min 20% like crude oil
 			normal =  50000,
-			-- need to test this, wiki seems wrong/misleading
-			--minimum = 50,
-			--normal =  500,
-			infinite_depletion_amount = 1 -- don't increase this, under 100 % yield, depletion_amount=1 means about the same actual yield as normal scrap (until minimum)
+			-- make reaching minimum yield quicker with same totals and yield curve
+			infinite_depletion_amount = const.INF_DEPLETION_RATE,
 		})
 	}
 end

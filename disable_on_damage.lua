@@ -22,7 +22,7 @@ function dmg.building_fully_damaged(id, e, force)
 	
 	-- workaround to stop drones getting stuck attacking this target
 	-- make drone force non-hostile
-	force.set_friend("player", true)
+	force.set_friend("player", true) -- set_cease_fire instead?
 	storage.friend_end_tick = game.tick + 2 -- 1 tick not enough
 	
 	-- start polling disabled building for repairs due to lack of on_entity_repaired API

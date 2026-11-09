@@ -2,7 +2,8 @@ local const = require("const")
 local common = require("control.common")
 local dmg = require("disable_on_damage")
 local Vault = require("vault")
-require("ore_tracking")
+local ore = require("ore_tracking")
+local recreate_fulgora = require("recreate_fulgora")
 require("spawning")
 local dead_bots = require("dead_bots")
 local movement = require("bot_movement")
@@ -31,11 +32,12 @@ function init()
 	if s.poll_repaired == nil then s.poll_repaired = {} end
 	if s.active_vaults == nil then s.active_vaults = {} end
 	if s.render_objs == nil then s.render_objs = {} end
+	if s.finite_initial == nil then s.finite_initial = {} end
 	
 	if init then
 		local surface = game.get_surface("fulgora")
 		if surface then
-			Vault.restore_destroyed_vaults(surface, "all") -- freezes the game for a bit, warn user or make user trigger it manually?
+			recreate_fulgora.restore_destroyed_vaults(surface, "all") -- freezes the game for a bit, warn user or make user trigger it manually?
 
 			-- This will convert ore to infinite
 			for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
@@ -220,10 +222,7 @@ local function init_chunk(surface, area)
 	local vaults = surface.find_entities_filtered{name=const.VAULT_NAME, area=area}
 	if next(vaults) then
 		for _,e in pairs(vaults) do
-			local vault = Vault.from_entity(e, "on_chunk_generated")
-			-- avoid lag from get_initial_ore_slow() hack if not actually installing in running game
-			-- so initial_ore is just current ore
-			vault.initial_ore_amount = vault:get_ore_remaining()
+			Vault.from_entity(e, "on_chunk_generated")
 		end
 	end
 	--elseif const.TRY_SPAWN_MISSING_VAULTS then
@@ -345,10 +344,10 @@ if const.DEBUG then
 		if all then
 			local fulgora = game.get_surface("fulgora")
 			if fulgora then
-				Vault.restore_destroyed_vaults(fulgora, "all")
+				recreate_fulgora.restore_destroyed_vaults(fulgora, "all")
 			end
 		elseif player then
-			Vault.restore_destroyed_vaults(player.surface, player.position, 60)
+			recreate_fulgora.restore_destroyed_vaults(player.surface, player.position, 60)
 		end
 	end)
 end
@@ -382,8 +381,7 @@ commands.add_command("fulg-modify-ore",
 	
 	local sel = player.selected
 	if sel and sel.valid and sel.name == const.VAULT_NAME then
-		local vault = Vault.from_entity(sel)
-		if vault and vault:modify_ore(mode, amount) == "success" then
+		if ore.modify_ore(Vault.from_entity(sel), mode, amount) == "success" then
 			player.print("ore modified")
 		end
 	else
@@ -394,10 +392,12 @@ end)
 ---- Init
 
 script.register_metatable("Vault", Vault)
+script.register_metatable("OreTracking", ore.OreTracking)
 
 ---@class obj_id : integer -- register_on_object_destroyed-based id
 ---@class unit_number : integer
 ---@class player_index : integer
+---@class tile_key : integer
 
 ---@class ModStorage
 ---@field vaults table<obj_id, Vault>
@@ -408,6 +408,7 @@ script.register_metatable("Vault", Vault)
 ---@field active_vaults table<obj_id, Vault>
 ---@field render_objs table<player_index, LuaRenderObject[]?>
 ---@field last_used_fake_fulgora MapTick?
+---@field finite_initial table<tile_key, integer> -- initial amount for finite scrap tiles around vaults (kept after mined out), see OreTracking
 
 ---@class Damaged
 ---@field entity LuaEntity
@@ -415,11 +416,13 @@ script.register_metatable("Vault", Vault)
 
 script.on_init(init)
 -- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
+local DEV_REINIT_EACH_LOAD = true
 script.on_configuration_changed(function(data)
 	local setting_changed = data.mod_startup_settings_changed
 	local changes = data.mod_changes[const.MOD_NAME]
-	if changes or const.DEBUG then
-		if const.DEBUG then -- dev reset
+	local dev_reset = const.DEBUG and DEV_REINIT_EACH_LOAD
+	if changes or dev_reset then
+		if dev_reset then -- dev reset
 			reset()
 			init()
 			return
