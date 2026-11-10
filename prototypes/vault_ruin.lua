@@ -1,4 +1,3 @@
--- vault ruin: indestructible vault, recycling tech trigger, near-wall graphic, drone waypoints
 local const = require("const")
 local meld = require("__core__.lualib.meld")
 

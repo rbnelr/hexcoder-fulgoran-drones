@@ -1,4 +1,3 @@
--- data stage is split by feature in prototypes/, each with data() and data_updates()
 require("prototypes.vault_ruin").data()
 require("prototypes.combat_robots").data()
 require("prototypes.scrap").data()

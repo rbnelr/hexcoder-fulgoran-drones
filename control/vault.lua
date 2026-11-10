@@ -1,7 +1,7 @@
 local const = require("const")
 local common = require("control.common")
-local dmg = require("disable_on_damage")
-local ore = require("ore_tracking")
+local dmg = require("control.disable_on_damage")
+local ore = require("control.ore_tracking")
 
 ---@class Vault
 ---@field entity LuaEntity

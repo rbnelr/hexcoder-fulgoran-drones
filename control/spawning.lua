@@ -1,6 +1,6 @@
----@class Vault
-local Vault = require("vault")
 local const = require("const")
+---@class Vault
+local Vault = require("control.vault")
 local common = require("control.common")
 
 local function spawn_position()

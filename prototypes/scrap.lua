@@ -1,4 +1,3 @@
--- infinite vault scrap: vault-scrap resource and the scrap autoplace split
 local const = require("const")
 local meld = require("__core__.lualib.meld")
 

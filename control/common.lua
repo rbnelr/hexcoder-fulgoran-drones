@@ -28,12 +28,23 @@ function common.get_inf_scrap_minimum(initial_amount)
 	end
 end
 
+-- This is super dodgy, if there are modded drills with high radius we may miss to update them (they won't mine the newly added bot resource)
+common.max_drill_radius = 0
+if prototypes then
+	for _,drill in pairs(prototypes.get_entity_filtered{{filter="type", type="mining-drill"}}) do
+		for quality,_ in pairs(prototypes.quality) do
+			local radius = drill.get_mining_drill_radius(quality)
+			if radius > common.max_drill_radius then common.max_drill_radius = radius end
+		end
+	end
+end
+
 -- update drills which touch tile at position, or in position+square radius (for vault)
 ---@param surface LuaSurface
 ---@param position MapPosition
 ---@param radius? number -- default to 0
 function common.update_drill_connections_near(surface, position, radius)
-	local r = const.max_drill_radius + (radius or 0) -- square radius!
+	local r = common.max_drill_radius + (radius or 0) -- square radius!
 	local area = {{position.x-r, position.y-r}, {position.x+r, position.y+r}}
 	-- this includes collision box of drill, not really what we want, but I would have added 1 to radius to make sure anyway
 	for _,drill in pairs(surface.find_entities_filtered{area=area, type="mining-drill"}) do

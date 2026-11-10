@@ -1,4 +1,3 @@
--- misc: drone targets, drills without ore, turret turn nerf
 local const = require("const")
 local common = require("prototypes.common")
 

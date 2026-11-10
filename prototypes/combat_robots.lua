@@ -1,4 +1,3 @@
--- combat robots: emerge/descend projectiles, balancing, harvestable drones (wrecks), hostile fulgoran-<bot> copies
 local const = require("const")
 local common = require("prototypes.common")
 local meld = require("__core__.lualib.meld")

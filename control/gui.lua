@@ -1,8 +1,9 @@
 local const = require("const")
 local common = require("control.common")
-local Vault = require("vault")
-local ore = require("ore_tracking")
-require("gui_util")
+---@class Vault
+local Vault = require("control.vault")
+local ore = require("control.ore_tracking")
+require("control.gui_util")
 
 local gui = {}
 
