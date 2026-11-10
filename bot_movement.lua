@@ -81,8 +81,27 @@ function movement.update(vault)
 	local had_bots = next(vault.active_wave_bots) ~= nil
 	
 	local tick = game.tick
+	local vault_e = vault.entity
+	local vault_center = { x = const.VAULT_SHAFT_CENTER.x + vault_e.position.x,
+	                       y = const.VAULT_SHAFT_CENTER.y + vault_e.position.y }
+	
 	--local j = 1
 	local target = nil
+	
+	local function try_leave(id, bot)
+		bot.combat_robot_owner = vault_e
+		
+		local dist = common.get_distance(bot.position, vault_center)
+		local radius_fraction = dist / (const.VAULT_SHAFT_RADIUS*1.2) -- 0-1, or higher if outside
+		
+		local time_left = bot.time_to_live
+		local time_passed_fraction = 1 - time_left / const.RETURN_TIME -- 1: no time left, 0: all time remain
+		
+		if time_left <= 1 or radius_fraction < time_passed_fraction then -- try to get to center, but vary automatically via time, and accept futher out if out of time
+			vault:descend_bot(bot)
+			vault.active_wave_bots[id] = nil
+		end
+	end
 	
 	for id,bot in pairs(vault.active_wave_bots) do
 		--- experimental movement logic, should rewrite later!
@@ -92,7 +111,10 @@ function movement.update(vault)
 		-- maybe switch target to closest if it dies, but move to purely random otherwise?
 		-- could also divide robots into clusters and stagger clusters, might look cool
 		if bot and bot.valid then
-			if bot.name ~= "distractor" then
+			local leave = const.DRONES_TRY_TO_RETURN and bot.time_to_live < const.RETURN_TIME
+			if leave then
+				try_leave(id, bot)
+			elseif bot.name ~= "fulgoran-distractor" then
 				---@cast bot -nil
 				-- form groups of bots where that all go to same target, with bots randomly breaking off
 				-- switch targets on a timer, or when target defeated
@@ -110,7 +132,8 @@ function movement.update(vault)
 					local rng = math.random()
 					local break_off = rng < 0.2
 					
-					-- entire group to same target
+					-- TODO: entire group to same target, does leave or break_off currently cause rest of the group to move?
+					-- if so fix?
 					if id == group_leader or is_waypoint or break_off then
 						target = choose_next_target(vault, bot)
 					end
@@ -119,13 +142,17 @@ function movement.update(vault)
 						bot.combat_robot_owner = target
 					end
 				end
-				
-				--local DBG_COL = {
-				--	["fulgoran-defender"] = {0,0,1}, ["fulgoran-distractor"] = {0,1,0}, ["fulgoran-destroyer"] = {1,0,0},
-				--}
-				--rendering.draw_line{from=bot, to=bot.combat_robot_owner,
-				--	surface = bot.surface, width = 2, color = DBG_COL[bot.name], time_to_live=1}
 			end
+			
+			--if bot and bot.valid and bot.name ~= "fulgoran-distractor" then
+			--	local DBG_COL = {
+			--		["fulgoran-defender"] = {0,0,1}, ["fulgoran-distractor"] = {0,1,0}, ["fulgoran-destroyer"] = {1,0,0},
+			--	}
+			--	if bot.valid then
+			--		rendering.draw_line{from=bot, to=bot.combat_robot_owner,
+			--			surface = bot.surface, width = 2, color = DBG_COL[bot.name], time_to_live=1}
+			--	end
+			--end
 		else
 			-- remove dead bots (and not distractor accidentally too!)
 			vault.active_wave_bots[id] = nil

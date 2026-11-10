@@ -168,6 +168,7 @@ function Vault:make_waypoints()
 end
 
 function Vault:wave_active()
+	-- ignoring decending projectiles for now
 	return (next(self.active_wave_bots) or next(self.wave_emerging_queued) or next(self.wave_emerging_projectiles)) ~= nil
 end
 

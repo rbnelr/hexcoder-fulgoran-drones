@@ -63,6 +63,7 @@ function Vault:queue_spawn_drones(bot_type, count, delay, duration)
 	end
 	self.wave_bots_count[bot_type] = (self.wave_bots_count[bot_type] or 0) + count
 end
+
 function Vault:update_emerging()
 	--draw_ellipse(self.entity, self.entity.surface,
 	--	VAULT_SHAFT_CENTER, {x=VAULT_SHAFT_RADIUS, y=VAULT_SHAFT_RADIUS*VAULT_SHAFT_ELLIPSE_K},
@@ -102,6 +103,30 @@ function Vault:update_emerging()
 	end
 end
 
+-- reverse of emerging: replace a returning bot by a descend projectile that flies down into the shaft, ending hidden behind the near-wall
+-- destroy() skips destroy_action, so no particle and no wreck
+---@param bot LuaEntity
+function Vault:descend_bot(bot)
+	local center = { x = const.VAULT_SHAFT_CENTER.x + self.entity.position.x,
+	                 y = const.VAULT_SHAFT_CENTER.y + self.entity.position.y }
+	local pos = bot.position
+	local name = const.DESCEND_PROJECTILES[bot.name]
+
+	-- end at the hidden bottom edge below the bot, clamped into the shaft
+	local r = const.VAULT_SHAFT_RADIUS * 0.9
+	local x = math.min(math.max(pos.x - center.x, -r), r)
+	local sy = center.y + emerging_obscured_y_pos(x) + const.BOT_FLOAT_HEIGHT
+	
+	self.entity.surface.create_entity{
+		name = name,
+		position = pos, target = {x=center.x + x, y=sy}, snap_to_grid = false,
+		force = const.DRONE_FORCE,
+		--speed = common.vector_length(bot.get_movement()), -- not sure if this does anything
+	}
+
+	bot.destroy()
+end
+
 script.on_event(defines.events.on_trigger_created_entity, function(event)
 	local bot = event.entity
 	local source = event.source
@@ -117,7 +142,7 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 		-- set force again, already set on projectile and _should_ have spawned bot with correct force, but does not
 		-- force is neutral for some reason, possibly because source==vault (simple-entity) can't actually have a force?
 		bot.force = const.DRONE_FORCE
-		
+
 		local variation = 1.0 - math.random()*0.2
 		bot.time_to_live = bot.time_to_live * variation
 		
@@ -200,9 +225,9 @@ function Vault:spawn_wave(size, freq, apply_evo)
 	-- probably want 1-2 distractors and 0 or 1 destroyer even on minimum size
 	
 	-- distractors spawn first, other types delayed
-	self:queue_spawn_drones("fulgoran-defender", round(30*s1), delay+1, 15*dur1)
+	self:queue_spawn_drones("fulgoran-defender", round(30*s1), delay+1.5, 15*dur1)
 	self:queue_spawn_drones("fulgoran-distractor", round(15*s2), delay+0, 9*dur2)
-	self:queue_spawn_drones("fulgoran-destroyer", round(20*s3), delay+2.5, 10*dur3)
+	self:queue_spawn_drones("fulgoran-destroyer", round(20*s3), delay+3.5, 10*dur3)
 	
 	--game.print(serpent.block{ evo=evo, size=size, freq=freq })
 	

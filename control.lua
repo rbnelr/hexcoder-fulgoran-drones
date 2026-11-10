@@ -180,9 +180,7 @@ end
 --	--game.remove_alert{type=defines.alert_type.entity_under_attack, surface="fulgora"}
 --end
 
-local HARVEST_BOTS = settings.startup[const.MOD_NAME.."-dead-bot-resource"].value
-
-if HARVEST_BOTS then
+if const.HARVEST_BOTS then
 	-- only triggers for hostile prototypes
 	script.on_event(const.MOD_NAME.."-on-create-combat-bot-remnant", function(event)
 		local surface = game.get_surface(event.surface_index) ---@diagnostic disable-line

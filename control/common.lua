@@ -52,6 +52,31 @@ function common.merge(tbl1, tbl2)
 	return t
 end
 
+-- factorio libs don't have this?
+---@param vec Vector
+---@return number
+function common.vector_length(vec)
+	local x = vec.x or vec[1]
+	local y = vec.y or vec[2]
+	return math.sqrt(x*x + y*y)
+end
+-- factorio libs don't have this?
+---@param vec Vector
+---@return Vector
+---@return number
+function common.normalized_vector(vec)
+	local x = vec.x or vec[1]
+	local y = vec.y or vec[2]
+	local length = math.sqrt(x*x + y*y)
+	if length == 0 then return { x=0, y=-1 }, 0 end
+	return { x=x/length, y=y/length }, length
+end
+
+function common.get_distance(a, b)
+	local x = a.x - b.x
+	local y = a.y - b.y
+	return math.sqrt(x*x + y*y)
+end
 function common.check_distance2(ax, ay, bx, by, r)
 	local x = ax - bx
 	local y = ay - by

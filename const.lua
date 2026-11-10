@@ -7,9 +7,17 @@ const.PRINT_PREFIX = "[Vault Drones] " -- prefix for all prints and log lines of
 const.DEBUG = settings.startup[const.MOD_NAME.."-debug"].value --[[@as boolean]]
 const.VAULT_DEFENSE_RADIUS = settings.startup[const.MOD_NAME.."-vault-defense-radius"].value --[[@as number]]
 const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value --[["@as boolean"]]
+const.HARVESTABLE_BOTS = settings.startup[const.MOD_NAME.."-dead-bot-resource"].value --[["@as boolean"]]
 
 -- TODO: setting for quality and attack size curve
 const.ALLOW_DRILLS_WITHOUT_ORE = true
+
+-- expired drones (time_to_live ran out, destroy_action) leave dead-<bot> wrecks like killed ones (dying_trigger_effect)
+-- off: expired drones drop the vanilla remnants, wrecks only pile up where drones were actually killed
+-- you have to kill them, this avoids bot buildup on vaults without turrets
+const.EXPIRED_DRONES_HARVESTABLE = false
+-- drones fly back into the vault shaft before their time_to_live runs out, so they don't expire
+const.DRONES_TRY_TO_RETURN = true
 
 -- 20M patch, at 20% min has 16M available
 -- 24 Drills 1.25 mining speed / 0.5s mining time = 60 mining/s at 50% drain = 1800/min
@@ -62,7 +70,18 @@ const.EMERGE_PARTICLES = {
 	["fulgoran-destroyer" ] = "hexcoder-destroyer-emerge",
 }
 
+if const.DRONES_TRY_TO_RETURN then
+	const.DESCEND_PROJECTILES = {
+		["fulgoran-defender"  ] = "hexcoder-defender-descend",
+		["fulgoran-distractor"] = "hexcoder-distractor-descend",
+		["fulgoran-destroyer" ] = "hexcoder-destroyer-descend",
+	}
+end
+
 const.DRONE_TINT = {
+	["defender"  ] = {0.29, 0.64, 0.82},
+	["distractor"] = {0.57, 0.78, 0.21},
+	["destroyer" ] = {0.85, 0.25, 0.14},
 	["fulgoran-defender"  ] = {0.29, 0.64, 0.82},
 	["fulgoran-distractor"] = {0.57, 0.78, 0.21},
 	["fulgoran-destroyer" ] = {0.85, 0.25, 0.14},
@@ -85,6 +104,14 @@ const.EMERGE_SPEEDS = {
 	["distractor"] = 2.5,
 	["destroyer"] = 3.0,
 }
+const.DESCEND_SPEEDS = {
+	["defender"] = 7,
+	["distractor"] = 4,
+	["destroyer"] = 5,
+}
+
+const.RETURN_TIME = 8*60
+
 const.VAULT_SHAFT_CENTER = {x=-0.25, y=0.25}
 const.VAULT_SHAFT_RADIUS = 4
 const.VAULT_SHAFT_ELLIPSE_K = 0.65 -- shaft is an ellipse, due to perspective

@@ -8,16 +8,19 @@ Date: ??. ??. 2026
     - info gui for vault ruin on hover
     - vault ruins that were destroyed or mined in the past are restored when the mod is added to an existing save
     - vault island scrap is converted automatically when the mod is added to an existing save or the infinite scrap setting is changed, fully mined vault tiles come back as infinite scrap
+    - drones fly back down into their vault when their lifetime is about to run out
     - added command /fulg-restore-ore <percent> to restore the scrap around the hovered vault ruin to a percentage of its original amount, including fully mined tiles
   Balancing:
     - distractor capsules now take personal battery, requiring the tech if harvestable drones enabled
     - destroyer capsules now take supercapacitors and a processing unit, requiring the EM plant tech if harvestable drones enabled
     - adjusted drone counts in waves
-    - destroyer lifetime nerfed 120s -> 70s, defender and distractor lifetimes equal to vanilla again
+    - adjusted combat robot lifetimes
     - default vault defense radius lowered from 60 to 55
   Graphics:
+    - added lights to drones
     - fixed tints for drones: emerging, active and dead drones have blue, green and red tints like the icons, while player combat bots are still tinted by force color
   Changes:
+    - expired drones no longer leave harvestable wrecks, only destroyed ones do (avoids wrecks piling up around vaults without defenses)
     - Active wave alert now only shows when the vault has player buildings in range
 ---------------------------------------------------------------------------------------------------
 Version: 1.0.1
