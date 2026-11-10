@@ -348,7 +348,7 @@ function ore.restore_ore(vault, restore)
 	common.update_drill_connections_near(surface, position, radius)
 end
 
-local VIS_DRAIN = true
+local VIS_DRAIN = false
 if const.DEBUG and VIS_DRAIN then
 	script.on_nth_tick(1, function(event)
 		local player = game.get_player(1) ---@cast player -nil

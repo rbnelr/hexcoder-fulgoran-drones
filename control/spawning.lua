@@ -2,6 +2,7 @@ local const = require("const")
 ---@class Vault
 local Vault = require("control.vault")
 local common = require("control.common")
+local progression = require("control.progression")
 
 local function spawn_position()
 	local spawn_r_x = const.VAULT_SPAWN_RADIUS
@@ -18,30 +19,30 @@ local function emerging_obscured_y_pos(x)
 	return const.VAULT_SHAFT_ELLIPSE_K * math.sqrt(r*r - x*x)
 end
 
-local function get_total_scrap_produced()
-	local surface = game.surfaces["fulgora"]
-	--local test = surface.get_resource_counts() -- only counts generated chunks, not clear how to use this
-	
-	-- this counts productivity, unlike my per-vault spawning logic, but that's probably ok
-	local stats = game.forces["player"].get_item_production_statistics(surface)
-	
-	local total = 0
-	for Q,_ in pairs(prototypes.quality) do
-		if Q ~= "quality-unknown" then
-			total = total + stats.get_input_count({name="scrap", quality=Q})
-		end
-	end
-	
-	return total
-end
-local function get_evolution_factor()
-	local total = get_total_scrap_produced()
-
-	local evo_speed = settings.global[const.MOD_NAME.."-evolution-speed"].value --[[@as number]]
-	local x = total * (evo_speed / 10000000)
-	local factor = x / (x + 1) -- like vanilla, squash 0-inf into 0-1 range
-	return factor
-end
+--local function get_total_scrap_produced()
+--	local surface = game.surfaces["fulgora"]
+--	--local test = surface.get_resource_counts() -- only counts generated chunks, not clear how to use this
+--	
+--	-- this counts productivity, unlike my per-vault spawning logic, but that's probably ok
+--	local stats = game.forces["player"].get_item_production_statistics(surface)
+--	
+--	local total = 0
+--	for Q,_ in pairs(prototypes.quality) do
+--		if Q ~= "quality-unknown" then
+--			total = total + stats.get_input_count({name="scrap", quality=Q})
+--		end
+--	end
+--	
+--	return total
+--end
+--local function get_evolution_factor()
+--	local total = get_total_scrap_produced()
+--
+--	local evo_speed = settings.global[const.MOD_NAME.."-evolution-speed"].value --[[@as number]]
+--	local x = total * (evo_speed / 10000000)
+--	local factor = x / (x + 1) -- like vanilla, squash 0-inf into 0-1 range
+--	return factor
+--end
 
 ---@param bot_type string
 ---@param count integer
@@ -194,11 +195,6 @@ function Vault:spawn_wave(size, freq, apply_evo)
 	size = size or 1
 	freq = freq or 1
 	
-	local evo = apply_evo and get_evolution_factor() or 1
-	-- TODO: needs to be tuned still, maybe evo needs to be lower since I think a max of wave size 4x is fine with infinite techs, quality etc.
-	-- it's just that right now all my saves are at high evo despite not being in the endgame
-	size = size * (evo*evo * 3.8 + 0.2)
-	
 	self:start_wave(size, freq)
 	
 	--self.next_bot_id = 1
@@ -297,6 +293,8 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 end
 
 function Vault:update_waves()
+	self:update_targets()
+	
 	if self:wave_active() then return end
 	
 	-- skip the ore scan without player structures (nothing can be mining), rare min size waves still happen
@@ -307,6 +305,7 @@ function Vault:update_waves()
 	if self.has_targets then
 		scan = self:scan_ore()
 		mined_ore = scan.total_mined
+		progression.update_vault(self, scan) -- depth and drill quality, independent of commit
 	end
 	
 	local time_since_last = (game.tick - self.wave_start_tick) / 3600

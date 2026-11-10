@@ -121,7 +121,6 @@ function gui.update_info_gui_content(vault, gui)
 	local mining_rate = mined_since_last / math.max(time_since_start, 0.01)
 	
 	-- represent per vault evolution as "depth mined" in approx 0-100 meters (really just %)
-	-- TODO: figure out how to scale evolution wave modifier and quality levels from mined amount (diminishing returns, and probably should not be tied to total patch size, but reach the higher tiers after a few million)
 	local depth = ore.OreTracking.get_depth(scan) * 100
 	
 	--gui.mining1.caption = string.format("%6d (%d/m)", mined_since_last, mining_rate)

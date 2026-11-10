@@ -25,14 +25,14 @@ function misc.data_updates()
 		end
 	end
 
-	if settings.startup[const.MOD_NAME.."-nerf-turret-turn"].value then
+	if const.NERF_TURRETS then
 		-- was 0.015   0.0025 -> very slow against biters (esp turret nests that get surrounded)
 		data.raw["ammo-turret"]["gun-turret"].rotation_speed = 0.005 -- was 0.015
 		data.raw["electric-turret"]["laser-turret"].rotation_speed = 0.007 -- was 0.01   0.004
 	end
 
-	-- TODO: do this in my overhaul?
-	--for _,planet in pairs{"vulcanus", "fulgora", "gleba", "aquilo"} do
+	-- this is what my spage rebalance mod does now
+	--for _,planet in pairs{"fulgora"} do -- {"vulcanus", "fulgora", "gleba", "aquilo"}
 	--	data:extend{{
 	--		type = "item-group",
 	--		name = planet.."-group",
@@ -44,22 +44,7 @@ function misc.data_updates()
 	--		order_in_recipe = data.raw["item-group"]["intermediate-products"].order_in_recipe,
 	--	}}
 	--end
-	--
-	--data.raw["item-subgroup"]["vulcanus-processes"].group = "vulcanus-group"
 	--data.raw["item-subgroup"]["fulgora-processes"].group = "fulgora-group"
-	--data.raw["item-subgroup"]["agriculture-processes"].group = "gleba-group"
-	--data.raw["item-subgroup"]["agriculture-products"].group = "gleba-group"
-	--data.raw["item-subgroup"]["aquilo-processes"].group = "aquilo-group"
-	--
-	--data.raw["item-subgroup"]["fluid-recipes"].group = "fluids"
-
-	--for _,type in pairs{"entity","item","recipe"} do
-	--	for name,proto in pairs(data.raw[type]) do
-	--		if proto.subsgroup_id == "fulgora-processes" then
-	--			proto.group_id = "fulgora"
-	--		end
-	--	end
-	--end
 end
 
 return misc

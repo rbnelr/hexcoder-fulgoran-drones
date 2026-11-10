@@ -260,6 +260,32 @@ local function capsule_recipes()
 	})
 end
 
+-- dead-<bot>-recycling: copy of the capsule recycling with capsules swapped for wrecks
+-- must run after the recycler generated the recycling recipes (its data-updates)
+local function dead_bot_recycling()
+	for _, name in pairs(BOT_NAMES) do
+		local real_recyc = data.raw["recipe"][name.."-capsule-recycling"]
+		local auto_recyc = data.raw["recipe"]["dead-"..name.."-recycling"]
+
+		local dead_recyc = meld(table.deepcopy(real_recyc), {
+			name = auto_recyc.name,
+			-- item to recycle is not craftable and has no autoplace, so maybe game thinks it's not obtainable, so does not show filter or signals
+			-- and shows as red in factoriopedia, this fixes that
+			flags = meld.overwrite{ "always-show" },
+			ingredients = meld.overwrite{{ type="item", name="dead-"..name, amount=1 }},
+			icons = auto_recyc.icons,
+			localised_name = auto_recyc.localised_name,
+			enabled = true,
+		})
+		for _,v in pairs(dead_recyc.results) do
+			if v.name:find("-capsule") then
+				v.name = "dead-"..v.name:gsub("-capsule", "")
+			end
+		end
+		data.raw["recipe"]["dead-"..name.."-recycling"] = dead_recyc
+	end
+end
+
 -- Fits in data-update, but there we don't get automatic recylcling recipes!
 -- dying particles that trigger the wreck script, dead-<bot> items and resources
 local function harvestable_drones()
@@ -362,7 +388,8 @@ local function harvestable_drones()
 					type="item",
 					name=item.name,
 					amount=1,
-					ignored_by_productivity=1
+					ignored_by_productivity=1, -- do we want this?
+					affected_by_quality = false, -- probably want this, TODO: not working?
 				}},
 			},
 			stages = meld.overwrite{ sheets = {
@@ -480,35 +507,9 @@ local function hostile_copies()
 	end
 end
 
--- dead-<bot>-recycling: copy of the capsule recycling with capsules swapped for wrecks
--- must run after the recycler generated the recycling recipes (its data-updates)
-local function dead_bot_recycling()
-	for _, name in pairs(BOT_NAMES) do
-		local real_recyc = data.raw["recipe"][name.."-capsule-recycling"]
-		local auto_recyc = data.raw["recipe"]["dead-"..name.."-recycling"]
-
-		local dead_recyc = meld(table.deepcopy(real_recyc), {
-			name = auto_recyc.name,
-			-- item to recycle is not craftable and has no autoplace, so maybe game thinks it's not obtainable, so does not show filter or signals
-			-- and shows as red in factoriopedia, this fixes that
-			flags = meld.overwrite{ "always-show" },
-			ingredients = meld.overwrite{{ type="item", name="dead-"..name, amount=1 }},
-			icons = auto_recyc.icons,
-			localised_name = auto_recyc.localised_name,
-			enabled = true,
-		})
-		for _,v in pairs(dead_recyc.results) do
-			if v.name:find("-capsule") then
-				v.name = "dead-"..v.name:gsub("-capsule", "")
-			end
-		end
-		data.raw["recipe"]["dead-"..name.."-recycling"] = dead_recyc
-	end
-end
-
 function combat_robots.data()
 	emerge_projectiles()
-	if settings.startup[const.MOD_NAME.."-buff-drones"].value then
+	if const.BUFFED_DRONES then
 		balance()
 	end
 	if const.HARVESTABLE_BOTS then

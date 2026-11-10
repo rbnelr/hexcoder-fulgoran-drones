@@ -190,7 +190,6 @@ local function respawn_vaults(surface, fake_surface, where, radius)
 	--	surface.regenerate_entity(const.VAULT_NAME, chunks)
 	--	-- regenerate_entity does not return sucess or number of entities actually added!
 	--end
-	---- TODO: recreate_initial_surface_and_load_chunks
 	--
 	--return "success"
 end
@@ -415,6 +414,5 @@ function M.try_place_missing_vault_ruin(surface, area)
 	end
 end
 ]]
-
 
 return M

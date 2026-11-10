@@ -2,6 +2,13 @@ local const = require("const")
 local common = require("control.common")
 local movement = {}
 
+-- Weyl sequence
+-- turn ids into uniformly distributed points in [0,1)
+local function weyl_hash01(id)
+	local p = id * 0.618033988749895
+	return p - math.floor(p)
+end
+
 -- choose bot target when it wants to switch
 -- TODO: track how many bots are targeting which target and bias against it, so attacks are more spread out
 ---@param vault Vault
@@ -19,21 +26,26 @@ local function choose_next_target(vault, bot)
 		-- to consider: LuaSurface.get_closest
 		
 		-- check for close targets (TODO: may be the main cost of this code?)
-		local close = vault.entity.surface.find_entities_filtered{position=bot.position, radius=const.RETARGET_DIST, type = const.TARGETS, is_military_target=true}
-		local count = #close
-		if count > 0 then
-			for i=1,3 do
-				local idx = math.floor(rnd * (count-0.001))+1
-				local targ = close[idx]
-				-- TODO: distance check is not actually needed since radius is already circular?
-				-- technically it's circle-touches-bounding-box vs distance to center, but we don't care about that...
-				-- and if this can't fail this weird retry loop is not even needed!
-				if common.check_distance(targ.position, vault.entity.position, R) then
-					return targ
-				end
-				rnd = math.random() -- new random to pick other target
-			end
+		local close = vault.entity.surface.find_entities_filtered{position=bot.position, radius=const.RETARGET_DIST,
+			type = const.TARGETS, is_military_target=true}
+		if next(close) then
+			local idx = math.floor(rnd * (#close-0.001))+1
+			return close[idx]
 		end
+		--local count = #close
+		--if count > 0 then
+		--	for i=1,3 do
+		--		local idx = math.floor(rnd * (count-0.001))+1
+		--		local targ = close[idx]
+		--		-- TODO: distance check is not actually needed since radius is already circular?
+		--		-- technically it's circle-touches-bounding-box vs distance to center, but we don't care about that...
+		--		-- and if this can't fail this weird retry loop is not even needed!
+		--		if common.check_distance(targ.position, vault.entity.position, R) then
+		--			return targ
+		--		end
+		--		rnd = math.random() -- new random to pick other target
+		--	end
+		--end
 		
 		-- no close target found, pick random target
 		-- reuse rnd
@@ -64,13 +76,6 @@ local function choose_next_target(vault, bot)
 	
 	-- no waypoint found?
 	return vault.entity
-end
-
--- Weyl sequence
--- turn ids into uniformly distributed points in [0,1)
-local function weyl_hash01(id)
-	local p = id * 0.618033988749895
-	return p - math.floor(p)
 end
 
 -- TODO: can be optimized, by only checking bots depending on tick, and reacting to building_fully_damaged()

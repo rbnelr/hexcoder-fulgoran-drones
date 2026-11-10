@@ -88,16 +88,16 @@ function common.get_distance(a, b)
 	local y = a.y - b.y
 	return math.sqrt(x*x + y*y)
 end
-function common.check_distance2(ax, ay, bx, by, r)
-	local x = ax - bx
-	local y = ay - by
-	return x*x + y*y <= r*r
-end
-function common.check_distance(a, b, r)
-	local x = a.x - b.x
-	local y = a.y - b.y
-	return x*x + y*y <= r*r
-end
+--function common.check_distance2(ax, ay, bx, by, r)
+--	local x = ax - bx
+--	local y = ay - by
+--	return x*x + y*y <= r*r
+--end
+--function common.check_distance(a, b, r)
+--	local x = a.x - b.x
+--	local y = a.y - b.y
+--	return x*x + y*y <= r*r
+--end
 
 function common.random_in_ellipse_center_bias(center, radius)
 	local r = math.random()

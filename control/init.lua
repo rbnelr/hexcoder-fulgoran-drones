@@ -1,20 +1,16 @@
 local const = require("const")
-local dmg = require("control.disable_on_damage")
+local common = require("control.common")
 ---@class Vault
 local Vault = require("control.vault")
+local dmg = require("control.disable_on_damage")
 local ore = require("control.ore_tracking")
 local recreate_fulgora = require("control.recreate_fulgora")
+local progression = require("control.progression")
 
 -- 'somewhat lazy' init ideally called in every handler, intentionally global
+-- used during dev, but new DEV_REINIT_EACH_LOAD makes this obsolete
+-- TODO: remove init() calls everywhere?
 function init()
-
-	-- create enemy drone force
-	if game.forces[const.DRONE_FORCE] == nil then
-		local force = game.create_force(const.DRONE_FORCE)
-		force.custom_color = {230,50,255} -- now tinting individually via actual graphic tints
-		-- TODO: can give force robot livetime bonus
-	end
-	
 	local s = storage
 	local init = next(s) == nil
 	
@@ -24,6 +20,13 @@ function init()
 	if s.active_vaults == nil then s.active_vaults = {} end
 	if s.render_objs == nil then s.render_objs = {} end
 	if s.finite_initial == nil then s.finite_initial = {} end
+	
+	-- create enemy drone force
+	if game.forces[const.DRONE_FORCE] == nil then
+		local force = game.create_force(const.DRONE_FORCE)
+		force.custom_color = {230,50,255} -- now tinting individually via actual graphic tints
+		-- TODO: can give force robot livetime bonus
+	end
 	
 	if init then
 		local surface = game.get_surface("fulgora")
@@ -59,6 +62,8 @@ local function reset()
 		for _,e in pairs(surface.find_entities_filtered{force=const.DRONE_FORCE}) do
 			e.destroy()
 		end
+		-- drill quality from depth, reapplied by the next scans after init
+		progression.clear_drills(surface)
 	end
 	
 	rendering.clear(const.MOD_NAME)

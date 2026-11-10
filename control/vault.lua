@@ -14,6 +14,8 @@ local ore = require("control.ore_tracking")
 ---@field waypoints LuaEntity[]
 ---@field wave_rng number?
 ---@field wave_rng2 number?
+---@field depth number? -- 0-1, cached from the last scan in update_waves, see progression.update_vault
+---@field drill_quality number? -- local_effect quality applied to drills in radius, nil = never scanned
 ---@field wave_size number?
 ---@field wave_freq number?
 ---@field wave_start_tick MapTick
@@ -93,7 +95,7 @@ function Vault.from_entity(vault, source_event)
 	-- new chunk: nothing mined yet, so no fake fulgora needed for finite initial amounts
 	v.dirty_ores = source_event ~= "on_chunk_generated"
 	
-	v:prepare() -- make sure to fix buildings
+	v:update_targets() -- make sure to fix buildings
 	
 	if const.DEBUG then
 		--rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
@@ -172,35 +174,30 @@ function Vault:wave_active()
 	return (next(self.active_wave_bots) or next(self.wave_emerging_queued) or next(self.wave_emerging_projectiles)) ~= nil
 end
 
-function Vault:prepare()
+function Vault:update_targets()
 	-- build new list, no cleanup needed for old one
 	self.targets = {}
 	self.has_targets = false
 	
-	local R = const.VAULT_DEFENSE_RADIUS
 	local p = self.entity.position
 	for _,e in pairs(self.entity.surface.find_entities_filtered{
-						position=p, radius=R, type = const.TARGETS }) do
+						position=p, radius=const.VAULT_DEFENSE_RADIUS, type = const.TARGETS }) do
 		--game.print(serpent.line(e))
 		
-		if common.check_distance(e.position, p, R) then -- TODO: distance check is not actually needed? since radius is circular?
-			dmg.fix_building(e.unit_number, e)
-			
-			if not e.disabled_by_script then
-				e.is_military_target = true
-				self.targets[e.unit_number] = e
-			end
-			
-			self.has_targets = true
+		dmg.fix_building(e.unit_number, e)
+		
+		if not e.disabled_by_script then
+			e.is_military_target = true
+			self.targets[e.unit_number] = e
 		end
+		
+		self.has_targets = true
 	end
 	
 	dmg.fix_all_icons()
 end
 
 function Vault:start_wave(size, freq)
-	self:prepare()
-	
 	-- create new waypoints every attack, takes into account radius changes and ends up more random
 	self:make_waypoints()
 	

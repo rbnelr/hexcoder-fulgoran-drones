@@ -1,9 +1,29 @@
+-- Drones never destroy buildings instead disabling them
+-- Only entity types in const.TARGETS are attacked and ever take damage from drones
+-- needs allow_run_time_change_of_is_military_target, set in prototypes/misc.lua
+-- is_military_target get set to true only around vaults, and currently lazily in Vault:update_targets
+-- fix_building/fix_all_icons were meant to clean up stuck states, but shouldn't really be needed in regular play
+-- entities take damage up to 1 HP on_entity_damaged set it back to 1 so it can't die
+-- then building_fully_damaged sets disabled_by_script, a custom status, alt-mode icon, stops attack via is_military_target=false,
+--   and the entity is added to storage.poll_repaired
+-- drones keep shooting a target after it stops being military, so the drone force is friends with "player" for 2 ticks
+--   A horrible HACK, but seems to be working perfectly against all expectations, (it's not even visible?)
+-- Repair has no event, so on_tick polls REPAIR_POLL_LIMIT entries of poll_repaired per tick:
+--   HP > 1: military again (attackable while still disabled)
+--   HP >= RESTORED_HP (2/3): restore_building(true) (enabled again)
+--   Died (player or non-drone damage, drones can't kill) -> on_entity_event: restore_building(false), to avoid revivied building keeping disabled state
+--   fix_building (wave start, init): disabled but HP >= RESTORED_HP (stuck, seen during development) -> restore_building(false).
+
 local const = require("const")
 local dmg = {}
 
 local RESTORED_HP = 2.0/3 -- 2/3 is where HP bar becomes green
 
--- TODO: LuaEntity.protected is this relevant?
+-- TODO: LuaEntity.protected is this relevant? "Automated weapons won't target protected entities."
+-- currently setting is_military_target=false to avoid drones from keeping to shoot things
+-- should test if protected (new sometime in 2.1) would do the same thing
+-- if so set is_military_target around vaults, then do protected when things are disabled
+-- if we are lucky that may also stop drones from shooting, unlike is_military_target=false, which needs set_friend hack
 
 -- fully damaged -> disable, show status and make non military to stop attacks
 ---@param id unit_number
