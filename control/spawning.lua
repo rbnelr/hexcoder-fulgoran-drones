@@ -53,7 +53,7 @@ function Vault:queue_spawn_drones(bot_type, quality_tier, count, delay, duration
 	local name = const.EMERGE_PARTICLES[bot_type]
 	for i = 1,count do
 		local quality_level = depth_scaling.roll_bot_quality_from_tier(quality_tier)
-		local quality_name = const.QUALITY_IDS[quality_level]
+		local quality_name = common.QUALITY_IDS[quality_level]
 		
 		---@type Emerging
 		local emerging = {
@@ -128,6 +128,7 @@ function Vault:descend_bot(bot)
 		name = name,
 		position = pos, target = {x=center.x + x, y=sy}, snap_to_grid = false,
 		force = const.DRONE_FORCE,
+		quality = bot.quality
 		--speed = common.vector_length(bot.get_movement()), -- not sure if this does anything
 	}
 

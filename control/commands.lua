@@ -2,6 +2,7 @@ local const = require("const")
 ---@class Vault
 local Vault = require("control.vault")
 local ore = require("control.ore_tracking")
+local depth_scaling = require("control.depth_scaling")
 --local recreate_fulgora = require("control.recreate_fulgora") -- for fulg-bench-convert
 --local dead_bots = require("control.dead_bots") -- for fulg-spawn-bot-res
 
@@ -62,7 +63,7 @@ if const.DEBUG then
 		if sel and sel.valid and sel.name == const.VAULT_NAME then
 			local vault = vault_from_entity(sel)
 			vault:stop_wave_and_kill_bots(true)
-			vault:spawn_wave(size, 1)
+			vault:spawn_wave(size, 1, depth_scaling.bot_tier(vault.depth))
 		end
 	end)
 	commands.add_command("fulg-kill-wave", "", function(command)

@@ -52,12 +52,19 @@ end
 
 -- This is super dodgy, if there are modded drills with high radius we may miss to update them (they won't mine the newly added bot resource)
 common.max_drill_radius = 0
-if prototypes then
-	for _,drill in pairs(prototypes.get_entity_filtered{{filter="type", type="mining-drill"}}) do
-		for quality,_ in pairs(prototypes.quality) do
-			local radius = drill.get_mining_drill_radius(quality)
-			if radius > common.max_drill_radius then common.max_drill_radius = radius end
-		end
+for _,drill in pairs(prototypes.get_entity_filtered{{filter="type", type="mining-drill"}}) do
+	for quality,_ in pairs(prototypes.quality) do
+		local radius = drill.get_mining_drill_radius(quality)
+		if radius > common.max_drill_radius then common.max_drill_radius = radius end
+	end
+end
+
+common.QUALITY_IDS = {[0]="normal"}
+do
+	local q = prototypes.quality["normal"]
+	while q.next do
+		q = q.next
+		table.insert(common.QUALITY_IDS, q.name)
 	end
 end
 

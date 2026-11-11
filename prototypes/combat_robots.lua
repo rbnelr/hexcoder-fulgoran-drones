@@ -166,7 +166,7 @@ local function balance()
 		separation_range = 1.6, -- was 1
 		range_from_player = 2.5, -- was 6
 		--friction = 0.016,
-		max_speed = 0.3,
+		max_speed = 0.28, -- was nil
 		selection_priority = 55, -- make selectable over buildings, was 35, normal buildings are 50, ore is 40
 		-- can spawn item like this, could probably trigger script too, to add scrap resource, but I don't actually want that anymore
 		--loot =
@@ -212,7 +212,7 @@ local function balance()
 		separation_range = 2.0, -- was 1.5
 		range_from_player = 2.8, -- was 6
 		friction = 0.020,
-		max_speed = 0.2,
+		max_speed = 0.15, -- was nil
 		selection_priority = 55, -- was 35, normal buildings are 50, ore is 40
 	})
 	

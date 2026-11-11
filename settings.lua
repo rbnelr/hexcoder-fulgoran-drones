@@ -63,7 +63,7 @@ data:extend({
 		type = "double-setting",
 		name = MOD_NAME.."-max-bot-quality",
 		order = "c3",
-		localised_name = "Max scrap quality",
+		localised_name = "Max drone quality",
 		localised_description = "Maximum quality tier for enemy drones\n0 to disable quality drones\n5=legendary\nthis is just the peak, multiple qualities still occur",
 		setting_type = "runtime-global",
 		default_value = 5,

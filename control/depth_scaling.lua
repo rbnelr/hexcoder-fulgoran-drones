@@ -45,6 +45,10 @@ local depth_scaling = {}
 -- drill has max qualtiy boost = 1000 (100000%), ie. 100% legendary from regular scrap
 local MAX_DRILL_QUALITY_BOOST = prototypes.entity["big-mining-drill"].effect_receiver.quality_limits.high
 
+-- Could add settings that change quality spread shape
+-- eg. range=1, top_heavy=2 => encounter any quality, most of Q_k at Tier_k, but a mix of everything
+--     range=0.5, top_heavy=1 => stop seeing Q0 at tier 2 and Q1 at tier 4, 
+
 -- vault is 14x8, drills are 5x5, so horizontal min possible distance is (7+2.5)
 local QSCRAP_DIST_FALLOFF_MIN_DIST = 12 -- 12 allows drills touching the corners to get the full tier, while further away suffers
 local QSCRAP_DIST_FALLOFF = 1 -- falloff at max dist (defense radius) in tiers
@@ -52,7 +56,7 @@ local QSCRAP_DIST_FALLOFF = 1 -- falloff at max dist (defense radius) in tiers
 local QSCRAP_SPREAD_RANGE = 1
 local QSCRAP_SPREAD_TOP_HEAVY = 2
 
-local BOT_SPREAD_RANGE = 1
+local BOT_SPREAD_RANGE = 0.5
 local BOT_SPREAD_TOP_HEAVY = 2
 
 ---@param depth number 0-1
@@ -188,12 +192,15 @@ end
 function depth_scaling.update_quality_for_all_vaults(surface)
 	---@type LuaEntity[]|{v:Vault, scan:OreScan}[]
 	local vaults = surface.find_entities_filtered{name=const.VAULT_NAME}
+	local vaults_to_update = {}
 	for k,v in pairs(vaults) do
 		local vault = vault_from_entity(v)
-		vaults[k] = { v=vault, scan=vault:scan_ore() }
+		if vault.has_targets then -- avoid untouched vaults to prevent lag?
+			vaults_to_update[k] = { v=vault, scan=vault:scan_ore() }
+		end
 	end
 	-- scan all first, then update
-	for _,v in pairs(vaults) do
+	for _,v in pairs(vaults_to_update) do
 		v.v:update_quality(v.scan)
 	end
 end
