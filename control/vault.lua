@@ -4,23 +4,29 @@ local dmg = require("control.disable_on_damage")
 local ore = require("control.ore_tracking")
 
 ---@class Vault
----@field entity LuaEntity
 ---@field id obj_id
+---@field entity LuaEntity
 ---@field near_wall LuaEntity?
+---
 ---@field dirty_ores boolean -- tiles may have been mined before tracking started (existing save, restored vault), see get_or_init_scrap
 ---@field scrap OreTracking? -- created on demand, see get_or_init_scrap
 ---@field targets LuaEntity[] -- NOTE: entities can end up in two vaults target list!, TODO: is currently only used for bot movement, and not ideal for it, want a list of vaild target that changes
 ---@field has_targets boolean -- has any targets (=vulnerable player entities)
+---
+--- latest depth, only needed for drill quality if drill touches multiple vaults TODO: this may go away later
+---@field depth number
+---
 ---@field waypoints LuaEntity[]
----@field wave_rng number?
+---
+--- Previous or current wave params TODO: could wrap into a table and actually properlly track prev wave even while next wave is active
+---@field wave_rng number? -- TODO: not sure why I stored the rng, maybe so the gui rolls the same size/freq variation? TODO: test that it actually does that
 ---@field wave_rng2 number?
----@field depth number? -- 0-1, cached from the last scan in update_waves, see progression.update_vault
----@field drill_quality number? -- local_effect quality applied to drills in radius, nil = never scanned
 ---@field wave_size number?
 ---@field wave_freq number?
 ---@field wave_start_tick MapTick
 ---@field wave_end_tick MapTick
 ---@field wave_bots_count table<string, integer>
+---
 -- TODO: track sorted into buckets by tick or sort list?
 ---@field wave_emerging_queued table<integer, Emerging> -- current attack wave emerging bots (not yet spawned anything)
 ---@field wave_emerging_projectiles table<integer, LuaEntity> -- current attack wave emerging bots (projectiles that appear like bots that rise out of the vault)
@@ -37,25 +43,27 @@ local ore = require("control.ore_tracking")
 local Vault = {}
 Vault.__index = Vault
 
----@param vault LuaEntity
+-- global because lua makes circular ref hard, files we require here can't this file
+---@param entity LuaEntity
 ---@param source_event? string
 ---@return Vault
-function Vault.from_entity(vault, source_event)
-	assert(vault.name == const.VAULT_NAME)
+function vault_from_entity(entity, source_event)
+	assert(entity.name == const.VAULT_NAME)
 	
 	-- simple entity has no unit_number!
 	--local id = vault.unit_number ---@cast id -nil
 	-- workaround, register on_object_destroyed
-	local id = script.register_on_object_destroyed(vault)
-	local v = storage.vaults[id]
-	if v then return v end
+	local id = script.register_on_object_destroyed(entity)
+	local vault = storage.vaults[id]
+	if vault then return vault end
 	
 	local tick = game.tick
 	
-	local v = setmetatable({
-		entity = vault,
+	local vault = setmetatable({
+		entity = entity,
 		id = id,
 		targets={},
+		depth = 0,
 		wave_start_tick = tick,
 		wave_end_tick = tick,
 		waypoints={},
@@ -65,45 +73,45 @@ function Vault.from_entity(vault, source_event)
 		active_wave_bots={},
 		wave_bots_count={},
 	}, Vault)
-	storage.vaults[id] = v
+	storage.vaults[id] = vault
 	
 	-- enemy structures cannot be mined, but decoratives like ruins can
-	vault.force = const.DRONE_FORCE -- vault (simple-entity) can't actually have a force?
-	vault.destructible = false -- can't damage
+	entity.force = const.DRONE_FORCE -- vault (simple-entity) can't actually have a force?
+	entity.destructible = false -- can't damage
 	
 	-- snap to grid (but manually because engine assumes everything is odd number of tiles????)
 	-- so we can comfortably build around it and are guaranteed to get full covereage with big mining drills
 	-- (13x13 coverage gives 4 past drill edge, and vault is now exactly 14x8)
-	local pos = vault.position
+	local pos = entity.position
 	pos.x = math.floor(pos.x+0.5) -- even width, center on integer (odd would be: math.floor(pos.x)+0.5)
 	pos.y = math.floor(pos.y+0.5) -- even height, center on integer
-	vault.teleport(pos,
+	entity.teleport(pos,
 		nil, -- same surface
 		true, -- raise_teleported
 		false) -- snap_to_grid
 	
-	v.near_wall = vault.surface.find_entity(const.VAULT_NEAR_WALL_NAME, vault.position)
-	if v.near_wall == nil then
-		v.near_wall = v.entity.surface.create_entity{
-			name = const.VAULT_NEAR_WALL_NAME, position = v.entity.position,
+	vault.near_wall = entity.surface.find_entity(const.VAULT_NEAR_WALL_NAME, entity.position)
+	if vault.near_wall == nil then
+		vault.near_wall = vault.entity.surface.create_entity{
+			name = const.VAULT_NEAR_WALL_NAME, position = vault.entity.position,
 			preserve_ghosts_and_corpses = true, -- ??
 		}
 	end
-	v.near_wall.destructible = false
+	vault.near_wall.destructible = false
 	
 	-- ore tracking is created on demand (get_or_init_scrap), vaults nobody builds near or looks at never need it
 	-- new chunk: nothing mined yet, so no fake fulgora needed for finite initial amounts
-	v.dirty_ores = source_event ~= "on_chunk_generated"
+	vault.dirty_ores = source_event ~= "on_chunk_generated"
 	
-	v:update_targets() -- make sure to fix buildings
+	vault:update_targets() -- make sure to fix buildings
 	
 	if const.DEBUG then
 		--rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
 		--	surface=vault.surface, filled=true, color={0,1,0}, time_to_live=60}
-		game.print(const.PRINT_PREFIX.."init vault ".. serpent.line{vault})
+		game.print(const.PRINT_PREFIX.."init vault ".. serpent.line{entity})
 	end
 	
-	return v
+	return vault
 end
 
 function Vault:destroy()
@@ -121,6 +129,18 @@ function Vault:destroy()
 	-- targets are not bound to vault, and can be forgotten as well
 	
 	storage.vaults[self.id] = nil
+end
+
+---@return Vault[]
+function Vault:get_this_and_overlapping_vaults()
+	local e = self.entity
+	local overlapping = {}
+	-- anything in 2x the radius can overlap
+	for _,ve in pairs(e.surface.find_entities_filtered{name=const.VAULT_NAME, position=e.position, radius=const.VAULT_DEFENSE_RADIUS*2}) do
+		local vault = vault_from_entity(ve)
+		table.insert(overlapping, vault)
+	end
+	return overlapping
 end
 
 -- ore tracking on demand: update_waves only scans with player buildings in range, gui forces it
@@ -253,6 +273,38 @@ end
 function Vault:remove_alert()
 	if self.entity.valid then
 		game.forces["player"].remove_alert{entity=self.entity}
+	end
+end
+
+function Vault:update_waves()
+	self:update_targets()
+	
+	if self:wave_active() then return end
+	
+	-- skip the ore scan without player structures (nothing can be mining), rare min size waves still happen
+	-- has_targets is set by prepare (vault init, wave start) and when building near the vault
+	-- TODO: player could be near and mine by hand but well, probably does not matter
+	local scan
+	local total_mined = 0
+	if self.has_targets then
+		scan = self:scan_ore()
+		total_mined = scan.total_mined
+		
+		self:update_quality(scan) -- depth and drill quality, independent of commit
+	end
+	
+	local time_since_last = (game.tick - self.wave_start_tick) / 3600
+	local time_between = (game.tick - self.wave_end_tick) / 3600
+	
+	--game.print(serpent.line{ ore=count, diff=diff, --[[id=self.id, tick=game.tick,]] at=self.entity})
+	
+	local trigger_wave, size, freq = self:should_spawn_wave(total_mined, time_since_last, time_between, true)
+	if trigger_wave then
+		if scan then
+			self.scrap:commit(scan)
+		end
+		
+		self:spawn_wave(size, freq)
 	end
 end
 

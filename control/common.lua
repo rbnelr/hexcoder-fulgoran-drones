@@ -5,6 +5,27 @@ local common = {}
 ---@type ModStorage
 storage = storage
 
+common.settings_changed = false
+---- Runtime settings (store here, not in storage)
+---@param event EventData.on_runtime_mod_setting_changed|{name:"_mod_load", setting_type:string}
+function common.update_runtime_settings(event)
+	if event.setting_type == "runtime-global" then
+		local g = settings.global
+		common.PROGRESSION_CURVE = g[const.MOD_NAME.."-progression-curve"].value --[[@as double]]
+		common.MAX_SCRAP_QUALITY = g[const.MOD_NAME.."-max-scrap-quality"].value --[[@as double]]
+		common.WAVE_FREQ         = g[const.MOD_NAME.."-wave-freq"].value --[[@as double]]
+		common.WAVE_SIZE         = g[const.MOD_NAME.."-wave-size"].value --[[@as double]]
+		common.WAVE_MIN_TIME     = g[const.MOD_NAME.."-wave-min-time"].value --[[@as double]]
+		common.WAVE_MAX_TIME     = g[const.MOD_NAME.."-wave-max-time"].value --[[@as double]]
+	end
+	
+	if event.name ~= "_mod_load" then
+		common.settings_changed = true
+	end
+end
+-- get each load, then update in on_runtime_mod_setting_changed
+common.update_runtime_settings({name="_mod_load", setting_type="runtime-global"})
+
 ---- Infinite vault scrap
 
 local INF_SCRAP_PROTO = prototypes.entity["vault-scrap"]
@@ -151,16 +172,23 @@ function common.int_position_key(pos)
 	--return y * 100000000 + (x + 8388608) -- use this to avoid?
 end
 
----@param list table
----@param items table<integer, table>
----@param period integer
----@param func fun(item)
-function common.stagger_tick(list, items, period, func)
+-- iteration state of a staggered poll, kept in storage (plain table, starts as {})
+---@class StaggerTickState
+---@field prev_key any? -- key of the last polled item, next() continues from here
+---@field amount number? -- fractional items owed, carried over between ticks
+---@field count integer? -- cached table_size(items), refreshed once per pass
+
+---@generic K, V
+---@param state StaggerTickState
+---@param items table<K, V>
+---@param period integer -- ticks per full pass over items
+---@param func fun(item: V)
+function common.stagger_tick(state, items, period, func)
 	local ok, val
-	local key = list.prev_key
-	local amount = list.amount or 0
-	local count = list.count
-	if count == nil or (count == 0 and next(items) ~= nil) then -- init count and handle edge case of empty list that fills again
+	local key = state.prev_key
+	local amount = state.amount or 0
+	local count = state.count
+	if count == nil or (count == 0 and next(items) ~= nil) then -- init count and handle edge case of empty items that fill again
 		count = table_size(items)
 	end
 	-- update count/period items per tick, effectively update each item once every period tick
@@ -175,13 +203,13 @@ function common.stagger_tick(list, items, period, func)
 			-- cache count, and only update once per pass, not every tick
 			count = table_size(items)
 		end
-		if key ~= nil then -- edge case of list being empty but still iterating
+		if key ~= nil then -- edge case of items being empty but still iterating
 			func(val)
 		end
 		amount = amount - 1
 	end
 	
-	list.prev_key, list.amount, list.count = key, amount, count
+	state.prev_key, state.amount, state.count = key, amount, count
 end
 
 return common

@@ -12,7 +12,10 @@
 --   HP > 1: military again (attackable while still disabled)
 --   HP >= RESTORED_HP (2/3): restore_building(true) (enabled again)
 --   Died (player or non-drone damage, drones can't kill) -> on_entity_event: restore_building(false), to avoid revivied building keeping disabled state
---   fix_building (wave start, init): disabled but HP >= RESTORED_HP (stuck, seen during development) -> restore_building(false).
+--   fix_building (at init and vault polling): disabled but HP >= RESTORED_HP (stuck, seen during development) -> restore_building(false).
+-- if uninstalled without reverting things:
+--   is_military_target=true should mostly revert since allow_run_time_change_of_is_military_target would revert to false for drills etc.
+--   builds will be left damaged, but afaik can be left disabled_by_script, which would be bad
 
 local const = require("const")
 local dmg = {}

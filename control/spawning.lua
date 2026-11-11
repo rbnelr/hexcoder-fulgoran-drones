@@ -2,7 +2,7 @@ local const = require("const")
 ---@class Vault
 local Vault = require("control.vault")
 local common = require("control.common")
-local progression = require("control.progression")
+local depth_scaling = require("control.depth_scaling")
 
 local function spawn_position()
 	local spawn_r_x = const.VAULT_SPAWN_RADIUS
@@ -187,11 +187,12 @@ local function round(x)
 	return math.floor(x+0.5)
 end
 
+-- spawn wave based on final scaled size and later quality
+-- also takes freq to remember so alerts and gui can keep displaying them
 ---@param size number?
 ---@param freq number?
----@param apply_evo boolean?
 ---@return boolean success
-function Vault:spawn_wave(size, freq, apply_evo)
+function Vault:spawn_wave(size, freq)
 	size = size or 1
 	freq = freq or 1
 	
@@ -247,7 +248,7 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	-- esp with this not even being time_between, but time_since_last (did I make this change for consistency)?
 	-- in fact, at high mining rates/evo/settings, having attacks literally uninterruppted may be cool
 	-- TODO: just remove this?
-	local min_time = settings.global[const.MOD_NAME.."-wave-min-time"].value * variation
+	local min_time = common.WAVE_MIN_TIME * variation
 	if time_since_last < min_time and early_out then
 		return false -- not enough time has elapsed, no wave
 	end
@@ -266,10 +267,10 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	local freq_exp = 0.6 -- was 0.5
 	local size_exp = 0.7 -- was 0.5
 	
-	local wave_frequency = settings.global[const.MOD_NAME.."-wave-freq"].value / variation * base_frequency
-	local max_time       = settings.global[const.MOD_NAME.."-wave-max-time"].value * variation
+	local wave_frequency = common.WAVE_FREQ / variation * base_frequency
+	local max_time       = common.WAVE_MAX_TIME * variation
 	-- use a second rng to make size and frequency non-correlated
-	local wave_size      = settings.global[const.MOD_NAME.."-wave-size"].value * variation2
+	local wave_size      = common.WAVE_SIZE * variation2
 	local min_size = 0.1
 	local max_size = 10
 	
@@ -290,35 +291,4 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, time_between, early
 	
 	local trigger_wave = time_since_last < min_time or time_since_last >= target_period
 	return trigger_wave, wave_size, wave_frequency, eta
-end
-
-function Vault:update_waves()
-	self:update_targets()
-	
-	if self:wave_active() then return end
-	
-	-- skip the ore scan without player structures (nothing can be mining), rare min size waves still happen
-	-- has_targets is set by prepare (vault init, wave start) and when building near the vault
-	-- TODO: player could be near and mine by hand but well, probably does not matter
-	local scan
-	local mined_ore = 0
-	if self.has_targets then
-		scan = self:scan_ore()
-		mined_ore = scan.total_mined
-		progression.update_vault(self, scan) -- depth and drill quality, independent of commit
-	end
-	
-	local time_since_last = (game.tick - self.wave_start_tick) / 3600
-	local time_between = (game.tick - self.wave_end_tick) / 3600
-	
-	--game.print(serpent.line{ ore=count, diff=diff, --[[id=self.id, tick=game.tick,]] at=self.entity})
-	
-	local trigger_wave, size, freq = self:should_spawn_wave(mined_ore, time_since_last, time_between, true)
-	if trigger_wave then
-		if scan then
-			self.scrap:commit(scan)
-		end
-		
-		self:spawn_wave(size, freq, true)
-	end
 end

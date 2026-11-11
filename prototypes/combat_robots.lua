@@ -389,7 +389,8 @@ local function harvestable_drones()
 					name=item.name,
 					amount=1,
 					ignored_by_productivity=1, -- do we want this?
-					affected_by_quality = false, -- probably want this, TODO: not working?
+					--affected_by_quality = false, -- probably want this, TODO: not working?
+					quality_min = "normal", quality_max = "normal", -- this does work
 				}},
 			},
 			stages = meld.overwrite{ sheets = {

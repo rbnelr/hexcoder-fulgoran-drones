@@ -2,10 +2,11 @@ local const = require("const")
 local common = require("control.common")
 ---@class Vault
 local Vault = require("control.vault")
+require("control.spawning") -- adds functions to Vault
+local depth_scaling = require("control.depth_scaling") -- adds functions to Vault
 local dmg = require("control.disable_on_damage")
 local ore = require("control.ore_tracking")
 local recreate_fulgora = require("control.recreate_fulgora")
-local progression = require("control.progression")
 
 -- 'somewhat lazy' init ideally called in every handler, intentionally global
 -- used during dev, but new DEV_REINIT_EACH_LOAD makes this obsolete
@@ -35,7 +36,7 @@ function init()
 			recreate_fulgora.convert_ore_and_restore_vaults(surface) -- freezes the game for a bit, warn user or make user trigger it manually?
 			
 			for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
-				Vault.from_entity(e)
+				vault_from_entity(e)
 			end
 			
 			--if const.TRY_SPAWN_MISSING_VAULTS then
@@ -62,8 +63,8 @@ local function reset()
 		for _,e in pairs(surface.find_entities_filtered{force=const.DRONE_FORCE}) do
 			e.destroy()
 		end
-		-- drill quality from depth, reapplied by the next scans after init
-		progression.clear_drills(surface)
+		
+		depth_scaling.reset_all_drills_local_quality_effect(surface)
 	end
 	
 	rendering.clear(const.MOD_NAME)
@@ -108,13 +109,16 @@ script.register_metatable("OreTracking", ore.OreTracking)
 ---@class tile_key : integer
 
 ---@class ModStorage
----@field vaults table<obj_id, Vault>
----@field friend_end_tick integer?
----@field poll_vaults table
+---@field vaults table<obj_id, Vault> -- all registed vaults, should be all since init() and chunkgen register them as soon as they appear
+---@field poll_vaults StaggerTickState -- stagger_tick state for vaults
+---@field active_vaults table<obj_id, Vault> -- waves with active waves only
+---
 ---@field poll_repaired Damaged[]
 ---@field poll_prev unit_number?
----@field active_vaults table<obj_id, Vault>
+---@field friend_end_tick integer?
+---
 ---@field render_objs table<player_index, LuaRenderObject[]?>
+---
 ---@field last_used_fake_fulgora MapTick?
 ---@field finite_initial table<tile_key, integer> -- initial amount for finite scrap tiles around vaults (kept after mined out), see OreTracking
 
@@ -124,11 +128,10 @@ script.register_metatable("OreTracking", ore.OreTracking)
 
 script.on_init(init)
 -- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
-local DEV_REINIT_EACH_LOAD = true
 script.on_configuration_changed(function(data)
 	local setting_changed = data.mod_startup_settings_changed
 	local changes = data.mod_changes[const.MOD_NAME]
-	local dev_reset = const.DEBUG and DEV_REINIT_EACH_LOAD
+	local dev_reset = const.DEBUG
 	if changes or setting_changed or dev_reset then
 		if dev_reset then -- dev reset
 			reset()
@@ -152,6 +155,4 @@ script.on_configuration_changed(function(data)
 	-- vault-scrap prototype is always defined (hidden when off), so it is not deleted
 end)
 
-script.on_event(defines.events.on_runtime_mod_setting_changed, function(event)
-	-- TODO: anything to handler here?
-end)
+script.on_event(defines.events.on_runtime_mod_setting_changed, common.update_runtime_settings)

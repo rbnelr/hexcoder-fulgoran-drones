@@ -3,10 +3,10 @@ local common = require("control.common")
 local dmg = require("control.disable_on_damage")
 ---@class Vault
 local Vault = require("control.vault")
+local depth_scaling = require("control.depth_scaling")
 local dead_bots = require("control.dead_bots")
 local movement = require("control.bot_movement")
 local gui = require("control.gui")
-local progression = require("control.progression")
 
 local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 	[defines.target_type.entity] = function(event)
@@ -38,15 +38,14 @@ local function on_entity_create(event)
 	if entity.type == "simple-entity" then
 		-- can't actually be built in game, but still do generic built events
 		if entity.name == const.VAULT_NAME then
-			Vault.from_entity(entity)
+			vault_from_entity(entity)
 		end
 	else
 		dmg.on_entity_event(entity)
 		
 		if entity.surface.name == "fulgora" then
-			-- quality from cached vault depth, new drills don't wait for the next scan
 			if entity.type == "mining-drill" then
-				progression.update_drill(entity)
+				depth_scaling.update_quality_for_single_drill(entity)
 			end
 		end
 	end
@@ -135,8 +134,13 @@ script.on_event(defines.events.on_tick, function(event)
 	--common._dev_reset()
 	init()
 	
-	-- TODO: could skip expensive checks by checking something like (last-get_resource_counts())>1000 first for whole planet?
-	-- how? pause until condition met, then scan every chunk once, then pause again?
+	if common.settings_changed then
+		local fulgora = game.surfaces["fulgora"]
+		if fulgora then
+			depth_scaling.update_quality_for_all_vaults(fulgora)
+		end
+	end
+	common.settings_changed = false
 	
 	common.stagger_tick(storage.poll_vaults, storage.vaults, const.ORE_POLL_PERIOD, function(vault)
 		if vault.entity.valid then
@@ -148,9 +152,8 @@ script.on_event(defines.events.on_tick, function(event)
 	
 	local update_alerts = event.tick % 30 == 0
 	
-	--for id,v in pairs(storage.vaults) do
 	for id,v in pairs(storage.active_vaults) do
-		if v.entity.valid then -- and v:wave_active()
+		if v.entity.valid then
 			if update_alerts then
 				v:update_alert()
 			end

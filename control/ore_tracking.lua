@@ -333,14 +333,13 @@ function ore.restore_ore(vault, restore)
 			old_ore.amount = amount
 		end
 	end
-
+	
 	-- important!, otherwise we may get negative or positive huge mining rates and trigger huge waves
 	-- find overlapping vaults (ore is part of more than one radius) and update their initial amounts (finite initial raised for restore > 100%, drained tiles)
-	for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME, position=position, radius=radius*2}) do
-		local vault = storage.vaults[script.register_on_object_destroyed(e)] -- HACK: to get vault witout require("control.vault")
-		if vault and vault.scrap then
-			vault.scrap:reset(surface, e.position, radius, true)
-			vault:_reset_wave_for_mining_rate() -- reset wave_end_tick so gui shows new mining rate for convenience
+	for _,v in pairs(vault:get_this_and_overlapping_vaults()) do
+		if v.scrap then
+			v.scrap:reset(surface, v.entity.position, radius, true)
+			v:_reset_wave_for_mining_rate() -- reset wave_end_tick so gui shows new mining rate for convenience
 		end
 	end
 
