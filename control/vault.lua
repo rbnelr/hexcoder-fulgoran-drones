@@ -31,12 +31,12 @@ local ore = require("control.ore_tracking")
 ---@field wave_emerging_queued table<integer, Emerging> -- current attack wave emerging bots (not yet spawned anything)
 ---@field wave_emerging_projectiles table<integer, LuaEntity> -- current attack wave emerging bots (projectiles that appear like bots that rise out of the vault)
 ---@field active_wave_bots table<integer, LuaEntity> -- current attack wave active bots
---@field next_bot_id integer?
 
 ---@class (exact) Emerging
 --@field id integer
 ---@field tick integer -- spawn projectile on future tick
 ---@field name string -- emerging projectile name
+---@field quality string
 ---@field final_pos MapPosition -- position once reached the top
 
 ---@class Vault
@@ -273,38 +273,6 @@ end
 function Vault:remove_alert()
 	if self.entity.valid then
 		game.forces["player"].remove_alert{entity=self.entity}
-	end
-end
-
-function Vault:update_waves()
-	self:update_targets()
-	
-	if self:wave_active() then return end
-	
-	-- skip the ore scan without player structures (nothing can be mining), rare min size waves still happen
-	-- has_targets is set by prepare (vault init, wave start) and when building near the vault
-	-- TODO: player could be near and mine by hand but well, probably does not matter
-	local scan
-	local total_mined = 0
-	if self.has_targets then
-		scan = self:scan_ore()
-		total_mined = scan.total_mined
-		
-		self:update_quality(scan) -- depth and drill quality, independent of commit
-	end
-	
-	local time_since_last = (game.tick - self.wave_start_tick) / 3600
-	local time_between = (game.tick - self.wave_end_tick) / 3600
-	
-	--game.print(serpent.line{ ore=count, diff=diff, --[[id=self.id, tick=game.tick,]] at=self.entity})
-	
-	local trigger_wave, size, freq = self:should_spawn_wave(total_mined, time_since_last, time_between, true)
-	if trigger_wave then
-		if scan then
-			self.scrap:commit(scan)
-		end
-		
-		self:spawn_wave(size, freq)
 	end
 end
 

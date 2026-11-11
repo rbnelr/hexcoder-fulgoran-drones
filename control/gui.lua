@@ -110,7 +110,26 @@ function gui.update_info_gui_content(vault, gui)
 		if bots and next(bots) then
 			str = "Bots:"
 			for n,c in pairs(bots) do
-				str = str..string.format("  %d[entity=%s,quality=normal]", c, n)
+				if const.IS_DRONE[n] then
+					str = str..string.format("  %d[entity=%s,quality=normal]", c, n)
+				end
+			end
+		end
+		return str
+	end
+	local function bot_quality_list(bots)
+		local str = ""
+		if bots and next(bots) then
+			local total = 0
+			for _,qn in ipairs(const.QUALITY_IDS) do
+				local count = bots[qn]
+				if count then total = total + count end
+			end
+			for _,qn in ipairs(const.QUALITY_IDS) do
+				local count = bots[qn]
+				if count then
+					str = str..string.format("  %.0f%%[quality=%s]", count / total * 100, qn)
+				end
 			end
 		end
 		return str
@@ -139,7 +158,7 @@ function gui.update_info_gui_content(vault, gui)
 		gui.cur_cap.caption = string.format("Wave active for %.1fmin!", time_since_start)
 		gui.cur1.caption = vault.wave_size and string.format("Size: %3.0f %%", vault.wave_size * 100) or "Size: --"
 		gui.cur2.caption = vault.wave_freq and string.format("Freq: %.1fmin", (1/vault.wave_freq)) or "Freq: --"
-		gui.cur3.caption = bot_list(vault.wave_bots_count)
+		gui.cur3.caption = bot_list(vault.wave_bots_count).."\n"..bot_quality_list(vault.wave_bots_count)
 		
 		gui.last_cap.caption = string.format("Last wave %.1fmin ago", time_since_start)
 		gui.last1.caption = "Size: --"
@@ -157,7 +176,7 @@ function gui.update_info_gui_content(vault, gui)
 		gui.last_cap.caption = string.format("Last wave %.1fmin ago", time_since_start)
 		gui.last1.caption = vault.wave_size and string.format("Size: %3.0f%%", vault.wave_size  * 100) or "Size: --"
 		gui.last2.caption = vault.wave_freq and string.format("Freq: %.1fmin", 1/vault.wave_freq) or "Freq: --"
-		gui.last3.caption = bot_list(vault.wave_bots_count)
+		gui.last3.caption = bot_list(vault.wave_bots_count).."\n"..bot_quality_list(vault.wave_bots_count)
 	end
 	
 	gui.quality1.caption = string.format("Tier: %.1f", depth_scaling.scrap_tier(depth)+1)

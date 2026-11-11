@@ -13,6 +13,7 @@ function common.update_runtime_settings(event)
 		local g = settings.global
 		common.PROGRESSION_CURVE = g[const.MOD_NAME.."-progression-curve"].value --[[@as double]]
 		common.MAX_SCRAP_QUALITY = g[const.MOD_NAME.."-max-scrap-quality"].value --[[@as double]]
+		common.MAX_BOT_QUALITY   = g[const.MOD_NAME.."-max-bot-quality"].value --[[@as double]]
 		common.WAVE_FREQ         = g[const.MOD_NAME.."-wave-freq"].value --[[@as double]]
 		common.WAVE_SIZE         = g[const.MOD_NAME.."-wave-size"].value --[[@as double]]
 		common.WAVE_MIN_TIME     = g[const.MOD_NAME.."-wave-min-time"].value --[[@as double]]

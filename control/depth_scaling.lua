@@ -49,10 +49,11 @@ local MAX_DRILL_QUALITY_BOOST = prototypes.entity["big-mining-drill"].effect_rec
 local QSCRAP_DIST_FALLOFF_MIN_DIST = 12 -- 12 allows drills touching the corners to get the full tier, while further away suffers
 local QSCRAP_DIST_FALLOFF = 1 -- falloff at max dist (defense radius) in tiers
 
--- TODO: absolute multiplier, or table based to ensure all qualities are seen without reducing average value too much?
-local QSCRAP_TIER_SPREAD = 0.5 -- random reduction (total) per drill to achive a spread of qualities
 local QSCRAP_SPREAD_RANGE = 1
 local QSCRAP_SPREAD_TOP_HEAVY = 2
+
+local BOT_SPREAD_RANGE = 1
+local BOT_SPREAD_TOP_HEAVY = 2
 
 ---@param depth number 0-1
 ---@return number 0-1
@@ -69,16 +70,43 @@ function depth_scaling.scrap_tier(depth)
 	return progression_curve(depth) * (common.MAX_SCRAP_QUALITY-1)
 end
 
+---@param depth number 0-1
+---@return number bot_tier 0-(MAX_BOT_QUALITY-1)
+function depth_scaling.bot_tier(depth)
+	return progression_curve(depth) * (common.MAX_BOT_QUALITY-1)
+end
+
 ---@param scrap_tier number 0-(MAX_SCRAP_QUALITY-1)
 ---@return number quality effect for LuaEntity.local_effect 1==+100%, up to +100000%, which gives 100% legendary
 local function quality_level_to_drill_effect(scrap_tier)
 	local tier = math.floor(scrap_tier)
-	local fract = (scrap_tier - tier)
+	local chance = (scrap_tier - tier)
 	if tier <= 0 then
-		return fract -- tier 1: 0-1, not 0.1-1 like needed for the later tiers
+		return chance -- tier 1: 0-1, not 0.1-1 like needed for the later tiers
 	end
 	local lo = 10 ^ (tier - 1) -- tier 2: 1..10, tier 3: 10..100, ...
-	return math.min(lo * (1 + 9 * fract), MAX_DRILL_QUALITY_BOOST)
+	return math.min(lo * (1 + 9 * chance), MAX_DRILL_QUALITY_BOOST)
+end
+
+---@param bot_tier number 0-(MAX_BOT_QUALITY-1)
+---@return number quality 0-4
+function depth_scaling.roll_bot_quality_from_tier(bot_tier)
+	bot_tier = bot_tier * (1 - BOT_SPREAD_RANGE * math.random() ^ BOT_SPREAD_TOP_HEAVY)
+	
+	local tier = math.floor(bot_tier)
+	local chance = (bot_tier - tier)
+	if tier > 0 then
+		chance = 0.1 + chance*0.9
+	end
+	
+	-- LuaQualityPrototype.roll_quality does also exist, but would need to run quality_level_to_drill_effect to get effect?
+	local rng = math.random()
+	if     rng >= chance then    -- tier = tier + 0
+	elseif rng >= chance*0.1 then   tier = tier + 1
+	elseif rng >= chance*0.01 then  tier = tier + 2
+	elseif rng >= chance*0.001 then tier = tier + 3
+	else                            tier = tier + 4 end
+	return math.min(tier, 4)
 end
 
 ---@param drill LuaEntity

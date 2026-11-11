@@ -44,11 +44,11 @@ const.WAYPOINT = const.MOD_NAME.."-waypoint"
 --	"fulgoran-distractor",
 --	"fulgoran-destroyer",
 --}
---const.IS_DRONE = {
---	["fulgoran-defender"] = true,
---	["fulgoran-distractor"] = true,
---	["fulgoran-destroyer"] = true,
---}
+const.IS_DRONE = {
+	["fulgoran-defender"] = true,
+	["fulgoran-distractor"] = true,
+	["fulgoran-destroyer"] = true,
+}
 
 const.DRONE_FORCE = "enemy-fulgoran-drones"
 
@@ -122,5 +122,14 @@ const.RETURN_TIME = 8*60
 
 const.ORE_POLL_PERIOD = 60*10
 const.REPAIR_POLL_LIMIT = 8 -- max per tick
+
+const.QUALITY_IDS = {[0]="normal"}
+do
+	local q = prototypes.quality["normal"]
+	while q.next do
+		q = q.next
+		table.insert(const.QUALITY_IDS, q.name)
+	end
+end
 
 return const
