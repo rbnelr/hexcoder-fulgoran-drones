@@ -148,7 +148,6 @@ if prototypes then -- only in control
 			tbl[n] = { level=i, from_level=from_level }
 			from_level[i] = n
 		end
-		return { to_level=to_level, from_level=from_level }
 	end
 	const.DRONE_RES_QUALITY_TABLE = {}
 	quality_levels(const.DRONE_RES_QUALITY_TABLE, "dead-defender")

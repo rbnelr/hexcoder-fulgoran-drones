@@ -4,10 +4,12 @@ local common = require("control.common")
 local dead_bots = {}
 
 function dead_bots.update_unlocked_qualities()
-	local highest = 0
+	local highest = 1
 	local player_force = game.forces["player"]
 	if player_force then
-		for i,q in ipairs(const.QUALITY_IDS) do
+		--for i,q in ipairs(const.QUALITY_IDS) do
+		for i=2,const.MAX_QUALITY_ID do -- don't bother checking normal, it's also safer this way
+			local q = const.QUALITY_IDS[i]
 			if not player_force.is_quality_unlocked(q) then
 				break
 			end
@@ -16,6 +18,8 @@ function dead_bots.update_unlocked_qualities()
 	end
 	storage.highest_quality_unlocked = highest
 end
+
+script.on_nth_tick(10*60, dead_bots.update_unlocked_qualities) -- catch research_all_technologies() etc.
 
 ---@param res_name string bot_resource_name
 ---@return string
@@ -38,7 +42,7 @@ function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
 		-- existing resource, increase amount
 		resource.amount = resource.amount + count
 		
-		local p = resource.position
+		--local p = resource.position
 		--rendering.draw_rectangle{left_top={p.x-0.5, p.y-0.5}, right_bottom={p.x+0.5, p.y+0.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
 	--else
 	-- not really needed resource no longer deletes cliffs due to cliff_removal_probability,

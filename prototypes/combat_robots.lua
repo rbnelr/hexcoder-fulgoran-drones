@@ -145,6 +145,39 @@ local function emerge_projectiles()
 	end
 end
 
+-- hostile distractor laser in the drone tint (vanilla laser-beam is shared with the laser turret, so copy)
+-- the vanilla laser textures are pure red (255,0,0 glow), tint can only multiply, so the color textures are recolored copies
+-- (fulgoran-laser-body/end.png, generated from the vanilla ones, tint {0.57, 0.78, 0.21}, white core kept)
+-- light layers are white and the ground light is tinted in the prototype, so those just get the tint
+local function hostile_laser_beam(hostile_name)
+	local tint = const.DRONE_TINT[hostile_name]
+	local beam = table.deepcopy(data.raw["beam"]["laser-beam"])
+	beam.name = hostile_name.."-laser-beam"
+	beam.localised_name = {"entity-name.laser-beam"}
+	local recolored = {
+		["__base__/graphics/entity/laser-turret/laser-body.png"] = const.MOD_DIR.."/graphics/fulgoran-laser-body.png",
+		["__base__/graphics/entity/laser-turret/laser-end.png"] = const.MOD_DIR.."/graphics/fulgoran-laser-end.png",
+	}
+	local function recolor(anim)
+		for _,layer in pairs(anim and anim.layers or {}) do
+			if recolored[layer.filename] then
+				layer.filename = recolored[layer.filename]
+			elseif layer.draw_as_light then
+				layer.tint = tint
+			end
+		end
+	end
+	local gs = beam.graphics_set.beam
+	recolor(gs.head)
+	recolor(gs.tail)
+	for _,body in pairs(gs.body or {}) do recolor(body) end
+	for _,ground in pairs(beam.graphics_set.ground or {}) do
+		ground.tint = { tint[1] * 0.5, tint[2] * 0.5, tint[3] * 0.5 } -- was {0.5, 0.05, 0.05}
+	end
+	data:extend{beam}
+	return beam.name
+end
+
 -- Add hostile versions of combat bot entities to be able to color them individually instead of one color per force
 -- and to allow hostile ones to spawn resource and player ones not
 local function hostile_copies()
@@ -177,6 +210,12 @@ local function hostile_copies()
 		mask.tint_as_overlay = true
 
 		hostile_bot.light = util.table.deepcopy(DRONE_LIGHTS[name])
+
+		if name == "distractor" then
+			local delivery = hostile_bot.attack_parameters.ammo_type.action.action_delivery
+			assert(delivery.type == "beam" and delivery.beam == "laser-beam")
+			delivery.beam = hostile_laser_beam(hostile_name)
+		end
 
 		data:extend{hostile_bot}
 	end
@@ -402,8 +441,7 @@ local function harvestable_drones_quality_resource()
 				local dp = table.deepcopy(base_dying_particle)
 				dp.name = hostile_name.."-dying-particle-"..Q.name
 				tint_particle(dp, tint)
-				
-				dp.render_layer = "projectile"
+				-- render_layer set on the vanilla particle in set_render_layers
 				
 				local trigger = dp.ended_on_ground_trigger_effect
 				assert(trigger and trigger[1].type == "create-entity")
@@ -578,7 +616,103 @@ function combat_robots.data_updates()
 	end
 end
 
+-- Render layers, relative to the vault near-wall ("smoke", see vault_ruin.lua), which hides emerging drones (projectiles, drawn at "projectile", no render_layer field)
+-- Layer order (low to high): object (buildings, trees) < higher-object-* < elevated rails < explosion < projectile < smoke (near-wall) < air-object (drones, flying robots)
+-- Between layers order is strict, within a layer things are sorted (by y?)
+--  beams default to "projectile" and explosions to "explosion", so attacks were drawn under the near-wall while the drones were over it
+--  => all beams (combat robots, laser turret, tesla turret/gun, electric, modded) and beam explosions (bullet-trails tracers) go to "air-object"
+--     they were already above all buildings, so this only changes order against smoke, the near-wall and flying things
+--  => effects at combat robots (source_effects, e.g. defender gunshot, only used by defender in vanilla) go to "air-object" too
+--     hits at the target stay, so they still hide behind the wall if the target is behind it
+--  => combat robot dying particles go to "projectile": over explosions (death explosion hid the falling debris) and buildings, but still under the near-wall
+--     (default "object" sorts with buildings, so debris falling behind a building was hidden)
+-- all in place (no copies), shared prototypes are changed for everything using them
+-- final_fixes so prototypes changed by other mods' data-updates are included
+-- must run before harvestable_drones_quality_resource, which copies the vanilla dying particles
+local AIR_LAYER = "air-object"
+local DYING_PARTICLE_LAYER = "projectile"
+
+local function as_list(t)
+	if t == nil then return {} end
+	if t.type then return {t} end -- single item, not array
+	return t
+end
+
+---@param effects table? TriggerEffect
+---@param explosion_layer string?
+---@param particle_layer string?
+local function set_effects_layer(effects, explosion_layer, particle_layer)
+	for _,eff in pairs(as_list(effects)) do
+		local explosion = (eff.type == "create-explosion" or eff.type == "create-entity") and data.raw["explosion"][eff.entity_name]
+		local particle = eff.type == "create-particle" and data.raw["optimized-particle"][eff.particle_name]
+		if explosion and explosion_layer then
+			explosion.render_layer = explosion_layer
+		elseif particle and particle_layer then
+			particle.render_layer = particle_layer
+		end
+	end
+end
+
+---@param trigger table? Trigger
+---@param explosion_layer string?
+---@param particle_layer string?
+local function set_trigger_source_layer(trigger, explosion_layer, particle_layer)
+	for _,action in pairs(as_list(trigger)) do
+		for _,delivery in pairs(as_list(action.action_delivery)) do
+			set_effects_layer(delivery.source_effects, explosion_layer, particle_layer)
+		end
+	end
+end
+
+local function set_render_layers()
+	for _,b in pairs(data.raw["beam"]) do
+		if b.graphics_set and b.graphics_set.beam then b.graphics_set.beam.render_layer = AIR_LAYER end
+	end
+	for _,e in pairs(data.raw["explosion"]) do
+		if e.beam then e.render_layer = AIR_LAYER end
+	end
+	for _,robot in pairs(data.raw["combat-robot"]) do
+		local ammo_type = robot.attack_parameters and robot.attack_parameters.ammo_type
+		set_trigger_source_layer(ammo_type and ammo_type.action, AIR_LAYER, AIR_LAYER)
+		-- killed / expired
+		set_effects_layer(robot.dying_trigger_effect, nil, DYING_PARTICLE_LAYER)
+		set_trigger_source_layer(robot.destroy_action, nil, DYING_PARTICLE_LAYER)
+	end
+end
+
+-- bullet-trails mod only adds tracers to ammo items, combat robots have their own ammo_type, so defenders had none
+-- tracer = explosion with beam = true in target_effects (like the mod does for ammo), drawn from shooter to target
+-- its explosions are defined in its data.lua, so they exist in final_fixes no matter the load order (no dependency needed)
+local BULLET_TRAILS = {
+	["fulgoran-defender"] = "bullet-beam-cyan-faint", -- matches the hostile defender tint
+	default = "bullet-beam-white-faint", -- what the mod uses for unknown "bullet" ammo
+}
+local function add_bullet_trails()
+	if not mods["bullet-trails"] then return end
+	for name,robot in pairs(data.raw["combat-robot"]) do
+		local ap = robot.attack_parameters
+		local trail = BULLET_TRAILS[name] or BULLET_TRAILS.default
+		if ap and ap.ammo_category == "bullet" and ap.ammo_type and data.raw["explosion"][trail] then
+			local action = as_list(ap.ammo_type.action)[1]
+			local delivery = action and as_list(action.action_delivery)[1]
+			if delivery and delivery.type == "instant" then
+				local effects = as_list(delivery.target_effects)
+				delivery.target_effects = effects
+				local has_trail = false
+				for _,eff in pairs(effects) do
+					if eff.entity_name and eff.entity_name:find("bullet-beam-", 1, true) then has_trail = true end
+				end
+				if not has_trail then
+					table.insert(effects, { type = "create-explosion", entity_name = trail })
+				end
+			end
+		end
+	end
+end
+
 function combat_robots.final_fixes()
+	add_bullet_trails()
+	set_render_layers()
 	if const.HARVESTABLE_BOTS then
 		harvestable_drones_quality_resource()
 	end

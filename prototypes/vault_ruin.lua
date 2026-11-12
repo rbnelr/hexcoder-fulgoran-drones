@@ -50,8 +50,10 @@ function vault_ruin.data_updates()
 				{width = 960, height = 640, filename = const.MOD_DIR.."/graphics/fulgoran-ruin-vault-near-wall.png",
 				shift = util.by_pixel( 18.5/2, -6/2), scale = 0.5}
 			},
+			-- must be above "projectile" (emerge/descend projectiles, dying particles), but below "air-object" so hostile beams draw over it
 			--render_layer = "higher-object-under",
-			render_layer = "air-object",
+			--render_layer = "air-object", -- hid beams (default "projectile" layer)
+			render_layer = "smoke",
 			icon = data.raw["simple-entity"][const.VAULT_NAME].icon,
 			collision_box = nil,
 			collision_mask = { layers = {} },

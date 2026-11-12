@@ -114,9 +114,8 @@ script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_
 --	end
 --end) -- can be filtered to only enemy force killing things, but my actual drone force only exists after init
 
-script.on_event(defines.events.on_research_finished, function(event)
-	dead_bots.update_unlocked_qualities(event)
-end)
+script.on_event(defines.events.on_research_finished, dead_bots.update_unlocked_qualities)
+script.on_event(defines.events.on_research_reversed, dead_bots.update_unlocked_qualities) -- unresearched from editor
 
 ---- Tick
 script.on_event(defines.events.on_tick, function(event)

@@ -126,7 +126,7 @@ script.register_metatable("OreTracking", ore.OreTracking)
 ---@field friend_end_tick integer?
 ---@field last_used_fake_fulgora MapTick?
 ---@field settings_changed boolean?
----@field highest_quality_unlocked integer -- 0-5
+---@field highest_quality_unlocked integer -- 1-5
 
 ---@class Damaged
 ---@field entity LuaEntity
