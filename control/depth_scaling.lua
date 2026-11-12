@@ -37,10 +37,14 @@ local depth_scaling = {}
 -- | +50000%  |      - |        - |    - |  50% |       50% |       2.20 |         5.00 |
 -- | +100000% |      - |        - |    - |    - |      100% |       2.50 |         6.00 |
 
--- TODO: handle quality tech unlocks, no quality output at all without quality?
--- TODO: handle quality level unlocks, should happen automatically for drills, but is needed for drones
+-- quality scrap is capped to quality tech unlocks by the engine
+-- bots are capped by us via dead_bots.downgrade_locked_qualities()
 -- TODO: quality level unlocks should maybe be reflected in the gui and also cap scrap_tier() etc., so drills are visibly capped
--- though if we cap at scrap_tier() the distance falloff would punish more than if we dont or just cap each drill's, but capping each drill changes the distribution
+-- if we cap at scrap_tier() the distance falloff would punish more than if we dont or just cap each drill's, but capping each drill changes the distribution
+
+-- Assemblers track the minimum quality bonus during each crafting cycle (normal and prod bard) to avoid cheesing by inserting just before finishing
+-- I've tested and mining drills _do no_, this means me swapping local_effect.quality every 10s with a randomly distributed number
+--  does not bias numbers downwards like I would have expected, however even if it did, at 1-10 scrap/s, every 10s would be a tiny difference
 
 -- drill has max qualtiy boost = 1000 (100000%), ie. 100% legendary from regular scrap
 local MAX_DRILL_QUALITY_BOOST = prototypes.entity["big-mining-drill"].effect_receiver.quality_limits.high
@@ -123,6 +127,9 @@ end
 ---@param drill LuaEntity
 ---@param nearby_vaults { vault:Vault, tier:number }[]
 local function update_drill_local_quality_effect(drill, nearby_vaults)
+	local effect = drill.local_effect
+	if effect == nil then return end -- no effect receiver?
+	
 	local max_tier = 0
 	local r = const.VAULT_DEFENSE_RADIUS - QSCRAP_DIST_FALLOFF_MIN_DIST
 	for _,v in pairs(nearby_vaults) do
@@ -144,7 +151,6 @@ local function update_drill_local_quality_effect(drill, nearby_vaults)
 	--effective_tier = effective_tier * math.random()
 	effective_tier = effective_tier * (1 - QSCRAP_SPREAD_RANGE * math.random() ^ QSCRAP_SPREAD_TOP_HEAVY)
 	
-	local effect = drill.local_effect or {}
 	effect.quality = quality_level_to_drill_effect(effective_tier)
 	drill.local_effect = effect
 end
