@@ -121,11 +121,11 @@ function gui.update_info_gui_content(vault, gui)
 		local str = ""
 		if bots and next(bots) then
 			local total = 0
-			for i=0,#common.QUALITY_IDS do local qn = common.QUALITY_IDS[i] -- ipairs skips 0
+			for _,qn in ipairs(const.QUALITY_IDS) do
 				local count = bots[qn]
 				if count then total = total + count end
 			end
-			for i=0,#common.QUALITY_IDS do local qn = common.QUALITY_IDS[i]
+			for _,qn in ipairs(const.QUALITY_IDS) do
 				local count = bots[qn]
 				if count then
 					str = str..string.format("  %.0f%%[quality=%s]", count / total * 100, qn)

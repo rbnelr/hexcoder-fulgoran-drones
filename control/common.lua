@@ -5,10 +5,18 @@ local common = {}
 ---@type ModStorage
 storage = storage
 
-common.settings_changed = false
+-- This actually sucks becaue on_runtime_mod_setting_changed gets called for each setting changed
+-- so caching all settings there is questionable
+-- and updating things like update_quality_for_all_vaults is straight up a bad idea, without annoying hacks like settings_changed
+
 ---- Runtime settings (store here, not in storage)
 ---@param event EventData.on_runtime_mod_setting_changed|{name:"_mod_load", setting_type:string}
 function common.update_runtime_settings(event)
+	if event.name ~= "_mod_load" then
+		if storage.settings_changed then return end -- dumb hack
+		storage.settings_changed = true
+	end
+	
 	if event.setting_type == "runtime-global" then
 		local g = settings.global
 		common.PROGRESSION_CURVE = g[const.MOD_NAME.."-progression-curve"].value --[[@as double]]
@@ -18,10 +26,6 @@ function common.update_runtime_settings(event)
 		common.WAVE_SIZE         = g[const.MOD_NAME.."-wave-size"].value --[[@as double]]
 		common.WAVE_MIN_TIME     = g[const.MOD_NAME.."-wave-min-time"].value --[[@as double]]
 		common.WAVE_MAX_TIME     = g[const.MOD_NAME.."-wave-max-time"].value --[[@as double]]
-	end
-	
-	if event.name ~= "_mod_load" then
-		common.settings_changed = true
 	end
 end
 -- get each load, then update in on_runtime_mod_setting_changed
@@ -59,14 +63,15 @@ for _,drill in pairs(prototypes.get_entity_filtered{{filter="type", type="mining
 	end
 end
 
-common.QUALITY_IDS = {[0]="normal"}
+const.QUALITY_IDS = {[1]="normal"}
 do
 	local q = prototypes.quality["normal"]
 	while q.next do
 		q = q.next
-		table.insert(common.QUALITY_IDS, q.name)
+		table.insert(const.QUALITY_IDS, q.name)
 	end
 end
+const.MAX_QUALITY_ID = #const.QUALITY_IDS
 
 -- update drills which touch tile at position, or in position+square radius (for vault)
 ---@param surface LuaSurface

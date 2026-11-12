@@ -102,6 +102,9 @@ function movement.update(vault)
 		local time_left = bot.time_to_live
 		local time_passed_fraction = 1 - time_left / const.RETURN_TIME -- 1: no time left, 0: all time remain
 		
+		-- bots get pushed away from each other, sometimes preventing them from moving towards vault
+		-- TODO: could try overriding movement via set_movement()?
+		
 		if time_left <= 1 or radius_fraction < time_passed_fraction then -- try to get to center, but vary automatically via time, and accept futher out if out of time
 			vault:descend_bot(bot)
 			vault.active_wave_bots[id] = nil

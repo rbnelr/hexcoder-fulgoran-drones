@@ -92,8 +92,9 @@ local function quality_level_to_drill_effect(scrap_tier)
 	return math.min(lo * (1 + 9 * chance), MAX_DRILL_QUALITY_BOOST)
 end
 
+-- bots spawn as quality no matter what quality is researched TODO: check if this can be made to work
 ---@param bot_tier number 0-(MAX_BOT_QUALITY-1)
----@return number quality 0-4
+---@return number quality 1-5
 function depth_scaling.roll_bot_quality_from_tier(bot_tier)
 	bot_tier = bot_tier * (1 - BOT_SPREAD_RANGE * math.random() ^ BOT_SPREAD_TOP_HEAVY)
 	
@@ -105,12 +106,18 @@ function depth_scaling.roll_bot_quality_from_tier(bot_tier)
 	
 	-- LuaQualityPrototype.roll_quality does also exist, but would need to run quality_level_to_drill_effect to get effect?
 	local rng = math.random()
-	if     rng >= chance then    -- tier = tier + 0
-	elseif rng >= chance*0.1 then   tier = tier + 1
-	elseif rng >= chance*0.01 then  tier = tier + 2
-	elseif rng >= chance*0.001 then tier = tier + 3
-	else                            tier = tier + 4 end
-	return math.min(tier, 4)
+	--if     rng >= chance then    -- tier = tier + 1
+	--elseif rng >= chance*0.1 then   tier = tier + 2
+	--elseif rng >= chance*0.01 then  tier = tier + 3
+	--elseif rng >= chance*0.001 then tier = tier + 4
+	--else                            tier = tier + 5 end
+	--return math.min(tier, 4)
+	while tier < const.MAX_QUALITY_ID do
+		tier = tier + 1
+		if rng >= chance then break end
+		chance = chance*0.1
+	end
+	return tier
 end
 
 ---@param drill LuaEntity
@@ -119,8 +126,7 @@ local function update_drill_local_quality_effect(drill, nearby_vaults)
 	local max_tier = 0
 	local r = const.VAULT_DEFENSE_RADIUS - QSCRAP_DIST_FALLOFF_MIN_DIST
 	for _,v in pairs(nearby_vaults) do
-		-- linear falloff is fine for now
-		-- TODO: 0 at edges fine (those are usually deep in oil ocean)
+		-- linear falloff by a constant along radius
 		local dist = common.get_distance(drill.position, v.vault.entity.position)
 		local dist_factor = (dist - QSCRAP_DIST_FALLOFF_MIN_DIST) / r
 		dist_factor = math.max(dist_factor, 0)

@@ -53,7 +53,7 @@ function Vault:queue_spawn_drones(bot_type, quality_tier, count, delay, duration
 	local name = const.EMERGE_PARTICLES[bot_type]
 	for i = 1,count do
 		local quality_level = depth_scaling.roll_bot_quality_from_tier(quality_tier)
-		local quality_name = common.QUALITY_IDS[quality_level]
+		local quality_name = const.QUALITY_IDS[quality_level]
 		
 		---@type Emerging
 		local emerging = {
@@ -70,6 +70,9 @@ function Vault:queue_spawn_drones(bot_type, quality_tier, count, delay, duration
 	self.wave_bots_count[bot_type] = (self.wave_bots_count[bot_type] or 0) + count
 end
 
+-- emerging bots: spawn projectile that looks like bot mostly hidden behind the near-wall
+-- once the projectile hits the spot it ws aiming at, it spawns the real bot
+-- TODO: projectile and or particles and bots have actual z axis, do we need to fake z via y here?
 function Vault:update_emerging()
 	--draw_ellipse(self.entity, self.entity.surface,
 	--	VAULT_SHAFT_CENTER, {x=VAULT_SHAFT_RADIUS, y=VAULT_SHAFT_RADIUS*VAULT_SHAFT_ELLIPSE_K},
@@ -92,7 +95,7 @@ function Vault:update_emerging()
 				force=const.DRONE_FORCE,
 				source = self.entity, -- track which vault this came from
 				preserve_ghosts_and_corpses = true, -- ??
-				quality = e.quality
+				quality = e.quality -- projectile can take quality
 			} ---@cast projectile - nil
 			self.wave_emerging_queued[id] = nil
 			
@@ -110,7 +113,8 @@ function Vault:update_emerging()
 	end
 end
 
--- reverse of emerging: replace a returning bot by a descend projectile that flies down into the shaft, ending hidden behind the near-wall
+-- reverse of emerging: destroy bot and spawn descend projectile, finishing hidden behind the near-wall
+-- this particle variant does not spawn a bot at the end
 -- destroy() skips destroy_action, so no particle and no wreck
 ---@param bot LuaEntity
 function Vault:descend_bot(bot)
@@ -128,14 +132,16 @@ function Vault:descend_bot(bot)
 		name = name,
 		position = pos, target = {x=center.x + x, y=sy}, snap_to_grid = false,
 		force = const.DRONE_FORCE,
-		quality = bot.quality
+		quality = bot.quality -- for good measure
 		--speed = common.vector_length(bot.get_movement()), -- not sure if this does anything
 	}
 
 	bot.destroy()
 end
 
--- quality emerge projectile automatically spawns bot at correct quality
+-- projectile automatically spawns bot, but we use callback to keep tracking the bot
+-- and to set force and time to live
+-- quality projectiles automatically spawn bots at correct quality
 script.on_event(defines.events.on_trigger_created_entity, function(event)
 	local bot = event.entity
 	local source = event.source
@@ -143,7 +149,7 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 	if bot.type == "combat-robot" and source and source.name == const.VAULT_NAME then
 		init()
 		
-		bot.combat_robot_owner = source
+		bot.combat_robot_owner = source -- source is vault entity
 		
 		local id = script.register_on_object_destroyed(source)
 		local vault = storage.vaults[id]

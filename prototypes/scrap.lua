@@ -24,7 +24,7 @@ function scrap.data_updates()
 				{ icon = data.raw["resource"]["scrap"].icon,
 				  icon_size = 64, scale = .5 },
 				{ icon = data.raw["simple-entity"][const.VAULT_NAME].icon,
-				  icon_size = 64, scale = .5, shift = {0, 12} },
+				  icon_size = 64, scale = .25, shift = {5, 10} },
 			},
 			--minable = {
 			--	mining_time = 1.25, -- was 0.5

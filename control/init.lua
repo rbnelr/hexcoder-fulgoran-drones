@@ -7,6 +7,7 @@ local depth_scaling = require("control.depth_scaling") -- adds functions to Vaul
 local dmg = require("control.disable_on_damage")
 local ore = require("control.ore_tracking")
 local recreate_fulgora = require("control.recreate_fulgora")
+local dead_bots = require("control.dead_bots")
 
 -- 'somewhat lazy' init ideally called in every handler, intentionally global
 -- used during dev, but new DEV_REINIT_EACH_LOAD makes this obsolete
@@ -30,6 +31,8 @@ function init()
 	end
 	
 	if init then
+		dead_bots.update_unlocked_qualities()
+		
 		local surface = game.get_surface("fulgora")
 		if surface then
 			-- respawn vaults, vault scrap to inf scrap setting
@@ -115,12 +118,15 @@ script.register_metatable("OreTracking", ore.OreTracking)
 ---
 ---@field poll_repaired Damaged[]
 ---@field poll_prev unit_number?
----@field friend_end_tick integer?
 ---
 ---@field render_objs table<player_index, LuaRenderObject[]?>
 ---
----@field last_used_fake_fulgora MapTick?
 ---@field finite_initial table<tile_key, integer> -- initial amount for finite scrap tiles around vaults (kept after mined out), see OreTracking
+---
+---@field friend_end_tick integer?
+---@field last_used_fake_fulgora MapTick?
+---@field settings_changed boolean?
+---@field highest_quality_unlocked integer -- 0-5
 
 ---@class Damaged
 ---@field entity LuaEntity

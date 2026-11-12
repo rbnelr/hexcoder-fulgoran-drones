@@ -165,17 +165,17 @@ if const.INF_SCRAP_ENABLED then
 			end
 		end
 
-		if const.DEBUG then
-			game.print(const.PRINT_PREFIX.."on_resource_depleted ".. serpent.line{
-				old_amount=old_amount,
-				bamount=ore.amount,
-				initial=ore.initial_amount,
-				minimum=ore.prototype.minimum_resource_amount,
-				normal=ore.prototype.normal_resource_amount,
-				old_yield=old_amount / INF_SCRAP_NORMAL * 100,
-				new_yield=ore.amount / INF_SCRAP_NORMAL * 100,
-			})
-		end
+		--if const.DEBUG then
+		--	game.print(const.PRINT_PREFIX.."on_resource_depleted ".. serpent.line{
+		--		old_amount=old_amount,
+		--		bamount=ore.amount,
+		--		initial=ore.initial_amount,
+		--		minimum=ore.prototype.minimum_resource_amount,
+		--		normal=ore.prototype.normal_resource_amount,
+		--		old_yield=old_amount / INF_SCRAP_NORMAL * 100,
+		--		new_yield=ore.amount / INF_SCRAP_NORMAL * 100,
+		--	})
+		--end
 	end)
 else
 	-- finite: registers initial on first sight, depleted tiles keep counting via depleted_finite
@@ -241,9 +241,9 @@ else
 		if ore.name ~= "scrap" then return end
 		init()
 
-		if const.DEBUG then
-			game.print(const.PRINT_PREFIX.."on_resource_depleted ".. serpent.line{ore})
-		end
+		--if const.DEBUG then
+		--	game.print(const.PRINT_PREFIX.."on_resource_depleted ".. serpent.line{ore})
+		--end
 
 		-- finite ore depleted, removed by the game after this
 		-- register it as depleted_finite so scan can keep reading initial count for each vault

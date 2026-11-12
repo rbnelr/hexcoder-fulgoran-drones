@@ -80,20 +80,6 @@ script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_
 -- on_trigger_created_entity in control/spawning.lua
 -- on_resource_depleted in control/ore_tracking.lua
 
----- Custom event
-if const.HARVESTABLE_BOTS then -- was const.HARVEST_BOTS (nil, handler never registered)
-	-- only triggers for hostile prototypes
-	script.on_event(const.MOD_NAME.."-on-create-combat-bot-remnant", function(event)
-		local surface = game.get_surface(event.surface_index) ---@diagnostic disable-line
-		if surface and surface.name == "fulgora" then
-			init()
-			
-			dead_bots.add_dead_bot_resource(surface, event.target_position, const.DRONE_RESOURCE[event.effect_id], 1) ---@diagnostic disable-line
-			-- could selectively spawn normal corpse here, but not needed right now
-		end
-	end)
-end
-
 -- This was an attempt at preventing alerts on select entities via script, but it did not work
 -- we can't disable or mute alterts per surface, only per type
 -- and I seem to remember the problem here was that they alerts still audibly happen, even if I make them disappear instantly
@@ -128,19 +114,23 @@ end
 --	end
 --end) -- can be filtered to only enemy force killing things, but my actual drone force only exists after init
 
+script.on_event(defines.events.on_research_finished, function(event)
+	dead_bots.update_unlocked_qualities(event)
+end)
+
 ---- Tick
 script.on_event(defines.events.on_tick, function(event)
 	--local prof = helpers.create_profiler()
 	--common._dev_reset()
 	init()
 	
-	if common.settings_changed then
+	if storage.settings_changed then
+		storage.settings_changed = nil
 		local fulgora = game.surfaces["fulgora"]
 		if fulgora then
 			depth_scaling.update_quality_for_all_vaults(fulgora)
 		end
 	end
-	common.settings_changed = false
 	
 	common.stagger_tick(storage.poll_vaults, storage.vaults, const.ORE_POLL_PERIOD, function(vault)
 		if vault.entity.valid then

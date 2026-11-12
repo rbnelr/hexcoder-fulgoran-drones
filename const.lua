@@ -22,6 +22,8 @@ const.EXPIRED_DRONES_HARVESTABLE = false
 -- drones fly back into the vault shaft before their time_to_live runs out, so they don't expire
 const.DRONES_TRY_TO_RETURN = true
 
+const.BOT_RESOURCE_QUALITY_BADGES = true
+
 -- 20M patch, at 20% min has 16M available
 -- 24 Drills 1.25 mining speed / 0.5s mining time = 60 mining/s at 50% drain = 1800/min
 -- 1800/s*10 = 1M/h = ~16h to deplete (more due to mining deed bots and <100% drain slowing down)
@@ -106,16 +108,53 @@ const.DRONE_TINT = {
 	["distractor"] = {0.57, 0.78, 0.21}, ["fulgoran-distractor"] = {0.57, 0.78, 0.21},
 	["destroyer" ] = {0.85, 0.25, 0.14}, ["fulgoran-destroyer" ] = {0.85, 0.25, 0.14},
 }
-const.DRONE_CORPSE = {
-	["fulgoran-defender"  ] = "defender-remnant",
-	["fulgoran-distractor"] = "distractor-remnant",
-	["fulgoran-destroyer" ] = "destroyer-remnant",
-}
-const.DRONE_RESOURCE = {
-	["fulgoran-defender"  ] = "dead-defender",
-	["fulgoran-distractor"] = "dead-distractor",
-	["fulgoran-destroyer" ] = "dead-destroyer",
-}
+--const.DRONE_CORPSE = {
+--	["fulgoran-defender"  ] = "defender-remnant",
+--	["fulgoran-distractor"] = "distractor-remnant",
+--	["fulgoran-destroyer" ] = "destroyer-remnant",
+--}
+
+if prototypes then -- only in control
+	const.QUALITY_IDS = {}
+	do
+		local q = prototypes.quality["normal"]
+		while q do
+			table.insert(const.QUALITY_IDS, q.name)
+			q = q.next
+		end
+	end
+	const.MAX_QUALITY_ID = #const.QUALITY_IDS
+	
+	local function quality_variants_table(name)
+		local table = {}
+		for _,qn in pairs(const.QUALITY_IDS) do
+			table[qn] = name.."-"..qn
+		end
+		return table
+	end
+	const.DRONE_DYING_PARTICLE = {
+		["fulgoran-defender"  ] = quality_variants_table("fulgoran-defender-dying-particle"),
+		["fulgoran-distractor"] = quality_variants_table("fulgoran-distractor-dying-particle"),
+		["fulgoran-destroyer" ] = quality_variants_table("fulgoran-destroyer-dying-particle"),
+	}
+	
+	local function quality_levels(tbl, name)
+		local to_level = {}
+		local from_level = {}
+		tbl[name] = { level=1, from_level=from_level }
+		from_level[1] = name
+		for i=2,#const.QUALITY_IDS do
+			local n = name.."-"..const.QUALITY_IDS[i]
+			tbl[n] = { level=i, from_level=from_level }
+			from_level[i] = n
+		end
+		return { to_level=to_level, from_level=from_level }
+	end
+	const.DRONE_RES_QUALITY_TABLE = {}
+	quality_levels(const.DRONE_RES_QUALITY_TABLE, "dead-defender")
+	quality_levels(const.DRONE_RES_QUALITY_TABLE, "dead-distractor")
+	quality_levels(const.DRONE_RES_QUALITY_TABLE, "dead-destroyer")
+end
 
 const.RETARGET_DIST = 15
 const.RETURN_TIME = 8*60
