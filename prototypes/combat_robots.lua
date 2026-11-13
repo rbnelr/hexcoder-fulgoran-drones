@@ -465,67 +465,133 @@ end
 -- both both player and enemy versions for now
 local function balance()
 	meld(data.raw["combat-robot"]["defender"], {
-		resistances = meld.overwrite{
-			{ type = "acid",     percent = 50 }, -- was 80 eff HP  400
-			{ type = "fire",     percent = 90 }, -- was 95 eff HP 2000
-			{ type = "physical", percent = 70 }, -- was 0  eff HP  667
-			{ type = "laser",    percent = 80 }, -- was 0  eff HP 1000
-			{ type = "electric", percent = 50 }, -- was 0  eff HP  400
-		},
-		max_health = 200, -- was 60
-		--time_to_live = 65*60, -- was 45sec
-
+		selection_priority = 55, -- make selectable over buildings, was 35, normal buildings are 50, ore is 40
+		
+		--TODO: test separation_force_factor, max_separation_force
 		separation_range = 1.6, -- was 1
 		range_from_player = 2.5, -- was 6
 		--friction = 0.016,
 		max_speed = 0.28, -- was nil
-		selection_priority = 55, -- make selectable over buildings, was 35, normal buildings are 50, ore is 40
-		-- can spawn item like this, could probably trigger script too, to add scrap resource, but I don't actually want that anymore
-		--loot =
-		--{
-		--	{
-		--		type = "item",
-		--		name = "stone",
-		--		amount_min = 2,
-		--		amount_max = 10,
-		--		independent_probability = 1
-		--	}
-		--}
+		
+		--time_to_live = 65*60, -- was 45sec
+		
+		--max_health = 200, -- was 60
+		--resistances = meld.overwrite{
+		--	{ type = "acid",     percent = 50 }, -- was 80 eff HP  400
+		--	{ type = "fire",     percent = 90 }, -- was 95 eff HP 2000
+		--	{ type = "physical", percent = 70 }, -- was 0  eff HP  667
+		--	{ type = "laser",    percent = 80 }, -- was 0  eff HP 1000
+		--	{ type = "electric", percent = 50 }, -- was 0  eff HP  400
+		--},
+		max_health = 300, -- was 60
+		resistances = meld.overwrite{
+			{ type = "acid",     percent =  80 }, -- was 80
+			{ type = "fire",     percent =  95 }, -- was 95
+			{ type = "physical", percent =  75, decrease = 3 }, -- was 0 
+			{ type = "laser",    percent =  0 }, -- was 0 
+			{ type = "electric", percent = -50 }, -- was 0 
+			{ type = "explosion", percent = 80  }, -- was 0 -- rockets should miss small fast drones
+		},
+		
+		attack_parameters = {
+			cooldown = 45, -- was 20
+			cooldown_deviation = 0.1,
+			range = 15, -- was 15, gun turret is 18
+			ammo_type = {
+				action = {
+					action_delivery = {
+						target_effects = {
+							{},
+							{ damage = { amount = 8, type = "physical"} } -- was 8
+						}
+					}
+				}
+			}
+		}
 	})
 	meld(data.raw["combat-robot"]["distractor"], {
-		resistances = meld.overwrite{
-			{ type = "acid",     percent = 50 }, -- was 80               eff HP  1100
-			{ type = "fire",     percent = 90 }, -- was 95               eff HP  5500
-			{ type = "physical", percent = 70 }, -- was 0                eff HP  1833
-			{ type = "laser",    percent = 80, decrease = 5 }, -- was 0  eff HP ~2750
-			{ type = "electric", percent = 50 }, -- was 0                eff HP  1100
-		},
-		max_health = 550, -- was 180
-		--time_to_live = 125*60, -- was 90sec
-		time_to_live = 60*60,
-		selection_priority = 55, -- was 35, normal buildings are 50, ore is 40
+		selection_priority = 54,
 		
 		-- want to avoid seperation force from distractors around vault, but this likely does not work
 		separation_range = 0,
 		range_from_player = 0,
+		
+		--time_to_live = 125*60, -- was 90sec
+		time_to_live = 75*60,
+		
+		max_health = 1600, -- was 180
+		resistances = meld.overwrite{
+			--{ type = "acid",     percent = 50 }, -- was 80               eff HP  1100
+			--{ type = "fire",     percent = 90 }, -- was 95               eff HP  5500
+			--{ type = "physical", percent = 70 }, -- was 0                eff HP  1833
+			--{ type = "laser",    percent = 80, decrease = 5 }, -- was 0  eff HP ~2750
+			--{ type = "electric", percent = 50 }, -- was 0                eff HP  1100
+			{ type = "acid",      percent =  80 }, -- was 80
+			{ type = "fire",      percent =  95 }, -- was 95
+			{ type = "physical",  percent =  25, decrease = 3 }, -- was 0
+			{ type = "laser",     percent =  80, decrease = 5 }, -- was 0
+			{ type = "electric",  percent = -10 }, -- was 0
+			{ type = "explosion", percent =  0, decrease = 100 }, -- was 0
+		},
+		
+		attack_parameters = {
+			cooldown = 60, -- was 40
+			cooldown_deviation = 0.2,
+			damage_modifier = 0.8, -- was 0.5
+			range = 17, -- was 15
+			ammo_type = {
+				action = {
+					action_delivery = {
+						duration = 16, -- was 20 visual only?
+					}
+				}
+			}
+		}
 	})
 	meld(data.raw["combat-robot"]["destroyer"], {
-		resistances = meld.overwrite{
-			{ type = "acid",     percent = 50 }, -- was 80                eff HP   800
-			{ type = "fire",     percent = 90 }, -- was 95                eff HP  4000
-			{ type = "physical", percent = 85, decrease = 5 }, -- was 0   eff HP ~2667
-			{ type = "laser",    percent = 80, decrease = 3 }, -- was 0   eff HP ~2000
-			{ type = "electric", percent = 90, decrease = 20 }, -- was 0  eff HP ~4000
-		},
-		max_health = 400, -- was 60, now same as a turret
-		--time_to_live = 120*60, -- was 120sec
-		time_to_live = 70*60, -- shorter than distractors, distractors feel like they should last longest
-
+		selection_priority = 55,
+		
 		separation_range = 2.0, -- was 1.5
 		range_from_player = 2.8, -- was 6
 		friction = 0.020,
 		max_speed = 0.15, -- was nil
-		selection_priority = 55, -- was 35, normal buildings are 50, ore is 40
+		
+		--time_to_live = 120*60, -- was 120sec
+		time_to_live = 80*60,
+		
+		--max_health = 400, -- was 60, now same as a turret
+		--resistances = meld.overwrite{
+		--	{ type = "acid",     percent = 50 }, -- was 80                eff HP   800
+		--	{ type = "fire",     percent = 90 }, -- was 95                eff HP  4000
+		--	{ type = "physical", percent = 85, decrease = 5 }, -- was 0   eff HP ~2667
+		--	{ type = "laser",    percent = 80, decrease = 3 }, -- was 0   eff HP ~2000
+		--	{ type = "electric", percent = 90, decrease = 20 }, -- was 0  eff HP ~4000
+		--},
+		max_health = 1250, -- was 60, now same as a turret
+		resistances = meld.overwrite{
+			{ type = "acid",      percent =  80 }, -- was 80
+			{ type = "fire",      percent =  95 }, -- was 95
+			--{ type = "physical",  percent =  50, decrease = 5 }, -- was 0, 
+			{ type = "physical",  percent =  60 }, -- was 0, 
+			{ type = "laser",     percent =  90, decrease = 5 }, -- was 0
+			{ type = "electric",  percent =  90, decrease = 10 }, -- was 0
+			{ type = "explosion", percent =  25, decrease = 100 }, -- was 0
+		},
+		
+		attack_parameters = {
+			--cooldown = 24, -- was 20
+			cooldown = 30, -- was 20
+			cooldown_deviation = 0.3, -- was 0.2
+			range = 12.5, -- was 20
+			damage_modifier = 2, -- was 2
+			ammo_type = {
+				action = {
+					action_delivery = {
+						duration = 20,
+					}
+				}
+			}
+		}
 	})
 	
 	-- lights for vanilla bots

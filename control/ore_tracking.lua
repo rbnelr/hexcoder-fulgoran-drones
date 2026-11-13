@@ -92,7 +92,6 @@ end
 ---@param scan OreScan
 function OreTracking:commit(scan)
 	self.amounts = scan._amounts
-	self.tick = game.tick
 end
 
 -- does not change the mined baseline, safe to call any time (gui)

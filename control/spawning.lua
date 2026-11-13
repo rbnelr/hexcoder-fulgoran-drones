@@ -238,9 +238,9 @@ function Vault:spawn_wave(size, freq, quality_tier)
 	-- probably want 1-2 distractors and 0 or 1 destroyer even on minimum size
 	
 	-- distractors spawn first, other types delayed
-	self:queue_spawn_drones("fulgoran-defender", quality_tier, round(30*s1), delay+1.5, 15*dur1)
-	self:queue_spawn_drones("fulgoran-distractor", quality_tier, round(15*s2), delay+0, 9*dur2)
-	self:queue_spawn_drones("fulgoran-destroyer", quality_tier, round(20*s3), delay+3.5, 10*dur3)
+	self:queue_spawn_drones("fulgoran-defender", quality_tier, round(32*s1), delay+1.5, 15*dur1)
+	self:queue_spawn_drones("fulgoran-distractor", quality_tier, round(10*s2), delay+0, 9*dur2)
+	self:queue_spawn_drones("fulgoran-destroyer", quality_tier, round(6*s3), delay+3.5, 10*dur3)
 	
 	--game.print(serpent.block{ evo=evo, size=size, freq=freq })
 	
