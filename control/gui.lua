@@ -2,7 +2,6 @@ local const = require("const")
 local common = require("control.common")
 ---@class Vault
 local Vault = require("control.vault")
-local ore = require("control.ore_tracking")
 local depth_scaling = require("control.depth_scaling")
 local gui_util = require("lib.gui_util")
 local GUI = gui_util.GUI
@@ -136,23 +135,19 @@ function gui.update_info_gui_content(vault, gui)
 		return str
 	end
 	
-	local time_since_start = (vault:time_since_last_wave_start() or 0) / 3600
+	local time_since_start = (game.tick - vault.wave_timer_start) / 3600
 	--local time_between = (game.tick - (vault.wave_end_tick)) / 3600
 	
-	local scan = vault:scan_ore()
-	local total = scan.total_for_depth
-	local mined_since_last = scan.total_mined
-	local mined_total = total - scan.total_remaining
-	if mined_total < 0 then mined_total = 0 end
-	
-	local mining_rate = mined_since_last / math.max(time_since_start, 0.01)
+	-- no scan, the ore tracker is up to date (polled while drills are around, nothing changes otherwise)
+	local scrap = vault.scrap_tracker
+	local mining_rate = scrap:mining_rate()
 	
 	-- represent per vault evolution as "depth mined" in approx 0-100 meters (really just %)
-	local depth = ore.OreTracker.get_depth(scan)
+	local depth = scrap.depth
 	
-	--gui.mining1.caption = string.format("%6d (%d/m)", mined_since_last, mining_rate)
+	--gui.mining1.caption = string.format("%6d (%d/m)", scrap.mined, mining_rate)
 	gui.mining1.caption = string.format("Rate: %d/min", mining_rate)
-	gui.mining2.caption = string.format("Drained: %4.2fM / %4.2fM", mined_total/1000000, total/1000000) -- "[font=default-bold]%4.2fM[/font] / [font=default-bold]%4.2fM[/font]"
+	gui.mining2.caption = string.format("Drained: %4.2fM / %4.2fM", (scrap.drainable - scrap.remaining)/1000000, scrap.drainable/1000000) -- "[font=default-bold]%4.2fM[/font] / [font=default-bold]%4.2fM[/font]"
 	gui.mining3.caption = string.format("Depth: %dm", depth*100)
 	
 	if vault:bots_active() then
@@ -167,7 +162,7 @@ function gui.update_info_gui_content(vault, gui)
 		gui.last3.caption = bot_list(nil)
 	else
 		-- Note that this factors in random variation
-		local trigger_wave, size, freq, eta = vault:should_spawn_wave(mined_since_last, time_since_start or 0, false)
+		local trigger_wave, size, freq, eta = vault:should_spawn_wave(mining_rate, time_since_start, false)
 		
 		gui.cur_cap.caption = eta and string.format("Next Wave est. in %.1fmin", eta) or "Next Wave est. in --"
 		gui.cur1.caption = size and string.format("Size: %3.0f%%", (size or 0) * 100) or "Size: --"

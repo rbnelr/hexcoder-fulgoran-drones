@@ -223,22 +223,22 @@ function Vault:_spawn_wave_bots(size, freq, bot_quality_tier)
 	return wave
 end
 
-function Vault:_start_fake_wave_without_spawns()
-	return {
-		start_tick = game.tick,
-		end_tick = nil,
-		size = 0,
-		freq = 0,
-		bot_quality_tier = 0,
-		bot_types = {},
-		bot_qualities = {},
-	}
-end
+--function Vault:_start_fake_wave_without_spawns()
+--	return {
+--		start_tick = game.tick,
+--		end_tick = nil,
+--		size = 0,
+--		freq = 0,
+--		bot_quality_tier = 0,
+--		bot_types = {},
+--		bot_qualities = {},
+--	}
+--end
 
----@param mined_ore integer mined ore since last wave
+---@param mining_rate number mined ore per minute since last wave (OreTracker:mining_rate)
 ---@param time_since_last number elapsed time in minutes since last wave started
 ---@return boolean trigger_wave, number? size, number? freq, number? eta
-function Vault:should_spawn_wave(mined_ore, time_since_last, early_out)
+function Vault:should_spawn_wave(mining_rate, time_since_last, early_out)
 	local wave_variation = 0.3 -- percent variation eg 0.2 => 0.8-1.2
 	
 	-- allow calling should_spawn_wave(), and getting same variation rng each time until set to nil
@@ -278,7 +278,6 @@ function Vault:should_spawn_wave(mined_ore, time_since_last, early_out)
 	local min_size = 0.1
 	local max_size = 10
 	
-	local mining_rate = mined_ore / math.max(time_since_last, 0.01)
 	local mining_factor = mining_rate / base_mining_rate
 	
 	wave_frequency = wave_frequency * mining_factor ^ freq_exp
@@ -299,6 +298,7 @@ end
 
 
 function Vault:update_waves()
+	local had_drills = self.has_drills -- from the previous update_targets (poll or build event)
 	self:update_targets()
 	
 	-- allow waves to overlap
@@ -308,27 +308,26 @@ function Vault:update_waves()
 	-- new wave start will counts as new wave for gui and for should_spawn_wave logic
 	--if self:bots_active() then return end
 	
-	-- skip the ore scan without player structures (nothing can be mining), rare min size waves still happen
-	-- has_drills is set by prepare (vault init, wave start) and when building near the vault
+	-- scan ore only while mining is possible since the last scan: drills now or at the previous poll (counts the mining until they were removed)
+	-- without drills no scans, rare min size waves still happen
 	-- TODO: player could be near and mine by hand but well, probably does not matter
-	local scan
-	local total_mined = 0
-	if self.has_drills then
-		scan = self:scan_ore()
-		total_mined = scan.total_mined
-		
-		self:update_quality_for_vault_drills(scan) -- depth and drill quality, independent of commit
+	if self.has_drills or had_drills then
+		local e = self.entity
+		self.scrap_tracker:scan(e.surface, e.position, const.VAULT_DEFENSE_RADIUS, self.has_drills)
 	end
 	
-	local time_since_last = (self:time_since_last_wave_start() or 0) / 3600
+	if self.has_drills then
+		self:update_quality_for_vault_drills() -- drill quality from depth
+	end
+	
+	local mining_rate = self.scrap_tracker:mining_rate() -- mining rate, usually since last wave start
+	local time_since_last = (game.tick - self.wave_timer_start) / 3600
 	--local time_between = (game.tick - self.wave_end_tick) / 3600
 	
-	--game.print(serpent.line{ ore=count, diff=diff, --[[id=self.id, tick=game.tick,]] at=self.entity})
-	
-	local trigger_wave, size, freq = self:should_spawn_wave(total_mined, time_since_last, true)
+	local trigger_wave, size, freq = self:should_spawn_wave(mining_rate, time_since_last, true)
 	if trigger_wave then
-		local quality_tier = depth_scaling.bot_tier(self.latest_depth)
-		self:start_wave(size, freq, quality_tier, scan)
+		local quality_tier = depth_scaling.bot_tier(self.scrap_tracker.depth)
+		self:start_wave(size, freq, quality_tier)
 		
 		-- reset rng here, other codepaths that start waves do not use rng
 		self.cur_rng = nil -- every wave gets random variation for time and mining spawning

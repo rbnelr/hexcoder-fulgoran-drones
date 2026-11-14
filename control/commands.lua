@@ -63,7 +63,7 @@ if const.DEBUG then
 		if sel and sel.valid and sel.name == const.VAULT_NAME then
 			local vault = get_or_init_vault(sel)
 			vault:end_wave(true) -- true: kill bots
-			vault:start_wave(size, 1, depth_scaling.bot_tier(vault.latest_depth), nil)
+			vault:start_wave(size, 1, depth_scaling.bot_tier(vault.scrap_tracker.depth))
 		end
 	end)
 	commands.add_command("fulg-kill-wave", "", function(command)

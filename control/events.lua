@@ -13,7 +13,7 @@ local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 		if storage.vaults ~= nil then
 			local vault = storage.vaults[event.registration_number]
 			if vault ~= nil then
-				vault:destroy()
+				vault:on_destroyed()
 			end
 		end
 		-- TODO: also update_targets for vaults or is this fine?
@@ -40,13 +40,17 @@ local function on_entity_create(event)
 	if entity.type == "simple-entity" then
 		-- can't actually be built in game, but still do generic built events
 		if entity.name == const.VAULT_NAME then
-			get_or_init_vault(entity)
+			get_or_init_vault(entity, "built")
 		end
 	elseif entity.surface.name == "fulgora" then
 		dmg.on_entity_event(entity)
 		
-		for _,vault in find_nearby_vaults(entity) do
+		for _,vault in pairs(find_nearby_vaults(entity)) do
 			vault:update_targets()
+			if entity.type == "mining-drill" then
+				local e = vault.entity
+				vault.scrap_tracker:on_drill_built(e.surface, e.position, const.VAULT_DEFENSE_RADIUS)
+			end
 		end
 		if entity.type == "mining-drill" then
 			depth_scaling.update_quality_for_single_drill(entity)
@@ -68,7 +72,7 @@ script.on_event(defines.events.on_entity_cloned, on_entity_create, built_filter)
 
 script.on_event(defines.events.on_entity_died, function(event)
 	if event.entity.surface.name == "fulgora" then
-		if const.IS_TARGET[event.entity.name] then
+		if const.IS_TARGET[event.entity.type] then
 			-- TODO: why am I calling this again? I think to reset non-military state so that revived entity will actually get attacked
 			-- currently entities are prevented from dying to enemies (but player could kill them)
 			-- except Vault:update_targets handles military target state, this even might be useless
@@ -79,6 +83,16 @@ script.on_event(defines.events.on_entity_died, function(event)
 end, dmg.event_filter)
 
 script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_dmg_filter)
+
+-- register vaults in newly generated chunks (fresh, nothing can have been mined there yet)
+script.on_event(defines.events.on_chunk_generated, function(event)
+	if event.surface.name == "fulgora" then
+		init()
+		for _,e in pairs(event.surface.find_entities_filtered{name=const.VAULT_NAME, area=event.area}) do
+			get_or_init_vault(e, "on_chunk_generated")
+		end
+	end
+end)
 
 -- on_trigger_created_entity in control/spawning.lua
 -- on_resource_depleted in control/ore_tracking.lua

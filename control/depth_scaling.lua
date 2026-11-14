@@ -1,7 +1,6 @@
 local const = require("const")
 local common = require("control.common")
 local myutil = require("lib.myutil")
-local ore = require("control.ore_tracking")
 ---@class Vault
 local Vault = require("control.vault")
 
@@ -136,7 +135,7 @@ local function update_drill_local_quality_effect(drill, nearby_vaults)
 	for _,vault in pairs(nearby_vaults) do
 		-- scrap_tier does some math over and over for each drill if we update all drills around vault
 		-- but its preferable over building that into its own list in the caller, if this impacts perf could optimize via caching in here?
-		local tier = depth_scaling.scrap_tier(vault.latest_depth)
+		local tier = depth_scaling.scrap_tier(vault.scrap_tracker.depth)
 		
 		-- linear falloff by a constant along radius
 		local dist = myutil.get_distance(drill.position, vault.entity.position)
@@ -171,11 +170,8 @@ function depth_scaling.reset_all_drills_local_quality_effect(surface)
 	end
 end
 
----@param scan OreScan
-function Vault:update_quality_for_vault_drills(scan)
-	-- cache depth on update, nearby_vaults will be slightly out of date, but depth changes slowly
-	self.latest_depth = ore.OreTracker.get_depth(scan)
-	
+-- depth is stored in the ore trackers (updated by their poll), nearby vaults may be slightly out of date, but depth changes slowly
+function Vault:update_quality_for_vault_drills()
 	local nearby_vaults = self:find_this_and_overlapping_vaults()
 
 	local e = self.entity
@@ -190,20 +186,14 @@ function depth_scaling.update_quality_for_single_drill(drill)
 	update_drill_local_quality_effect(drill, find_nearby_vaults(drill))
 end
 
+-- settings changed (progression curve, max quality), depth itself does not change, so no scans
 ---@param surface LuaSurface
 function depth_scaling.update_quality_for_all_vaults(surface)
-	---@type LuaEntity[]|{v:Vault, scan:OreScan}[]
-	local vaults = surface.find_entities_filtered{name=const.VAULT_NAME}
-	local vaults_to_update = {}
-	for k,v in pairs(vaults) do
+	for _,v in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
 		local vault = get_or_init_vault(v)
-		if vault.has_drills then -- avoid untouched vaults to prevent lag?
-			vaults_to_update[k] = { v=vault, scan=vault:scan_ore() }
+		if vault.has_drills then
+			vault:update_quality_for_vault_drills()
 		end
-	end
-	-- scan all first, then update
-	for _,v in pairs(vaults_to_update) do
-		v.v:update_quality_for_vault_drills(v.scan)
 	end
 end
 

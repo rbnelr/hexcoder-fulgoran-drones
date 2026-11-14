@@ -10,7 +10,7 @@ local recreate_fulgora = require("control.recreate_fulgora")
 local dead_bots = require("control.dead_bots")
 
 -- 'somewhat lazy' init ideally called in every handler, intentionally global
--- used during dev, but new DEV_REINIT_EACH_LOAD makes this obsolete
+-- used during dev, but manually resetting via ctrl+alt on load makes this obsolete
 -- TODO: remove init() calls everywhere?
 function init()
 	local s = storage
@@ -21,7 +21,6 @@ function init()
 	if s.poll_repaired == nil then s.poll_repaired = {} end
 	if s.active_vaults == nil then s.active_vaults = {} end
 	if s.render_objs == nil then s.render_objs = {} end
-	if s.finite_initial == nil then s.finite_initial = {} end
 	
 	-- create enemy drone force
 	if game.forces[const.DRONE_FORCE] == nil then
@@ -39,7 +38,7 @@ function init()
 			recreate_fulgora.convert_ore_and_restore_vaults(surface) -- freezes the game for a bit, warn user or make user trigger it manually?
 			
 			for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
-				get_or_init_vault(e)
+				get_or_init_vault(e, "init")
 			end
 			
 			--if const.TRY_SPAWN_MISSING_VAULTS then
@@ -120,8 +119,6 @@ script.register_metatable("OreTracker", ore.OreTracker)
 ---@field poll_prev unit_number?
 ---
 ---@field render_objs table<player_index, LuaRenderObject[]?>
----
----@field finite_initial table<tile_key, integer> -- initial amount for finite scrap tiles around vaults (kept after mined out), see OreTracker
 ---
 ---@field friend_end_tick integer?
 ---@field last_used_fake_fulgora MapTick?

@@ -67,8 +67,8 @@ const.TARGETS = {
 	"ammo-turret", "electric-turret",
 }
 const.IS_TARGET = {}
-for _,name in pairs(const.TARGETS) do
-	const.IS_TARGET[name] = true
+for _,type in pairs(const.TARGETS) do
+	const.IS_TARGET[type] = true
 end
 
 ----

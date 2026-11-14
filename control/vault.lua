@@ -9,17 +9,14 @@ local ore = require("control.ore_tracking")
 ---@field near_wall LuaEntity?
 ---@field waypoints LuaEntity[]
 ---
----@field scan_initial_scrap boolean? -- tiles may have been mined before tracking started (eg. install on existing save)
----@field scrap OreTracker? -- lazy inited only if vault has player buildings, holds per-vault scrap count tracking
+---@field scrap_tracker OreTracker
 ---@field targets LuaEntity[] -- NOTE: entities can end up in two vaults target list!, TODO: is currently only used for bot movement, and not ideal for it, want a list of vaild target that changes
----@field has_drills boolean -- TODO: just cache the list of drills here instead? would help quality update performance
----
---- latest depth, only needed for drill quality if drill touches multiple vaults TODO: this may go away later
----@field latest_depth number
+---@field has_drills boolean -- mining drills in radius, ore is only scanned while true. TODO: just cache the list of drills here instead? would help quality update performance
 ---
 --- Waves
 ---@field cur_rng number? -- roll the same size/freq variations until wave actually starts, then reset
 ---@field cur_rng2 number?
+---@field wave_timer_start MapTick -- vault init or last wave start (we can't default to 0 or first wave never starts), independent of active/prev_wave (wave infos may be nil)
 ---@field active_wave WaveInfo?
 ---@field prev_wave WaveInfo?
 ---
@@ -64,7 +61,7 @@ end
 
 -- global because lua makes circular ref hard, files we require here can't this file
 ---@param entity LuaEntity
----@param source_event? string
+---@param source_event? string -- if not on_chunk_generated, may have been mined before
 ---@return Vault
 function get_or_init_vault(entity, source_event)
 	assert(entity.name == const.VAULT_NAME)
@@ -77,13 +74,12 @@ function get_or_init_vault(entity, source_event)
 		entity = entity,
 		waypoints={},
 		
-		-- new chunk: nothing mined yet, so no fake fulgora scan needed for finite initial amounts
-		scan_initial_scrap = source_event ~= "on_chunk_generated" and true or nil,
+		--scrap_tracker, after update_targets() (needs has_drills)
+		
+		wave_timer_start = game.tick, -- first wave counts from vault init
 		
 		--targets={}, -- handled by update_targets()
 		--has_drills=false,
-		
-		latest_depth = 0,
 		
 		emerging_queued={},
 		emerging_projectiles={},
@@ -119,6 +115,9 @@ function get_or_init_vault(entity, source_event)
 	end
 	
 	vault:update_targets() -- make sure to fix buildings
+	
+	-- scanned right away (depth for all vaults)
+	vault.scrap_tracker = ore.OreTracker.new(entity.surface, entity.position, const.VAULT_DEFENSE_RADIUS, vault.has_drills, source_event)
 	
 	if const.DEBUG then
 		--rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
@@ -164,22 +163,15 @@ end
 ---@param size number?
 ---@param freq number?
 ---@param bot_quality_tier number? -- 0-(MAX_BOT_QUALITY-1)
----@param current_scan OreScan? -- reuse scan this tick instead of doing another, used by update_waves
-function Vault:start_wave(size, freq, bot_quality_tier, current_scan)
+function Vault:start_wave(size, freq, bot_quality_tier)
 	-- end active wave if still active
 	self:end_wave()
 	
 	-- TODO: update_targets here?
 	
-	-- need to do a scan, because _spawn_wave_bots sets wave.start_tick
-	-- and mining rate is scan_ore().total_mined / (game.tick - latest_wave.start_tick)
-	-- so if we start a wave without commit(scan), it makes the mining rate blow up
-	-- we only scan here if we force a wave to start without scan before
-	-- this happens during console commands or when waves trigger without buildings around vault (due to maximum time)
-	if current_scan == nil then
-		current_scan = self:scan_ore()
-	end
-	self.scrap:commit(current_scan)
+	-- mining rate is measured since the last wave start, no scan needed (mined is kept up to date by the poll scans)
+	self.scrap_tracker:reset_mined()
+	self.wave_timer_start = game.tick
 	
 	-- create new waypoints every attack, ends up more random (and previously handled radius changes)
 	self:create_waypoints()
@@ -234,44 +226,6 @@ function Vault:end_wave(force_inactive)
 	end
 end
 
----@return number? time in ticks
-function Vault:time_since_last_wave_start()
-	local latest_started_wave = self.active_wave or self.prev_wave
-	return latest_started_wave and (game.tick - latest_started_wave.start_tick) or nil
-end
-
-function Vault:_reset_scrap_and_fix_mining_rate() -- for restore-ore, to show accurate mining rate after changing ore count, could be solved in other way too
-	-- end current wave normally then start a new wave without any bots so mining rate will be for latest scan
-	self:end_wave()
-	
-	-- reset scrap, which commits scan
-	if self.scrap then
-		self.scrap:reset(self.entity.surface, self.entity.position, const.VAULT_DEFENSE_RADIUS, true)
-	end
-	
-	-- start new wave so active_wave.start_tick is set
-	local new_wave = self:_start_fake_wave_without_spawns()
-	assert(self.active_wave == nil)
-	self.active_wave = new_wave
-end
-
--- ore tracking on demand: update_waves only scans with player buildings in range, gui forces it
--- update_initial needs fake fulgora (slow), only done once here, and naturally staggered by the vault polling
----@return OreTracker
-function Vault:get_or_init_scrap()
-	if self.scrap == nil then
-		local e = self.entity
-		self.scrap = ore.OreTracker.new(e.surface, e.position, const.VAULT_DEFENSE_RADIUS, self.scan_initial_scrap)
-	end
-	return self.scrap
-end
-
----@return OreScan
-function Vault:scan_ore()
-	local e = self.entity
-	return self:get_or_init_scrap():scan(e.surface, e.position, const.VAULT_DEFENSE_RADIUS)
-end
-
 -- create random invisible waypoints to act as drone movement targets
 -- because drones cannot be instructed to move to arbitrary positions
 function Vault:create_waypoints()
@@ -305,7 +259,7 @@ end
 ---@param target LuaEntity
 ---@return Vault[] nearby_vaults
 function find_nearby_vaults(target)
-	assert(const.IS_TARGET[target.name])
+	assert(const.IS_TARGET[target.type])
 	local nearby_vaults = {}
 	for _,v in pairs(target.surface.find_entities_filtered{name=const.VAULT_NAME, position=target.position, radius=const.VAULT_DEFENSE_RADIUS}) do
 		local vault = get_or_init_vault(v)
@@ -351,7 +305,9 @@ function Vault:update_targets()
 			self.targets[e.unit_number] = e
 		end
 		
-		self.has_drills = true
+		if e.type == "mining-drill" then
+			self.has_drills = true
+		end
 	end
 	
 	dmg.fix_all_icons()
