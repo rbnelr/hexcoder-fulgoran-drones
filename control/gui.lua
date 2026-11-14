@@ -76,12 +76,14 @@ local function get_window_def()
 				GUI{type="label", name="cur1", caption=""},
 				GUI{type="label", name="cur2", caption=""},
 				GUI{type="label", name="cur3", caption=""},
+				GUI{type="label", name="cur4", caption=""},
 			},
 			GUI{type="frame", direction="vertical", style={base="inside_deep_frame", padding=4}}:add{
 				GUI{type="label", name="last_cap", caption="", style={base="caption_label"}},
 				GUI{type="label", name="last1", caption=""},
 				GUI{type="label", name="last2", caption=""},
 				GUI{type="label", name="last3", caption=""},
+				GUI{type="label", name="last4", caption=""},
 			},
 			GUI{type="frame", direction="vertical", style={base="inside_deep_frame", padding=4}}:add{
 				GUI{type="label", caption="Mining", style={base="caption_label"}},
@@ -90,7 +92,7 @@ local function get_window_def()
 				GUI{type="label", name="mining3", caption=""},
 			},
 			GUI{type="frame", direction="vertical", style={base="inside_deep_frame", padding=4}}:add{
-				GUI{type="label", caption="Quality", style={base="caption_label"}},
+				GUI{type="label", caption="Quality Tier", style={base="caption_label"}},
 				GUI{type="label", name="quality1", caption=""},
 				GUI{type="label", name="quality2", caption=""},
 				GUI{type="label", name="quality3", caption=""},
@@ -105,28 +107,28 @@ local vauld_gui_def = get_window_def()
 ---@param vault Vault
 ---@param gui GuiRefs
 function gui.update_info_gui_content(vault, gui)
-	local function bot_list(bots)
+	local function bot_list(wave)
+		local types = wave and wave.bot_types
 		local str = "Bots: --"
-		if bots and next(bots) then
+		if types and next(types) then
 			str = "Bots:"
-			for n,c in pairs(bots) do
-				if const.IS_DRONE[n] then
-					str = str..string.format("  %d[entity=%s,quality=normal]", c, n)
-				end
+			for n,c in pairs(types) do
+				str = str..string.format("  %d[entity=%s,quality=normal]", c, n)
 			end
 		end
 		return str
 	end
-	local function bot_quality_list(bots)
-		local str = ""
-		if bots and next(bots) then
+	local function bot_quality_list(wave)
+		local qualities = wave and wave.bot_qualities
+		local str = "  "
+		if qualities and next(qualities) then
 			local total = 0
 			for _,qn in ipairs(const.QUALITY_IDS) do
-				local count = bots[qn]
+				local count = qualities[qn]
 				if count then total = total + count end
 			end
 			for _,qn in ipairs(const.QUALITY_IDS) do
-				local count = bots[qn]
+				local count = qualities[qn]
 				if count then
 					str = str..string.format("  %.0f%%[quality=%s]", count / total * 100, qn)
 				end
@@ -138,8 +140,9 @@ function gui.update_info_gui_content(vault, gui)
 	local time_since_start = (game.tick - vault.wave_timer_start) / 3600
 	--local time_between = (game.tick - (vault.wave_end_tick)) / 3600
 	
-	-- no scan, the ore tracker is up to date (polled while drills are around, nothing changes otherwise)
 	local scrap = vault.scrap_tracker
+	local e = vault.entity
+	scrap:scan(e.surface, e.position, const.VAULT_DEFENSE_RADIUS, vault.has_drills)
 	local mining_rate = scrap:mining_rate()
 	
 	-- represent per vault evolution as "depth mined" in approx 0-100 meters (really just %)
@@ -147,19 +150,31 @@ function gui.update_info_gui_content(vault, gui)
 	
 	--gui.mining1.caption = string.format("%6d (%d/m)", scrap.mined, mining_rate)
 	gui.mining1.caption = string.format("Rate: %d/min", mining_rate)
-	gui.mining2.caption = string.format("Drained: %4.2fM / %4.2fM", (scrap.drainable - scrap.remaining)/1000000, scrap.drainable/1000000) -- "[font=default-bold]%4.2fM[/font] / [font=default-bold]%4.2fM[/font]"
+	-- finite: actual amounts, drainable stops at the 20% floor, inf: drainable (down to the minimum)
+	-- TODO: this may be confusing, but better have a depth that seems arbitrary than a obviously wrong total
+	local total = scrap.initial_total or scrap.drainable
+	local drained = scrap.initial_total and (total - scrap.amount_total) or (total - scrap.remaining)
+	gui.mining2.caption = string.format("Drained: %4.2fM / %4.2fM", drained/1000000, total/1000000) -- "[font=default-bold]%4.2fM[/font] / [font=default-bold]%4.2fM[/font]"
 	gui.mining3.caption = string.format("Depth: %dm", depth*100)
 	
-	if vault:bots_active() then
-		gui.cur_cap.caption = string.format("Wave active for %.1fmin!", time_since_start)
-		gui.cur1.caption = vault.wave_size and string.format("Size: %3.0f %%", vault.wave_size * 100) or "Size: --"
-		gui.cur2.caption = vault.wave_freq and string.format("Freq: %.1fmin", (1/vault.wave_freq)) or "Freq: --"
-		gui.cur3.caption = bot_list(vault.wave_bots_count).."\n"..bot_quality_list(vault.wave_bots_count)
-		
-		gui.last_cap.caption = string.format("Last wave %.1fmin ago", time_since_start)
-		gui.last1.caption = "Size: --"
-		gui.last2.caption = "Freq: --"
-		gui.last3.caption = bot_list(nil)
+	-- size, freq and bots of a started wave, or -- if none
+	---@param l1 LuaGuiElement
+	---@param l2 LuaGuiElement
+	---@param l3 LuaGuiElement
+	---@param l4 LuaGuiElement
+	---@param wave WaveInfo?
+	local function show_wave(l1, l2, l3, l4, wave)
+		l1.caption = wave and wave.size and string.format("Size: %3.0f%%", wave.size * 100) or "Size: --"
+		l2.caption = wave and wave.freq and string.format("Freq: %.1fmin", 1/wave.freq) or "Freq: --"
+		l3.caption = wave and bot_list(wave) or bot_list(nil)
+		l4.caption = wave and bot_quality_list(wave) or bot_quality_list(nil)
+	end
+	
+	-- waves may overlap, bots of the previous wave can still be around while the active one spawns
+	local active, prev = vault.active_wave, vault.prev_wave
+	if active then
+		gui.cur_cap.caption = string.format("Wave active for %.1fmin!", (game.tick - active.start_tick) / 3600)
+		show_wave(gui.cur1, gui.cur2, gui.cur3, gui.cur4, active)
 	else
 		-- Note that this factors in random variation
 		local trigger_wave, size, freq, eta = vault:should_spawn_wave(mining_rate, time_since_start, false)
@@ -168,14 +183,14 @@ function gui.update_info_gui_content(vault, gui)
 		gui.cur1.caption = size and string.format("Size: %3.0f%%", (size or 0) * 100) or "Size: --"
 		gui.cur2.caption = freq and string.format("Freq: %.1fmin", 1/freq) or "Freq: --" -- despite being used internally, maybe displaying frequency is a bit weird, eta for next, and time since last might be enough
 		gui.cur3.caption = bot_list(nil)
-		
-		gui.last_cap.caption = string.format("Last wave %.1fmin ago", time_since_start)
-		gui.last1.caption = vault.wave_size and string.format("Size: %3.0f%%", vault.wave_size  * 100) or "Size: --"
-		gui.last2.caption = vault.wave_freq and string.format("Freq: %.1fmin", 1/vault.wave_freq) or "Freq: --"
-		gui.last3.caption = bot_list(vault.wave_bots_count).."\n"..bot_quality_list(vault.wave_bots_count)
+		gui.cur4.caption = bot_quality_list(nil)
 	end
 	
-	gui.quality1.caption = string.format("Tier: %.1f", depth_scaling.scrap_tier(depth)+1)
+	gui.last_cap.caption = prev and string.format("Last wave %.1fmin ago", (game.tick - prev.start_tick) / 3600) or "No wave yet"
+	show_wave(gui.last1, gui.last2, gui.last3, gui.last4, prev)
+	
+	gui.quality1.caption = string.format("Scrap: %.1f", depth_scaling.scrap_tier(depth)+1)
+	gui.quality2.caption = string.format("Drones: %.1f", depth_scaling.bot_tier(depth)+1)
 end
 
 ---@param player LuaPlayer

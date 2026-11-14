@@ -169,8 +169,9 @@ function Vault:start_wave(size, freq, bot_quality_tier)
 	
 	-- TODO: update_targets here?
 	
-	-- mining rate is measured since the last wave start, no scan needed (mined is kept up to date by the poll scans)
-	self.scrap_tracker:reset_mined()
+	-- mining rate is measured since the last wave start, scans unless update_waves already did this tick
+	local e = self.entity
+	self.scrap_tracker:reset_mined(e.surface, e.position, const.VAULT_DEFENSE_RADIUS, self.has_drills)
 	self.wave_timer_start = game.tick
 	
 	-- create new waypoints every attack, ends up more random (and previously handled radius changes)

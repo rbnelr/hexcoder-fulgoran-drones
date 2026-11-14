@@ -1,5 +1,5 @@
 local meld = require("__core__.lualib.meld")
-local util = require("lib.myutil")
+local util = require("util")
 
 local common = {}
 

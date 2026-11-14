@@ -33,8 +33,9 @@ local FINITE_FLOOR_RATIO = common.INF_SCRAP_MIN_RATIO
 
 -- initial amount and depth:
 -- inf ore has initial_amount, finite ore does not, so remember it per tracker in initial_amounts (first time seen, or from fake fulgora), overlapping vaults store shared tiles twice (rare)
--- depleted finite tiles disappear, their drainable amount stays summed in depleted_drainable
+-- depleted finite tiles disappear, their initial moves to depleted_initial so drainable keeps counting them, a tile that reappears moves back
 -- tiles that appear later (chunks generated later, restored tiles) have no previous amount, so they do not count as mined
+-- tiles in ungenerated chunks are unknown (not depleted) until generated, like inf ore
 -- depth = fraction of drainable amount gone, per tile down to a floor (tiles below it count as 0, not negative), inf ore floor is its minimum, so 100m depth = minimum yield (inf ore can only lose ~80%)
 --  same 20% used for finite ores for simplicity, which also allows benefitting from max quality for some time until actually depleted
 -- depth only depends on the ore (progression curve is applied later), so it is stored
@@ -44,12 +45,15 @@ local FINITE_FLOOR_RATIO = common.INF_SCRAP_MIN_RATIO
 ---@class OreTracker
 ---@field amounts table<tile_key, number>? -- amount at last scan, only while drills are around
 ---@field initial_amounts table<tile_key, number>? -- finite only: initial amount of present tiles, kept while idle
----@field depleted_drainable number? -- finite only: drainable amount of mined out tiles
----@field remaining number -- drainable amount left (current minum minimum)
+---@field depleted_initial table<tile_key, number>? -- finite only: initial amount of mined out tiles
+---@field remaining number -- drainable amount left (current minus minimum)
 ---@field drainable number -- initially drainable (initial minus minimum), summed per tile
+---@field initial_total number? -- finite only: actual initial amount, incl. mined out tiles (drainable stops at the 20% floor, confusing in the gui)
+---@field amount_total number? -- finite only: actual current amount
 ---@field depth number -- 0-1
 ---@field mined number -- mining rate since tick (drain, but adjusted when yield <100%)
 ---@field tick MapTick -- last reset_mined() (wave start) or creation
+---@field scan_tick MapTick -- last scan(), reset_mined() skips its scan if already scanned this tick
 local OreTracker = {}
 OreTracker.__index = OreTracker
 ore.OreTracker = OreTracker
@@ -96,9 +100,18 @@ function OreTracker:mining_rate()
 end
 
 -- start a new mining rate window, on wave start
-function OreTracker:reset_mined()
+-- scans first unless already scanned this tick, so mining before the reset does not land in the new window
+---@param surface LuaSurface
+---@param position MapPosition
+---@param radius number
+---@param has_drills boolean
+function OreTracker:reset_mined(surface, position, radius, has_drills)
+	local tick = game.tick
+	if self.scan_tick ~= tick then
+		self:scan(surface, position, radius, has_drills)
+	end
 	self.mined = 0
-	self.tick = game.tick
+	self.tick = tick
 end
 
 ---@param remaining number
@@ -147,6 +160,7 @@ if const.INF_SCRAP_ENABLED then
 		self.remaining = remaining
 		self.drainable = drainable
 		self.depth = calc_depth(remaining, drainable)
+		self.scan_tick = game.tick
 	end
 	
 	script.on_event(defines.events.on_resource_depleted, function(event)
@@ -188,7 +202,7 @@ if const.INF_SCRAP_ENABLED then
 		--end
 	end)
 else
-	-- finite: registers initial on first sight, fake minimum is 20% of initial, mined out tiles are in depleted_drainable
+	-- finite: registers initial on first sight, fake minimum is 20% of initial, mined out tiles are in depleted_initial
 	---@param surface LuaSurface
 	---@param position MapPosition
 	---@param radius number
@@ -200,7 +214,13 @@ else
 			initial_amounts = {}
 			self.initial_amounts = initial_amounts
 		end
-		local mined, remaining, drainable = 0, 0, self.depleted_drainable or 0
+		local depleted_initial = self.depleted_initial
+		if depleted_initial == nil then
+			depleted_initial = {}
+			self.depleted_initial = depleted_initial
+		end
+		local mined, remaining, drainable = 0, 0, 0
+		local initial_total, amount_total = 0, 0
 
 		for _,ore in pairs(surface.find_entities_filtered{type="resource", name="scrap", position=position, radius=radius}) do
 			local amount = ore.amount
@@ -208,16 +228,24 @@ else
 
 			local initial = initial_amounts[key]
 			if initial == nil then
-				-- no recorded initial, assume current amount
-				-- happens on the first scan of a fresh vault, or for tiles that appear later
-				initial = amount
-				initial_amounts[key] = amount
+				initial = depleted_initial[key]
+				if initial then
+					-- depleted tile reappeared
+					depleted_initial[key] = nil
+				else
+					-- no recorded initial, assume current amount
+					-- happens on the first scan of a fresh vault, or for tiles that appear later
+					initial = amount
+				end
+				initial_amounts[key] = initial
 			end
 			local minimum = initial * FINITE_FLOOR_RATIO
 
 			drainable = drainable + (initial - minimum)
 			remaining = remaining + math.max(amount - minimum, 0)
-			
+			initial_total = initial_total + initial
+			amount_total = amount_total + amount
+
 			local prev_amount = amounts[key]
 			if prev_amount and amount < prev_amount then
 				mined = mined + (prev_amount - amount)
@@ -225,13 +253,22 @@ else
 			amounts[key] = amount
 		end
 
+		-- mined out tiles still count as drainable, nothing remaining
+		for _,initial in pairs(depleted_initial) do
+			drainable = drainable + initial * (1 - FINITE_FLOOR_RATIO)
+			initial_total = initial_total + initial
+		end
+
 		self.amounts = has_drills and amounts or nil
 		self.mined = self.mined + mined
 		self.remaining = remaining
 		self.drainable = drainable
+		self.initial_total = initial_total
+		self.amount_total = amount_total
 		self.depth = calc_depth(remaining, drainable)
+		self.scan_tick = game.tick
 	end
-	
+
 	script.on_event(defines.events.on_resource_depleted, function(event)
 		local ore = event.entity
 		if ore.name ~= "scrap" then return end
@@ -242,7 +279,7 @@ else
 		--end
 
 		-- finite ore depleted, removed by the game after this
-		-- last amount counts as mined, drainable amount moves to depleted_drainable so depth keeps counting the tile
+		-- last amount counts as mined, initial moves to depleted_initial so depth keeps counting the tile
 		local position = ore.position
 		local key = int_position_key(position)
 		for _,ve in pairs(ore.surface.find_entities_filtered{name=const.VAULT_NAME, position=position, radius=const.VAULT_DEFENSE_RADIUS}) do
@@ -254,7 +291,7 @@ else
 				---@cast scrap -nil
 				---@cast initial_amounts -nil
 				initial_amounts[key] = nil
-				scrap.depleted_drainable = (scrap.depleted_drainable or 0) + initial * (1 - FINITE_FLOOR_RATIO)
+				scrap.depleted_initial[key] = initial -- exists, scan creates both tables
 				
 				local amounts = scrap.amounts
 				local prev_amount = amounts and amounts[key]
@@ -286,19 +323,23 @@ function OreTracker:scan_initial_finite(surface, position, radius)
 	end
 	
 	local initial_amounts = {}
-	local depleted_drainable = 0
+	local depleted_initial = {}
 	for _,orig in pairs(initial_ores) do
-		local key = int_position_key(orig.position)
+		local pos = orig.position
+		local key = int_position_key(pos)
 		local ore = current[key]
 		if ore == nil then
 			-- missing tiles were finite, inf ore never disappears
-			depleted_drainable = depleted_drainable + orig.amount * (1 - FINITE_FLOOR_RATIO)
+			-- unless the chunk is not generated on the real surface yet (fake fulgora generates all around), scan registers those tiles once generated
+			if surface.is_chunk_generated{x=math.floor(pos.x / 32), y=math.floor(pos.y / 32)} then
+				depleted_initial[key] = orig.amount
+			end
 		elseif ore.name == "scrap" then
 			initial_amounts[key] = math.max(orig.amount, ore.amount) -- restore_ore > 100%
 		end
 	end
 	self.initial_amounts = initial_amounts
-	self.depleted_drainable = depleted_drainable
+	self.depleted_initial = depleted_initial
 end
 
 -- Restore the scrap around a vault ruin to a percentage of the original (mapgen) amount, read from fake fulgora
@@ -325,8 +366,10 @@ function ore.restore_ore(vault, restore)
 
 		---@type LuaEntity? -- typecheck does not allow surface.create_entity in if to assign LuaEntity? to this unless I do this
 		local old_ore = surface.find_entities_filtered{position=orig_ore.position, type="resource", name=const.ACTIVE_SCRAP}[1] -- TODO: why not find_entity?
-		if old_ore == nil and not const.INF_SCRAP_ENABLED then
+		local opos = orig_ore.position
+		if old_ore == nil and not const.INF_SCRAP_ENABLED and surface.is_chunk_generated{x=math.floor(opos.x / 32), y=math.floor(opos.y / 32)} then
 			-- fully drained, only finite tiles can deplete (with inf scrap on, a missing tile is off-island finite scrap, ignored)
+			-- ungenerated chunks get their tiles from mapgen
 			old_ore = surface.create_entity{name="scrap", position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
 		end
 		
@@ -355,7 +398,7 @@ function ore.restore_ore(vault, restore)
 		local tracker = v.scrap_tracker
 		tracker:scan_initial_finite(e.surface, e.position, radius)
 		tracker:scan(e.surface, e.position, radius, v.has_drills)
-		tracker:reset_mined()
+		tracker:reset_mined(e.surface, e.position, radius, v.has_drills) -- no scan, already scanned above
 	end
 
 	-- recreated drained tiles

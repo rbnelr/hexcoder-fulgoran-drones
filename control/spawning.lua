@@ -45,7 +45,9 @@ function Vault:_queue_spawn_drones(wave, bot_type, quality_tier, count, delay, d
 		
 		wave.bot_qualities[quality_name] = (wave.bot_qualities[quality_name] or 0) + 1
 	end
-	wave.bot_types[bot_type] = (wave.bot_types[bot_type] or 0) + count
+	if count > 0 then
+		wave.bot_types[bot_type] = (wave.bot_types[bot_type] or 0) + count
+	end
 end
 
 -- emerging bots: spawn projectile that looks like bot mostly hidden behind the near-wall

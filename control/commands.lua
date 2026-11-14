@@ -58,7 +58,6 @@ if const.DEBUG then
 		
 		local size = command.parameter and tonumber(command.parameter) or 1
 		
-		-- vault for testing
 		local sel = game.get_player(command.player_index).selected
 		if sel and sel.valid and sel.name == const.VAULT_NAME then
 			local vault = get_or_init_vault(sel)
@@ -66,12 +65,9 @@ if const.DEBUG then
 			vault:start_wave(size, 1, depth_scaling.bot_tier(vault.scrap_tracker.depth))
 		end
 	end)
-	commands.add_command("fulg-kill-wave", "", function(command)
+	commands.add_command("fulg-end-wave", "", function(command)
 		init()
 		
-		local size = command.parameter and tonumber(command.parameter) or 1
-		
-		-- vault for testing
 		local sel = game.get_player(command.player_index).selected
 		if sel and sel.valid and sel.name == const.VAULT_NAME then
 			get_or_init_vault(sel):end_wave(true)
