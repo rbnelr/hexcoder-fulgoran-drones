@@ -10,6 +10,14 @@ function vault_ruin.data()
 			name = const.WAYPOINT,
 			type = "simple-entity",
 			--picture = const.DEBUG and data.raw["container"]["wooden-chest"].picture or nil,
+			picture = nil,
+			hidden = true,
+			selection_priority = 1,
+			max_health = 1000000, healing_per_tick = 1000000/60,
+			collision_box = nil,
+			collision_mask = { layers = {} },
+			selection_box = {{0,0}, {0,0}},
+			selectable_in_game = false,
 		}
 	}
 end

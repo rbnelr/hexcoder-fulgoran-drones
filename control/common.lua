@@ -21,9 +21,8 @@ function common.update_runtime_settings(event)
 		common.PROGRESSION_CURVE = g[const.MOD_NAME.."-progression-curve"].value --[[@as double]]
 		common.MAX_SCRAP_QUALITY = g[const.MOD_NAME.."-max-scrap-quality"].value --[[@as double]]
 		common.MAX_BOT_QUALITY   = g[const.MOD_NAME.."-max-bot-quality"].value --[[@as double]]
-		common.WAVE_FREQ         = g[const.MOD_NAME.."-wave-freq"].value --[[@as double]]
-		common.WAVE_SIZE         = g[const.MOD_NAME.."-wave-size"].value --[[@as double]]
-		common.WAVE_MIN_TIME     = g[const.MOD_NAME.."-wave-min-time"].value --[[@as double]]
+		common.WAVE_FREQ_MULT    = g[const.MOD_NAME.."-wave-freq"].value --[[@as double]]
+		common.WAVE_SIZE_MULT    = g[const.MOD_NAME.."-wave-size"].value --[[@as double]]
 		common.WAVE_MAX_TIME     = g[const.MOD_NAME.."-wave-max-time"].value --[[@as double]]
 	end
 end
@@ -42,6 +41,66 @@ common.INF_SCRAP_DEPLETED_BUMP_AMOUNT = math.max(math.floor(INF_SCRAP_PROTO.norm
 
 -- we drain faster so inf scrap does not last 100h until it reaches minimum, this does not change yield (other than reducing yield faster)
 common.INF_SCRAP_DEPLETION_TO_MINING = 1 / INF_SCRAP_PROTO.infinite_depletion_resource_amount -- == const.INF_DEPLETION_RATE
+
+common.WAVE_MIN_TIME = 20/60 -- allow for endless waves, 20 seconds to ensure mining rate is accurate, TODO: could lower
+common.WAVE_MIN_SIZE = 3
+common.WAVE_MAX_SIZE = 1000
+
+common.BASE_MINING_RATE = 1000 -- 1500 is ~10 big drills, mining below full speed, this can go up to 10k with a more drills and speed modules
+common.BASE_FREQUENCY = 1 / 10
+common.BASE_SIZE = 50
+
+common.BASE_DEPTH_START_MULT = 0.25
+common.BASE_DEPTH_END_MULT = 1.5
+
+common.BOT_COSTS = {
+	["fulgoran-defender"] = 1,
+	["fulgoran-distractor"] = 6,
+	["fulgoran-destroyer"] = 10,
+}
+---@type table<number, table<string, number>> -- depth -> (robot -> cost ratio)
+common.BOT_RATIOS_PROGRESSION = {
+	[1] = {
+		["fulgoran-defender"] = 0.75,
+		["fulgoran-distractor"] = 0.25,
+		["fulgoran-destroyer"] = 0.00,
+	},
+	[2] = {
+		["fulgoran-defender"] = 0.45,
+		["fulgoran-distractor"] = 0.35,
+		["fulgoran-destroyer"] = 0.20,
+	},
+	[3] = {
+		["fulgoran-defender"] = 0.20,
+		["fulgoran-distractor"] = 0.45,
+		["fulgoran-destroyer"] = 0.35,
+	},
+	[4] = {
+		["fulgoran-defender"] = 0.10,
+		["fulgoran-distractor"] = 0.50,
+		["fulgoran-destroyer"] = 0.40,
+	},
+}
+---@param depth number 0-1
+---@return table<string, number> ratios
+function common.get_bot_ratio(depth)
+	local i
+	local t
+	local prog = common.BOT_RATIOS_PROGRESSION
+	if     depth < 0.3 then i = 1; t = (depth / 0.3)
+	elseif depth < 0.7 then i = 2; t = ((depth - 0.3) / 0.4)
+	else                    i = 3; t = ((depth - 0.7) / 0.3)
+	end
+	
+	local prev = prog[i]
+	local next = prog[i+1]
+	local t2 = (1-t)
+	return {
+		["fulgoran-defender"] = t2 * prev["fulgoran-defender"] + t * next["fulgoran-defender"],
+		["fulgoran-distractor"] = t2 * prev["fulgoran-distractor"] + t * next["fulgoran-distractor"],
+		["fulgoran-destroyer"] = t2 * prev["fulgoran-destroyer"] + t * next["fulgoran-destroyer"],
+	}
+end
 
 -- infinite resource minimum amount is actually increased if initial yield > 100%
 ---@param initial_amount integer

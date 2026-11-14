@@ -115,7 +115,6 @@ local function drone_projectile(name, hostile_name, proj_name, accell, speeds, a
 end
 
 -- projectile that looks like a drone, to create illusion of drones acending out of hole before they actually become active
--- TODO: tinting doesn't work for these yet
 
 -- projectiles can be covered up by fulgoran-ruin-vault-near-wall
 -- what was also suggested was rendering manually with LuaRendering (allow for fading in from black etc.)
@@ -338,12 +337,12 @@ local function harvestable_drones()
 			autoplace = meld.delete(),
 			
 			minable = meld.overwrite{
-				mining_time = 0.4, -- had this at 3.5, but that's dumb
+				mining_time = 0.25, -- 0.4
 				results = {{
 					type="item",
 					name=item.name,
 					amount=1,
-					ignored_by_productivity=1, -- do we want this?
+					--ignored_by_productivity=1, -- don't do this, weird to spawn drones out of nothing, but we want prod bonus to retain scrap to drone ratio
 					--affected_by_quality = false, -- probably want this, TODO: not working?
 					quality_min = "normal", quality_max = "normal", -- this does work
 				}},
@@ -474,6 +473,7 @@ local function balance()
 		max_speed = 0.28, -- was nil
 		
 		--time_to_live = 65*60, -- was 45sec
+		time_to_live = 60*60,
 		
 		--max_health = 200, -- was 60
 		--resistances = meld.overwrite{
@@ -483,7 +483,7 @@ local function balance()
 		--	{ type = "laser",    percent = 80 }, -- was 0  eff HP 1000
 		--	{ type = "electric", percent = 50 }, -- was 0  eff HP  400
 		--},
-		max_health = 300, -- was 60
+		max_health = 400, -- was 60
 		resistances = meld.overwrite{
 			{ type = "acid",     percent =  80 }, -- was 80
 			{ type = "fire",     percent =  95 }, -- was 95
@@ -494,7 +494,7 @@ local function balance()
 		},
 		
 		attack_parameters = {
-			cooldown = 45, -- was 20
+			cooldown = 40, -- was 20
 			cooldown_deviation = 0.1,
 			range = 15, -- was 15, gun turret is 18
 			ammo_type = {
@@ -502,7 +502,7 @@ local function balance()
 					action_delivery = {
 						target_effects = {
 							{},
-							{ damage = { amount = 8, type = "physical"} } -- was 8
+							{ damage = { amount = 6, type = "physical"} } -- was 8
 						}
 					}
 				}
@@ -517,9 +517,8 @@ local function balance()
 		range_from_player = 0,
 		
 		--time_to_live = 125*60, -- was 90sec
-		time_to_live = 75*60,
 		
-		max_health = 1600, -- was 180
+		max_health = 1800, -- was 180
 		resistances = meld.overwrite{
 			--{ type = "acid",     percent = 50 }, -- was 80               eff HP  1100
 			--{ type = "fire",     percent = 90 }, -- was 95               eff HP  5500
@@ -537,7 +536,7 @@ local function balance()
 		attack_parameters = {
 			cooldown = 60, -- was 40
 			cooldown_deviation = 0.2,
-			damage_modifier = 0.8, -- was 0.5
+			damage_modifier = 0.75, -- was 0.5
 			range = 17, -- was 15
 			ammo_type = {
 				action = {
@@ -557,7 +556,7 @@ local function balance()
 		max_speed = 0.15, -- was nil
 		
 		--time_to_live = 120*60, -- was 120sec
-		time_to_live = 80*60,
+		time_to_live = 85*60,
 		
 		--max_health = 400, -- was 60, now same as a turret
 		--resistances = meld.overwrite{
@@ -567,12 +566,12 @@ local function balance()
 		--	{ type = "laser",    percent = 80, decrease = 3 }, -- was 0   eff HP ~2000
 		--	{ type = "electric", percent = 90, decrease = 20 }, -- was 0  eff HP ~4000
 		--},
-		max_health = 1250, -- was 60, now same as a turret
+		max_health = 1500, -- was 60, now same as a turret
 		resistances = meld.overwrite{
 			{ type = "acid",      percent =  80 }, -- was 80
 			{ type = "fire",      percent =  95 }, -- was 95
 			--{ type = "physical",  percent =  50, decrease = 5 }, -- was 0, 
-			{ type = "physical",  percent =  60 }, -- was 0, 
+			{ type = "physical",  percent =  65 }, -- was 0, 
 			{ type = "laser",     percent =  90, decrease = 5 }, -- was 0
 			{ type = "electric",  percent =  90, decrease = 10 }, -- was 0
 			{ type = "explosion", percent =  25, decrease = 100 }, -- was 0
@@ -580,10 +579,10 @@ local function balance()
 		
 		attack_parameters = {
 			--cooldown = 24, -- was 20
-			cooldown = 30, -- was 20
+			cooldown = 34, -- was 20
 			cooldown_deviation = 0.3, -- was 0.2
 			range = 12.5, -- was 20
-			damage_modifier = 2, -- was 2
+			damage_modifier = 1.5, -- was 2
 			ammo_type = {
 				action = {
 					action_delivery = {

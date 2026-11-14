@@ -29,7 +29,7 @@ const.BOT_RESOURCE_QUALITY_BADGES = true
 -- 1800/s*10 = 1M/h = ~16h to deplete (more due to mining deed bots and <100% drain slowing down)
 -- at 50% drain it takes 1/50%=2x as long to drain, integral from 0.2 to 1 for (1/x) is 1.61, so at 100% initial yield it takes 50% longer than expected
 -- with any ore above 100%, it will actually take closer to the expected
-const.INF_DEPLETION_RATE = 10
+const.INF_DEPLETION_RATE = 5
 
 ----
 const.SCRAP_TYPES = {"scrap", "vault-scrap"} -- vault-scrap always defined, hidden if inf scrap is off
@@ -139,7 +139,6 @@ if prototypes then -- only in control
 	}
 	
 	local function quality_levels(tbl, name)
-		local to_level = {}
 		local from_level = {}
 		tbl[name] = { level=1, from_level=from_level }
 		from_level[1] = name

@@ -179,7 +179,7 @@ end
 ---@param bot_quality_tier number? -- 0-(MAX_BOT_QUALITY-1)
 ---@return WaveInfo wave
 function Vault:_spawn_wave_bots(size, freq, bot_quality_tier)
-	size = size or 1
+	size = size or 100
 	freq = freq or 1
 	bot_quality_tier = bot_quality_tier or 0
 	
@@ -189,23 +189,35 @@ function Vault:_spawn_wave_bots(size, freq, bot_quality_tier)
 	local var2 = 1 + (math.random()*2-1) * 0.3
 	local var3 = 1 + (math.random()*2-1) * 0.3
 	
-	local s1 = math.max(size * var1, 0)
-	local s2 = math.max(size * var2 - 0.1, 0)
-	local s3 = math.max(size * var3 - 0.3, 0)
-	
+	-- old fixed distribution (size 100 = 32 def, 10 dis, 6 des, ~140 cost)
+	--local s1 = math.max(size/100 * var1, 0)
+	--local s2 = math.max(size/100 * var2 - 0.1, 0)
+	--local s3 = math.max(size/100 * var3 - 0.3, 0)
+
+	-- size is the total cost budget, split by depth dependent cost ratios (common.get_bot_ratio), count = budget share / cost
+	local ratio = common.get_bot_ratio(self.scrap_tracker.depth)
+	local costs = common.BOT_COSTS
+	-- random rounding: fractional counts spawn with matching chance, keeps the average bot rate exact for small waves
+	local function count(bot_type, var)
+		local n = math.max(size * ratio[bot_type] / costs[bot_type] * var, 0)
+		return math.floor(n + math.random())
+	end
+	local n1 = count("fulgoran-defender", var1)
+	local n2 = count("fulgoran-distractor", var2)
+	local n3 = count("fulgoran-destroyer", var3)
+
 	-- size 4 spawns 4x the bots over 2x the time (2x the rate)
 	-- TODO: could also intentially cluster more around the start?
-	local dur1 = math.sqrt(s1)
-	local dur2 = math.sqrt(s2)
-	local dur3 = math.sqrt(s3)
-	
+	--local dur1 = s1 ^ 0.3 --math.sqrt(s1)
+	--local dur2 = s2 ^ 0.3 --math.sqrt(s2)
+	--local dur3 = s3 ^ 0.3 --math.sqrt(s3)
+	-- duration from total size (not per type count), so rare types still spread over the whole wave
+	local dur1 = (size/100 * var1) ^ 0.3
+	local dur2 = (size/100 * var2) ^ 0.3
+	local dur3 = (size/100 * var3) ^ 0.3
+
 	local delay = 2
-	
-	-- TODO: current distribution fixed, should make
-	-- low sizes spawn almost only defenders
-	-- and high sizes more destroyers than this
-	-- probably want 1-2 distractors and 0 or 1 destroyer even on minimum size
-	
+
 	local wave = {
 		start_tick = game.tick,
 		end_tick = nil,
@@ -217,9 +229,9 @@ function Vault:_spawn_wave_bots(size, freq, bot_quality_tier)
 	}
 	
 	-- distractors spawn first, other types delayed
-	self:_queue_spawn_drones(wave, "fulgoran-defender", bot_quality_tier, round(32*s1), delay+1.5, 15*dur1)
-	self:_queue_spawn_drones(wave, "fulgoran-distractor", bot_quality_tier, round(10*s2), delay+0, 9*dur2)
-	self:_queue_spawn_drones(wave, "fulgoran-destroyer", bot_quality_tier, round(6*s3), delay+3.5, 10*dur3)
+	self:_queue_spawn_drones(wave, "fulgoran-defender", bot_quality_tier, n1, delay+1.5, 15*dur1)
+	self:_queue_spawn_drones(wave, "fulgoran-distractor", bot_quality_tier, n2, delay+0, 9*dur2)
+	self:_queue_spawn_drones(wave, "fulgoran-destroyer", bot_quality_tier, n3, delay+3.5, 10*dur3)
 	
 	--game.print("_spawn_wave: "..serpent.block(wave))
 	return wave
@@ -237,10 +249,17 @@ end
 --	}
 --end
 
+---@param depth number 0-1
+---@return number mult
+local function depth_wave_multiplier(depth)
+	return depth * (common.BASE_DEPTH_END_MULT - common.BASE_DEPTH_START_MULT) + common.BASE_DEPTH_START_MULT
+end
+
 ---@param mining_rate number mined ore per minute since last wave (OreTracker:mining_rate)
+---@param depth number 0-1
 ---@param time_since_last number elapsed time in minutes since last wave started
 ---@return boolean trigger_wave, number? size, number? freq, number? eta
-function Vault:should_spawn_wave(mining_rate, time_since_last, early_out)
+function Vault:should_spawn_wave(mining_rate, depth, time_since_last, early_out)
 	local wave_variation = 0.3 -- percent variation eg 0.2 => 0.8-1.2
 	
 	-- allow calling should_spawn_wave(), and getting same variation rng each time until set to nil
@@ -249,12 +268,7 @@ function Vault:should_spawn_wave(mining_rate, time_since_last, early_out)
 	local variation = 1 + self.cur_rng * wave_variation
 	local variation2 = 1 + self.cur_rng2 * wave_variation
 	
-	-- vary min and max time too, to avoid waves synching
-	-- TODO: min time is a bit weird, esp being a setting, unless somebody really wants a ex. 2 minute safe window
-	-- esp with this not even being time_between, but time_since_last (did I make this change for consistency)?
-	-- in fact, at high mining rates/evo/settings, having attacks literally uninterruppted may be cool
-	-- TODO: just remove this?
-	local min_time = common.WAVE_MIN_TIME * variation
+	local min_time = common.WAVE_MIN_TIME * variation -- very small min time, keep variation to remove potential patterns
 	if time_since_last < min_time and early_out then
 		return false -- not enough time has elapsed, no wave
 	end
@@ -263,30 +277,26 @@ function Vault:should_spawn_wave(mining_rate, time_since_last, early_out)
 	-- both size and frequency of attacks increase with higher mining rate, though rate is determined by mined amount since last wave
 	-- so if stopped mining, the rate is not 0 but actually decreases over time, the attack will happen later and at lower size
 	
-	-- 1 wave every 10 minutes if mining 3000 ore/min
-	local base_mining_rate = 3000 -- was 5000 50% resource drain on big miners makes this more forgiving
-	local base_frequency = 1 / 10
-	
 	-- exp=0.5: at 4x the mining rate: 2x as often and 2x as big, at 9x the rate 3x as often
 	-- meaning the number of bots over time is proportional to mining rate
 	-- could increase so size and frequency would be exponential to mining rate
-	local freq_exp = 0.6 -- was 0.5
-	local size_exp = 0.7 -- was 0.5
+	local freq_exp = 1.0 -- was 0.5
+	local size_exp = 1.1 -- was 0.5
+	local depth_mult = depth_wave_multiplier(depth)
 	
-	local wave_frequency = common.WAVE_FREQ / variation * base_frequency
 	local max_time       = common.WAVE_MAX_TIME * variation
+	local wave_frequency = common.WAVE_FREQ_MULT / variation * common.BASE_FREQUENCY
 	-- use a second rng to make size and frequency non-correlated
-	local wave_size      = common.WAVE_SIZE * variation2
-	local min_size = 0.1
-	local max_size = 10
+	local wave_size      = common.WAVE_SIZE_MULT * variation2 * common.BASE_SIZE
 	
-	local mining_factor = mining_rate / base_mining_rate
+	local factor = mining_rate / common.BASE_MINING_RATE
+	factor = factor * depth_mult
 	
-	wave_frequency = wave_frequency * mining_factor ^ freq_exp
-	wave_size = wave_size * mining_factor ^ size_exp
+	wave_frequency = wave_frequency * factor ^ freq_exp
+	wave_size = wave_size * factor ^ size_exp
 	
-	wave_size = math.max(wave_size, min_size)
-	wave_size = math.min(wave_size, max_size)
+	wave_size = math.max(wave_size, common.WAVE_MIN_SIZE)
+	wave_size = math.min(wave_size, common.WAVE_MAX_SIZE)
 	
 	wave_frequency = math.max(wave_frequency, 1/max_time) -- 1/max_time==min_freq could also be added instead of max'ed
 	wave_frequency = math.min(wave_frequency, 1/min_time)
@@ -294,7 +304,7 @@ function Vault:should_spawn_wave(mining_rate, time_since_last, early_out)
 	local target_period = 1/wave_frequency
 	local eta = math.max(target_period - time_since_last, 0)
 	
-	local trigger_wave = time_since_last < min_time or time_since_last >= target_period
+	local trigger_wave = time_since_last >= target_period
 	return trigger_wave, wave_size, wave_frequency, eta
 end
 
@@ -323,10 +333,11 @@ function Vault:update_waves()
 	end
 	
 	local mining_rate = self.scrap_tracker:mining_rate() -- mining rate, usually since last wave start
+	local depth = self.scrap_tracker.depth
 	local time_since_last = (game.tick - self.wave_timer_start) / 3600
 	--local time_between = (game.tick - self.wave_end_tick) / 3600
 	
-	local trigger_wave, size, freq = self:should_spawn_wave(mining_rate, time_since_last, true)
+	local trigger_wave, size, freq = self:should_spawn_wave(mining_rate, depth, time_since_last, true)
 	if trigger_wave then
 		local quality_tier = depth_scaling.bot_tier(self.scrap_tracker.depth)
 		self:start_wave(size, freq, quality_tier)

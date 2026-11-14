@@ -149,18 +149,26 @@ function movement.update(vault)
 				end
 			end
 			
-			--if bot and bot.valid and bot.name ~= "fulgoran-distractor" then
-			--	local DBG_COL = {
-			--		["fulgoran-defender"] = {0,0,1}, ["fulgoran-distractor"] = {0,1,0}, ["fulgoran-destroyer"] = {1,0,0},
-			--	}
-			--	if bot.valid then
-			--		rendering.draw_line{from=bot, to=bot.combat_robot_owner,
-			--			surface = bot.surface, width = 2, color = DBG_COL[bot.name], time_to_live=1}
-			--	end
-			--end
+			if const.DEBUG and bot and bot.valid and bot.name ~= "fulgoran-distractor" then
+				local DBG_COL = {
+					["fulgoran-defender"] = {0,0,1}, ["fulgoran-distractor"] = {0,1,0}, ["fulgoran-destroyer"] = {1,0,0},
+				}
+				if bot.valid and bot.combat_robot_owner and bot.combat_robot_owner.valid then
+					rendering.draw_line{from=bot, to=bot.combat_robot_owner,
+						surface = bot.surface, width = 1, color = DBG_COL[bot.name], time_to_live=1}
+				end
+			end
 		else
 			-- remove dead bots (and not distractor accidentally too!)
 			vault.active_bots[id] = nil
+		end
+	end
+	
+	if const.DEBUG then
+		for _,w in pairs(vault.waypoints) do
+			if w.valid then
+				rendering.draw_circle{surface=w.surface, target=w, radius=1.5, color={0,1,0}, time_to_live=1}
+			end
 		end
 	end
 end

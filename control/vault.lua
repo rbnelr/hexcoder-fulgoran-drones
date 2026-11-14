@@ -232,15 +232,15 @@ end
 function Vault:create_waypoints()
 	self:delete_waypoints()
 	
-	local count = 30
+	local count = 42 -- 30
 	local R = const.VAULT_DEFENSE_RADIUS*0.8
-	-- TODO: test if a random_in_circle_center_bias would be better
+	local minR = const.VAULT_SHAFT_RADIUS + 4
 	
 	self.waypoints = {}
 	for i=1,count do
 		local waypoint = self.entity.surface.create_entity{
 			name=const.WAYPOINT,
-			position = myutil.random_in_circle(self.entity.position, R),
+			position = myutil.random_in_circle_center_bias(self.entity.position, R, minR), -- random_in_circle
 			preserve_ghosts_and_corpses = true, -- ??
 		}
 		waypoint.destructible = false
@@ -335,7 +335,7 @@ function Vault:update_alert()
 			force.add_custom_alert(self.entity,
 				{type="entity", name=const.VAULT_NAME},
 				{"alert.active-attack",
-				string.format("%.0f", latest_wave.size*100 or -1),
+				string.format("%.0f", latest_wave.size or -1),
 				-- string.format("%.2f", latest_wave.freq or -1)
 				}, true)
 		end

@@ -51,16 +51,16 @@ end
 --	return x*x + y*y <= r*r
 --end
 
-function myutil.random_in_ellipse_center_bias(center, radius)
-	local r = math.random()
-	local theta = math.random() * 6.28318530 -- 2PI
+function myutil.random_in_ellipse(center, radius)
+	local r = math.sqrt(math.random())
+	local theta = math.random() * 6.2831853 -- 2PI
 	
 	return { x = center.x + radius.x*r * math.cos(theta),
 	         y = center.y + radius.y*r * math.sin(theta) }
 end
-function myutil.random_in_ellipse(center, radius)
-	local r = math.sqrt(math.random())
-	local theta = math.random() * 6.2831853 -- 2PI
+function myutil.random_in_ellipse_center_bias(center, radius)
+	local r = math.random()
+	local theta = math.random() * 6.28318530 -- 2PI
 	
 	return { x = center.x + radius.x*r * math.cos(theta),
 	         y = center.y + radius.y*r * math.sin(theta) }
@@ -72,6 +72,18 @@ function myutil.random_in_circle(center, radius)
 	return { x = center.x + radius * math.cos(theta),
 	         y = center.y + radius * math.sin(theta) }
 end
+---@param center MapPosition
+---@param radius number
+---@param min_radius number?
+function myutil.random_in_circle_center_bias(center, radius, min_radius)
+	local radius_range = min_radius and radius - min_radius or radius
+	radius = radius_range * math.random() + (min_radius or 0)
+	local theta = math.random() * 6.2831853 -- 2PI
+	
+	return { x = center.x + radius * math.cos(theta),
+	         y = center.y + radius * math.sin(theta) }
+end
+
 ---@param target ScriptRenderTarget
 ---@param surface LuaSurface
 ---@param offset Vector

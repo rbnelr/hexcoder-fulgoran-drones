@@ -499,13 +499,13 @@ function gui.update_info_gui_content(vault, refs, num_q)
 
 	-- waves
 	-- Note that this factors in random variation
-	local trigger_wave, size, freq, eta = vault:should_spawn_wave(mining_rate, time_since_start, false)
+	local trigger_wave, size, freq, eta = vault:should_spawn_wave(mining_rate, depth, time_since_start, false)
 	local active, prev = vault.active_wave, vault.prev_wave
 	local function wave_time(wave, key)
 		return wave and L(key, string.format("%.1f", (game.tick - wave.start_tick) / 3600)) or "--"
 	end
 	local function wave_size(s, fmt)
-		return s and string.format(fmt, s * 100) or "--"
+		return s and string.format(fmt, s) or "--"
 	end
 	-- next wave also shown while one is active (waves can overlap)
 	set_wave_row(refs, "next", eta and L("next-eta", string.format("%.1f", eta)) or "--", wave_size(size, "~%.0f%%"), nil, num_q)

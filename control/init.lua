@@ -131,10 +131,18 @@ script.register_metatable("OreTracker", ore.OreTracker)
 
 script.on_init(init)
 -- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
+
+local DO_DEV_RESET = true
 script.on_configuration_changed(function(data)
+	log("on_configuration_changed:".. serpent.line(data))
+	
 	local setting_changed = data.mod_startup_settings_changed
 	local changes = data.mod_changes[const.MOD_NAME]
-	local dev_reset = const.DEBUG
+	
+	-- dev reset calls on_configuration_changed even with no changes,
+	-- unfortunately this also triggers on any third party mod changes
+	local dev_reset = DO_DEV_RESET and const.DEBUG
+	
 	if changes or setting_changed or dev_reset then
 		if dev_reset then -- dev reset
 			reset()

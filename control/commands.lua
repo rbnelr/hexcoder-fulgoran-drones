@@ -56,7 +56,7 @@ if const.DEBUG then
 	commands.add_command("fulg-attack", "", function(command)
 		init()
 		
-		local size = command.parameter and tonumber(command.parameter) or 1
+		local size = command.parameter and tonumber(command.parameter) or 100
 		
 		local sel = game.get_player(command.player_index).selected
 		if sel and sel.valid and sel.name == const.VAULT_NAME then

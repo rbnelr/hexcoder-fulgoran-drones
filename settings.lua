@@ -77,15 +77,6 @@ data:extend({
 	},
 	{
 		type = "double-setting",
-		name = MOD_NAME.."-wave-min-time",
-		order = "d3",
-		setting_type = "runtime-global",
-		default_value = 1,
-		minimum_value = 0.1,
-		maximum_value = 20,
-	},
-	{
-		type = "double-setting",
 		name = MOD_NAME.."-wave-max-time",
 		order = "d4",
 		setting_type = "runtime-global",
