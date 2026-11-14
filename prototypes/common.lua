@@ -1,5 +1,5 @@
 local meld = require("__core__.lualib.meld")
-local util = require("util")
+local util = require("lib.myutil")
 
 local common = {}
 
@@ -7,7 +7,7 @@ local common = {}
 -- does not deduplicate
 ---@param list any[]
 ---@param values any[]|any
----@return any[]
+---@return boolean
 function common.list_contains(list, values)
 	if type(values) == "table" then
 		for _,value in pairs(values) do

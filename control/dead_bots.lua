@@ -74,6 +74,7 @@ if const.HARVESTABLE_BOTS then -- was const.HARVEST_BOTS (nil, handler never reg
 		end
 	end)
 	
+	---@param event any where is custom event data type?
 	script.on_event(const.MOD_NAME.."-on-combat-bot-died", function(event)
 		local surface = game.get_surface(event.surface_index) ---@diagnostic disable-line
 		if surface and surface.name == "fulgora" then

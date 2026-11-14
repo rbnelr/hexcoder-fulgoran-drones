@@ -10,6 +10,8 @@
 
 ---@alias GuiRefs table<string, LuaGuiElement>
 
+local gui_util = {}
+
 local GuiDef = {}
 GuiDef.__index = GuiDef
 
@@ -83,19 +85,18 @@ function GuiDef:add_to(parent, name, refs)
 	return elem, refs
 end
 
--- global functions!!
-
 ---@param args GuiDef
 ---@return GuiDef
-function GUI(args)
+local function GUI(args)
 	return setmetatable(args, GuiDef)
 end
+gui_util.GUI = GUI
 
 ---@param name string
 ---@param caption LocalisedString
 ---@param content GuiDef[]
 ---@return GuiDef
-function gui_default_frame(name, caption, content)
+function gui_util.gui_default_frame(name, caption, content)
 	-- TODO: cursor is not finger pointer on draggable titlebar like with built in guis?
 	return GUI{type="frame", name=name, direction="vertical"}:add{
 		GUI{type="flow", drag_target=name, style={horizontal_spacing=8}}:add{
@@ -106,16 +107,18 @@ function gui_default_frame(name, caption, content)
 	}:add(content)
 end
 
-function gui_vpane(name, style)
+function gui_util.gui_vpane(name, style)
 	local actual_style={base="inside_shallow_frame_with_padding"}
 	if style then
 		for k,v in pairs(style) do actual_style[k] = v end
 	end
 	return GUI{type="frame", name=name, direction="vertical", style=actual_style}
 end
-function gui_hflow(args)
+function gui_util.gui_hflow(args)
 	return GUI{type="flow", name=args.name, direction="horizontal", style=args.style}
 end
-function gui_vflow(args)
+function gui_util.gui_vflow(args)
 	return GUI{type="flow", name=args.name, direction="vertical", style=args.style}
 end
+
+return gui_util

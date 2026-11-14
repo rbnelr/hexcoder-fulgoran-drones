@@ -1,5 +1,5 @@
 local const = require("const")
-local common = require("control.common")
+local myutil = require("lib.myutil")
 local movement = {}
 
 -- Weyl sequence
@@ -75,16 +75,13 @@ local function choose_next_target(vault, bot)
 	if targ then return targ end
 	
 	-- no waypoint found?
+	assert(vault.entity.valid)
 	return vault.entity
 end
 
 -- TODO: can be optimized, by only checking bots depending on tick, and reacting to building_fully_damaged()
 ---@param vault Vault
 function movement.update(vault)
-	--local count = table_size(vault.active_wave_bots)
-	--local had_bots = count > 0
-	local had_bots = next(vault.active_wave_bots) ~= nil
-	
 	local tick = game.tick
 	local vault_e = vault.entity
 	local vault_center = { x = const.VAULT_SHAFT_CENTER.x + vault_e.position.x,
@@ -96,7 +93,7 @@ function movement.update(vault)
 	local function try_leave(id, bot)
 		bot.combat_robot_owner = vault_e
 		
-		local dist = common.get_distance(bot.position, vault_center)
+		local dist = myutil.get_distance(bot.position, vault_center)
 		local radius_fraction = dist / (const.VAULT_SHAFT_RADIUS*1.2) -- 0-1, or higher if outside
 		
 		local time_left = bot.time_to_live
@@ -107,11 +104,11 @@ function movement.update(vault)
 		
 		if time_left <= 1 or radius_fraction < time_passed_fraction then -- try to get to center, but vary automatically via time, and accept futher out if out of time
 			vault:descend_bot(bot)
-			vault.active_wave_bots[id] = nil
+			vault.active_bots[id] = nil
 		end
 	end
 	
-	for id,bot in pairs(vault.active_wave_bots) do
+	for id,bot in pairs(vault.active_bots) do
 		--- experimental movement logic, should rewrite later!
 		-- move all at once (robotic hivemind feeling)
 		-- or move staggered
@@ -163,13 +160,8 @@ function movement.update(vault)
 			--end
 		else
 			-- remove dead bots (and not distractor accidentally too!)
-			vault.active_wave_bots[id] = nil
+			vault.active_bots[id] = nil
 		end
-	end
-	
-	if had_bots and vault:wave_active() == false then
-		-- wave over, should only trigger once
-		vault:end_wave()
 	end
 end
 

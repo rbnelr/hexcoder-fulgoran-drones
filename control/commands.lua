@@ -61,9 +61,9 @@ if const.DEBUG then
 		-- vault for testing
 		local sel = game.get_player(command.player_index).selected
 		if sel and sel.valid and sel.name == const.VAULT_NAME then
-			local vault = vault_from_entity(sel)
-			vault:stop_wave_and_kill_bots(true)
-			vault:spawn_wave(size, 1, depth_scaling.bot_tier(vault.depth))
+			local vault = get_or_init_vault(sel)
+			vault:end_wave(true) -- true: kill bots
+			vault:start_wave(size, 1, depth_scaling.bot_tier(vault.latest_depth), nil)
 		end
 	end)
 	commands.add_command("fulg-kill-wave", "", function(command)
@@ -74,7 +74,7 @@ if const.DEBUG then
 		-- vault for testing
 		local sel = game.get_player(command.player_index).selected
 		if sel and sel.valid and sel.name == const.VAULT_NAME then
-			vault_from_entity(sel):stop_wave_and_kill_bots(true)
+			get_or_init_vault(sel):end_wave(true)
 		end
 	end)
 	
@@ -109,7 +109,7 @@ commands.add_command("fulg-restore-ore",
 
 	local sel = player.selected
 	if sel and sel.valid and sel.name == const.VAULT_NAME then
-		ore.restore_ore(vault_from_entity(sel), percent / 100)
+		ore.restore_ore(get_or_init_vault(sel), percent / 100)
 		player.print(const.PRINT_PREFIX.."ore restored")
 	else
 		player.print(const.PRINT_PREFIX.."need to hover a vault!")

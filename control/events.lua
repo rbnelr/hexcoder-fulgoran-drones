@@ -1,5 +1,5 @@
 local const = require("const")
-local common = require("control.common")
+local myutil = require("lib.myutil")
 local dmg = require("control.disable_on_damage")
 ---@class Vault
 local Vault = require("control.vault")
@@ -16,6 +16,8 @@ local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 				vault:destroy()
 			end
 		end
+		-- TODO: also update_targets for vaults or is this fine?
+		-- entities should basically never die anyway, and polling and bot movement handles invalid entities, I think
 	end,
 	[defines.target_type.player] = function(event)
 		for _,v in pairs(storage.render_objs[event.useful_id]) do
@@ -38,20 +40,21 @@ local function on_entity_create(event)
 	if entity.type == "simple-entity" then
 		-- can't actually be built in game, but still do generic built events
 		if entity.name == const.VAULT_NAME then
-			vault_from_entity(entity)
+			get_or_init_vault(entity)
 		end
-	else
+	elseif entity.surface.name == "fulgora" then
 		dmg.on_entity_event(entity)
 		
-		if entity.surface.name == "fulgora" then
-			if entity.type == "mining-drill" then
-				depth_scaling.update_quality_for_single_drill(entity)
-			end
+		for _,vault in find_nearby_vaults(entity) do
+			vault:update_targets()
+		end
+		if entity.type == "mining-drill" then
+			depth_scaling.update_quality_for_single_drill(entity)
 		end
 	end
 end
 
-local built_filter = common.merge(dmg.event_filter, {
+local built_filter = myutil.merge(dmg.event_filter, {
 	{filter="type", type="simple-entity"},
 	{filter="name", name=const.VAULT_NAME, mode="and"}
 })
@@ -131,7 +134,7 @@ script.on_event(defines.events.on_tick, function(event)
 		end
 	end
 	
-	common.stagger_tick(storage.poll_vaults, storage.vaults, const.ORE_POLL_PERIOD, function(vault)
+	myutil.stagger_tick(storage.poll_vaults, storage.vaults, const.ORE_POLL_PERIOD, function(vault)
 		if vault.entity.valid then
 			vault:update_waves()
 		end
@@ -141,14 +144,18 @@ script.on_event(defines.events.on_tick, function(event)
 	
 	local update_alerts = event.tick % 30 == 0
 	
-	for id,v in pairs(storage.active_vaults) do
-		if v.entity.valid then
+	for id,vault in pairs(storage.active_vaults) do
+		if vault:bots_active() then
 			if update_alerts then
-				v:update_alert()
+				vault:update_alert()
 			end
-			v:update_emerging()
+			vault:update_emerging()
 			
-			movement.update(v)
+			movement.update(vault)
+		else
+			vault:end_wave(true) -- true: actually make wave inactive
+			
+			assert(next(vault.waypoints) == nil)
 		end
 	end
 	

@@ -1,5 +1,6 @@
 local const = require("const")
 local common = require("control.common")
+local myutil = require("lib.myutil")
 local ore = require("control.ore_tracking")
 ---@class Vault
 local Vault = require("control.vault")
@@ -125,21 +126,25 @@ function depth_scaling.roll_bot_quality_from_tier(bot_tier)
 end
 
 ---@param drill LuaEntity
----@param nearby_vaults { vault:Vault, tier:number }[]
+---@param nearby_vaults Vault[] -- either vaults that thouch this drill or, more if using the overlapping list for all drills from one vault
 local function update_drill_local_quality_effect(drill, nearby_vaults)
 	local effect = drill.local_effect
 	if effect == nil then return end -- no effect receiver?
 	
 	local max_tier = 0
 	local r = const.VAULT_DEFENSE_RADIUS - QSCRAP_DIST_FALLOFF_MIN_DIST
-	for _,v in pairs(nearby_vaults) do
+	for _,vault in pairs(nearby_vaults) do
+		-- scrap_tier does some math over and over for each drill if we update all drills around vault
+		-- but its preferable over building that into its own list in the caller, if this impacts perf could optimize via caching in here?
+		local tier = depth_scaling.scrap_tier(vault.latest_depth)
+		
 		-- linear falloff by a constant along radius
-		local dist = common.get_distance(drill.position, v.vault.entity.position)
+		local dist = myutil.get_distance(drill.position, vault.entity.position)
 		local dist_factor = (dist - QSCRAP_DIST_FALLOFF_MIN_DIST) / r
 		dist_factor = math.max(dist_factor, 0)
 		if dist_factor < 1 then
 			local falloff = dist_factor * QSCRAP_DIST_FALLOFF
-			max_tier = math.max(v.tier - falloff, max_tier)
+			max_tier = math.max(tier - falloff, max_tier)
 		end
 	end
 	
@@ -167,17 +172,11 @@ function depth_scaling.reset_all_drills_local_quality_effect(surface)
 end
 
 ---@param scan OreScan
-function Vault:update_quality(scan)
+function Vault:update_quality_for_vault_drills(scan)
 	-- cache depth on update, nearby_vaults will be slightly out of date, but depth changes slowly
-	self.depth = ore.OreTracking.get_depth(scan)
+	self.latest_depth = ore.OreTracker.get_depth(scan)
 	
-	local nearby_vaults = {}
-	for _,vault in pairs(self:get_this_and_overlapping_vaults()) do
-		table.insert(nearby_vaults, {
-			vault = vault,
-			tier = depth_scaling.scrap_tier(vault.depth)
-		})
-	end
+	local nearby_vaults = self:find_this_and_overlapping_vaults()
 
 	local e = self.entity
 	-- TODO: cache drills
@@ -188,16 +187,7 @@ end
 
 ---@param drill LuaEntity
 function depth_scaling.update_quality_for_single_drill(drill)
-	local nearby_vaults = {}
-	for _,v in pairs(drill.surface.find_entities_filtered{name=const.VAULT_NAME, position=drill.position, radius=const.VAULT_DEFENSE_RADIUS}) do
-		local vault = vault_from_entity(v)
-		table.insert(nearby_vaults, {
-			vault = vault,
-			tier = depth_scaling.scrap_tier(vault.depth)
-		})
-	end
-
-	update_drill_local_quality_effect(drill, nearby_vaults)
+	update_drill_local_quality_effect(drill, find_nearby_vaults(drill))
 end
 
 ---@param surface LuaSurface
@@ -206,14 +196,14 @@ function depth_scaling.update_quality_for_all_vaults(surface)
 	local vaults = surface.find_entities_filtered{name=const.VAULT_NAME}
 	local vaults_to_update = {}
 	for k,v in pairs(vaults) do
-		local vault = vault_from_entity(v)
-		if vault.has_targets then -- avoid untouched vaults to prevent lag?
+		local vault = get_or_init_vault(v)
+		if vault.has_drills then -- avoid untouched vaults to prevent lag?
 			vaults_to_update[k] = { v=vault, scan=vault:scan_ore() }
 		end
 	end
 	-- scan all first, then update
 	for _,v in pairs(vaults_to_update) do
-		v.v:update_quality(v.scan)
+		v.v:update_quality_for_vault_drills(v.scan)
 	end
 end
 

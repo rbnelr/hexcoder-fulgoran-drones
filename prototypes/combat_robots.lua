@@ -91,7 +91,7 @@ local function drone_projectile(name, hostile_name, proj_name, accell, speeds, a
 	local animation_shadow = util.table.deepcopy(bot.shadow_idle)
 	local tint = const.DRONE_TINT[hostile_name]
 
-	assert(animation.layers and animation.layers[2] and animation.layers[2].filename:find("-mask"))
+	assert(animation and animation.layers and animation.layers[2] and animation.layers[2].filename:find("-mask"))
 	animation.layers[2].apply_runtime_tint = false
 	animation.layers[2].tint = tint
 	animation.layers[2].tint_as_overlay = true
@@ -167,7 +167,7 @@ local function hostile_laser_beam(hostile_name)
 			end
 		end
 	end
-	local gs = beam.graphics_set.beam
+	local gs = beam.graphics_set.beam ---@cast gs -nil
 	recolor(gs.head)
 	recolor(gs.tail)
 	for _,body in pairs(gs.body or {}) do recolor(body) end
@@ -212,7 +212,7 @@ local function hostile_copies()
 		hostile_bot.light = util.table.deepcopy(DRONE_LIGHTS[name])
 
 		if name == "distractor" then
-			local delivery = hostile_bot.attack_parameters.ammo_type.action.action_delivery
+			local delivery = hostile_bot.attack_parameters.ammo_type.action.action_delivery ---@cast delivery -nil
 			assert(delivery.type == "beam" and delivery.beam == "laser-beam")
 			delivery.beam = hostile_laser_beam(hostile_name)
 		end

@@ -39,7 +39,7 @@ function init()
 			recreate_fulgora.convert_ore_and_restore_vaults(surface) -- freezes the game for a bit, warn user or make user trigger it manually?
 			
 			for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
-				vault_from_entity(e)
+				get_or_init_vault(e)
 			end
 			
 			--if const.TRY_SPAWN_MISSING_VAULTS then
@@ -104,7 +104,7 @@ end
 
 
 script.register_metatable("Vault", Vault)
-script.register_metatable("OreTracking", ore.OreTracking)
+script.register_metatable("OreTracker", ore.OreTracker)
 
 ---@class obj_id : integer -- register_on_object_destroyed-based id
 ---@class unit_number : integer
@@ -121,7 +121,7 @@ script.register_metatable("OreTracking", ore.OreTracking)
 ---
 ---@field render_objs table<player_index, LuaRenderObject[]?>
 ---
----@field finite_initial table<tile_key, integer> -- initial amount for finite scrap tiles around vaults (kept after mined out), see OreTracking
+---@field finite_initial table<tile_key, integer> -- initial amount for finite scrap tiles around vaults (kept after mined out), see OreTracker
 ---
 ---@field friend_end_tick integer?
 ---@field last_used_fake_fulgora MapTick?
