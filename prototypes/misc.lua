@@ -4,7 +4,10 @@ local common = require("prototypes.common")
 local misc = {}
 
 function misc.data()
-	
+	-- vault gui threat counter (control/gui.lua ALIVE_FONT), "scenario-message-dialog" family is IBM Plex Mono, no font file needed
+	data:extend{
+		{type="font", name=const.MOD_NAME.."-counter", from="scenario-message-dialog", size=32},
+	}
 end
 
 function misc.data_updates()

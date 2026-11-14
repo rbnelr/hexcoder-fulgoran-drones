@@ -173,6 +173,11 @@ script.on_event(defines.events.on_tick, function(event)
 		end
 	end
 	
+	-- vault gui threat counter, the rest of the gui is refreshed in on_nth_tick below
+	for _,player in pairs(game.connected_players) do
+		gui.update_info_gui_fast(player)
+	end
+	
 	--prof.stop()
 	--game.print(prof)
 end)
@@ -193,7 +198,7 @@ end)
 -- on_selected_entity_changed viz can get stuck sometimes
 -- seemingly on_selected_entity_changed does not handle going into map view, and there's no event for map view switch?
 -- so poll for this, should be okay
-script.on_nth_tick(30, function(event)
+script.on_nth_tick(20, function(event)
 	init()
 	gui.update_all_viz()
 end)

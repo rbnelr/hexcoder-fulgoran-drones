@@ -69,7 +69,11 @@ function GuiDef:add_to(parent, name, refs)
 	
 	if style_mods then
 		for k, v in pairs(style_mods) do
-			if k ~= "base" then -- filter out base here to avoid having to modify original table
+			if k == "column_alignments" then -- read-only custom table, set per column
+				for i, a in pairs(v) do
+					elem.style.column_alignments[i] = a
+				end
+			elseif k ~= "base" then -- filter out base here to avoid having to modify original table
 				elem.style[k] = v
 			end
 		end
