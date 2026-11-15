@@ -1,10 +1,17 @@
 local const = require("const")
 local common = require("control.common")
 local util = require("util")
+local myutil = require("lib.myutil")
 
 local original_mapgen = {}
 
----- Fake surfaces
+-- named noise expression from vanilla fulgora mapgen
+-- =1 around vault islands (lots of space of oil ocean is included)
+-- vanilla scrap autoplace uses it for the vault scrap (which is actual circular patch under vault + random noise-based patches elsewhere), both are ~100k per tile
+-- =0 is other islands with only noise-based scrap at about 1k counts (I think)
+local VAULT_MASK_NOISE = "fulgora_vaults_and_starting_vault"
+
+--#region Fake surfaces
 
 ---@alias FakeSurfaces table<string, MapTick> -- fake surface name -> keep until tick
 
@@ -26,8 +33,7 @@ local function delete_surface_now(fake_surface)
 	game.delete_surface(fake_surface)
 end
 
--- delete the fake surface and forget it in storage, fine if either does not exist
----@param name string -- fake surface name, or the real surface name (prefixed here)
+---@param name string -- fake surface name, or the real surface name (auto prefixed)
 function original_mapgen.delete_fake_surface(name)
 	if string.sub(name, 1, #FAKE_PREFIX) ~= FAKE_PREFIX then
 		name = FAKE_PREFIX..name
@@ -86,8 +92,8 @@ local function recreate_surface_safe(real_surface)
 
 	local fake_surface = game.surfaces[fake_name]
 	if fake_surface ~= nil then
-		local stale = fake_surfaces[fake_name] == nil and "not in storage" or
-			not util.table.compare(fake_surface.map_gen_settings, mgs) and "map_gen_settings differ" or nil
+		local stale = fake_surfaces[fake_name] == nil -- fake surface found that we don't remember
+			or not util.table.compare(fake_surface.map_gen_settings, mgs) -- map_gen_settings differ
 		if stale then
 			original_mapgen.delete_fake_surface(fake_name)
 			fake_surface = nil
@@ -108,16 +114,9 @@ local function recreate_surface_safe(real_surface)
 	fake_surfaces[fake_name] = game.tick + FAKE_KEEP_TICKS
 	return fake_surface
 end
+--#endregion
 
----- 
-
--- named noise expression from vanilla fulgora mapgen
--- =1 around vault islands (lots of space of oil ocean is included)
--- vanilla scrap autoplace uses it for the vault scrap (which is actual circular patch under vault + random noise-based patches elsewhere), both are ~100k per tile
--- =0 is other islands with only noise-based scrap at about 1k counts (I think)
-local VAULT_MASK_NOISE = "fulgora_vaults_and_starting_vault"
-
----- Chunk selection for recreate_initial_surface_and_load_chunks
+--#region Chunk selection for recreate_initial_surface_and_load_chunks
 -- only chunks generated on the real surface: ore elsewhere does not exist yet (mapgen creates it correctly later), so there is nothing to compare or restore
 -- returned as lists (no generators, coroutines are not available in factorio), so the caller can skip creating the fake surface for 0 chunks
 
@@ -178,6 +177,9 @@ end
 
 -- generated chunks touching the circle (was request_to_generate_chunks(position, radius/32+1), a larger square)
 -- +1 tile margin, find_entities_filtered with radius also finds resources whose bounding box touches the circle
+-- measured (/fulg-bench-chunks, radius 55): request radius is a square centered on the position's chunk, only requested chunks get entities,
+--  but every generated area gets a 3 chunk deep ring of partially generated chunks (~60ms for a single chunk, then ~4-5ms per extra chunk)
+--  so one request per chunk costs nothing extra, the bounding square was already 16 instead of 25 chunks (133 vs 173ms)
 ---@param real_surface LuaSurface
 ---@param position MapPosition
 ---@param radius number
@@ -185,10 +187,20 @@ end
 function original_mapgen.chunks_in_radius(real_surface, position, radius)
 	local chunks = {}
 	local r = radius + 1
-	for cy = math.floor((position.y - r) / 32), math.floor((position.y + r) / 32) do
-		for cx = math.floor((position.x - r) / 32), math.floor((position.x + r) / 32) do
+	local px, py = position.x, position.y
+	local y0 = math.floor((py - r) / 32)
+	local y1 = math.floor((py + r) / 32)
+	local x0 = math.floor((px - r) / 32)
+	local x1 = math.floor((px + r) / 32)
+	for cy = y0, y1 do
+		for cx = x0, x1 do
+			-- skip corner chunks of the bounding square the circle does not reach: nearest point of the chunk to position
+			local nearest = {
+				x = math.min(math.max(px, cx*32), cx*32+32),
+				y = math.min(math.max(py, cy*32), cy*32+32),
+			}
 			local cpos = {x=cx, y=cy}
-			if real_surface.is_chunk_generated(cpos) then
+			if myutil.check_distance(position, nearest, r) and real_surface.is_chunk_generated(cpos) then
 				chunks[#chunks+1] = cpos
 			end
 		end
@@ -218,9 +230,9 @@ function original_mapgen.recreate_initial_surface_and_load_chunks(real_surface, 
 
 	return fake_surface
 end
+--#endregion
 
-
----- Whole map restore
+--#region Whole map restore
 
 -- add or remove vault-scrap in the surface autoplace settings, only affects chunks generated later
 -- data stage does this for the planet, but an existing surface keeps the settings it was created with
@@ -400,6 +412,7 @@ function original_mapgen.convert_ore_and_restore_vaults(surface)
 	-- before the fake surface gets created, it copies the settings
 	original_mapgen.update_autoplace_settings(surface)
 
+	local prof_total = helpers.create_profiler()
 	local prof_fake = helpers.create_profiler()
 	local chunks = original_mapgen.vault_island_chunks(surface)
 	local fake_surface = original_mapgen.recreate_initial_surface_and_load_chunks(surface, chunks)
@@ -421,11 +434,18 @@ function original_mapgen.convert_ore_and_restore_vaults(surface)
 	local respawned = respawn_vaults(surface, fake_surface, "all")
 	prof_vaults.stop()
 
-	-- always print, also outside of debug: the game froze for this, the timings tell the user why
-	log(dbg_print(string.format("Converted %d vault scrap tiles to %s, respawned %d vault ruins", converted, const.INF_SCRAP_ENABLED and "infinite" or "finite", respawned)))
-	log(dbg_print{"", string.format("Fake surface (%d chunks): ", #chunks), prof_fake, ", ore conversion: ", prof_scrap, ", vault respawn: ", prof_vaults})
-end
+	prof_total.stop()
 
+	-- always print, also outside of debug: the game froze for this, the time tells the user why (profiler text is fixed "Duration: ...ms", so only once)
+	log(dbg_print{"", string.format("Checked vault ruins and scrap on %d chunks: converted %d tiles to %s, respawned %d vault ruins. ",
+		#chunks, converted, const.INF_SCRAP_ENABLED and "infinite" or "finite", respawned), prof_total})
+	if const.DEBUG then
+		log(dbg_print{"", "Fake surface: ", prof_fake, ", ore conversion: ", prof_scrap, ", vault respawn: ", prof_vaults})
+	end
+end
+--#endregion
+
+--#region Missing vault experiments
 -- experimental way of spawning vaults in rare case where vault island is missing its ruin
 --[[
 ---@param surface LuaSurface
@@ -532,5 +552,6 @@ function original_mapgen.try_place_missing_vault_ruin(surface, area)
 	end
 end
 ]]
+--#endregion
 
 return original_mapgen

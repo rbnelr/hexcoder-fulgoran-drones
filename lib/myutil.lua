@@ -76,6 +76,11 @@ function myutil.normalized_vector(vec)
 	return { x=x/length, y=y/length }, length
 end
 
+function myutil.check_distance(a, b, r)
+	local x = a.x - b.x
+	local y = a.y - b.y
+	return x*x + y*y <= r*r
+end
 function myutil.get_distance(a, b)
 	local x = a.x - b.x
 	local y = a.y - b.y
@@ -84,11 +89,6 @@ end
 --function myutil.check_distance2(ax, ay, bx, by, r)
 --	local x = ax - bx
 --	local y = ay - by
---	return x*x + y*y <= r*r
---end
---function myutil.check_distance(a, b, r)
---	local x = a.x - b.x
---	local y = a.y - b.y
 --	return x*x + y*y <= r*r
 --end
 

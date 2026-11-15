@@ -10,6 +10,7 @@ local BOT_NAMES = {
 	["destroyer"]="fulgoran-destroyer",
 }
 
+--#region Lights and particles
 local function cone_light(scale, rotation, intensity, color)
 	local dist = 7 * scale
 	local a = rotation * 2 * math.pi
@@ -77,6 +78,9 @@ local function tint_particle(particle, tint)
 		mask.tint_as_overlay = true
 	end
 end
+--#endregion
+
+--#region Emerge projectiles and hostile copies
 
 -- projectile that looks like a drone
 ---@param name string vanilla bot name
@@ -219,6 +223,9 @@ local function hostile_copies()
 		data:extend{hostile_bot}
 	end
 end
+--#endregion
+
+--#region Harvestable drones
 
 -- Fits in data-update, but there we don't get automatic recylcling recipes!
 -- dying particles that trigger the wreck script, dead-<bot> items and resources
@@ -456,6 +463,9 @@ local function harvestable_drones_quality_resource()
 		end
 	end
 end
+--#endregion
+
+--#region Balance and capsule recipes
 
 -- buff HP and resistances by a lot, otherwise very few turret completely defeat even huge swarms
 -- lengthen time to live
@@ -636,6 +646,9 @@ local function capsule_recipes()
 		prerequisites = meld_helper.add_or_assign{"electromagnetic-plant"}
 	})
 end
+--#endregion
+
+--#region Recycling and stage entry points
 
 -- dead-<bot>-recycling: copy of the capsule recycling with capsules swapped for wrecks
 -- must run after the recycler generated the recycling recipes (its data-updates)
@@ -680,6 +693,9 @@ function combat_robots.data_updates()
 		dead_bot_recycling()
 	end
 end
+--#endregion
+
+--#region Final fixes: render layers, bullet trails
 
 -- Render layers, relative to the vault near-wall ("smoke", see vault_ruin.lua), which hides emerging drones (projectiles, drawn at "projectile", no render_layer field)
 -- Layer order (low to high): object (buildings, trees) < higher-object-* < elevated rails < explosion < projectile < smoke (near-wall) < air-object (drones, flying robots)
@@ -782,5 +798,6 @@ function combat_robots.final_fixes()
 		harvestable_drones_quality_resource()
 	end
 end
+--#endregion
 
 return combat_robots

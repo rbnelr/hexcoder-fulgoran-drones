@@ -14,6 +14,7 @@ local function L(key, ...)
 	return {const.MOD_NAME.."-gui."..key, ...}
 end
 
+--#region Radius visualisation
 local VIS_RADIUS_TINT = {0.80, 0.05, 0.05}
 local VIS_RADIUS_TINT_FILL = {VIS_RADIUS_TINT[1]*0.1,VIS_RADIUS_TINT[2]*0.1,VIS_RADIUS_TINT[3]*0.1,0.1}
 
@@ -57,8 +58,9 @@ function gui.update_all_viz()
 		gui.update_info_gui(player)
 	end
 end
+--#endregion
 
----- Vault GUI
+--#region Vault GUI
 
 local WAVE_TABLE_BOTS = {"fulgoran-defender", "fulgoran-distractor", "fulgoran-destroyer"}
 local WAVE_ROWS = {"next", "active", "last"} -- future to past
@@ -565,5 +567,6 @@ function gui.update_info_gui(player)
 		gui.update_info_gui_content(vault, refs, num_q)
 	end
 end
+--#endregion
 
 return gui

@@ -3,6 +3,10 @@ local myutil = require("lib.myutil")
 local common = require("control.common")
 local original_mapgen = require("control.original_mapgen")
 
+---@class Damaged
+---@field entity LuaEntity
+---@field icon LuaRenderObject
+
 local ore = {}
 
 local INF_SCRAP_NORMAL = common.INF_SCRAP_NORMAL
@@ -15,7 +19,7 @@ local int_position_key = myutil.int_position_key
 -- finite ore has no minimum, use the same 20% as inf ore as floor for depth
 local FINITE_FLOOR_RATIO = common.INF_SCRAP_MIN_RATIO
 
----- Per-vault ore tracking
+--#region OreTracker (per-vault ore tracking)
 
 -- each vault tracks the scrap in its radius, for mining rate (wave size and frequency) and depth (progression)
 -- this needs the previous amount per tile, comparing total amounts breaks with inf ore since drain reduces <100% yield, chunks generated later and depleted tiles also would complicate things
@@ -120,13 +124,16 @@ end
 local function calc_depth(remaining, drainable)
 	return drainable > 0 and math.min(math.max(1 - remaining / drainable, 0), 1) or 0
 end
+--#endregion
 
+--#region Scan
 -- scan the active scrap type, off-island scrap of the other type (rarely touches radius) is ignored
 -- per tile: drain since the previous scan is added to mined, tiles without previous amount count nothing (new tiles, first scan after drills returned)
 -- also sets remaining, drainable and depth
 -- has_drills: mining is possible until the next scan, keep the per-tile amounts, otherwise drop them (on_drill_built() takes a new baseline)
 -- two versions for simplicity and potential perf, inf scrap is a startup setting
 if const.INF_SCRAP_ENABLED then
+	--#region Infinite
 	-- infinite: initial is initial_amount, minimum includes the bump, mined corrected for yield and our faster drain
 	---@param surface LuaSurface
 	---@param position MapPosition
@@ -201,7 +208,9 @@ if const.INF_SCRAP_ENABLED then
 		--	})
 		--end
 	end)
+	--#endregion
 else
+	--#region Finite
 	-- finite: registers initial on first sight, fake minimum is 20% of initial, mined out tiles are in depleted_initial
 	---@param surface LuaSurface
 	---@param position MapPosition
@@ -302,6 +311,7 @@ else
 			end
 		end
 	end)
+	--#endregion
 end
 
 -- finite: rebuild initial amounts and mined out tiles from fake fulgora (slow, cheap during init since convert just generated it), scan() after this to update depth
@@ -342,6 +352,44 @@ function OreTracker:scan_initial_finite(surface, position, radius)
 	self.initial_amounts = initial_amounts
 	self.depleted_initial = depleted_initial
 end
+--#endregion
+
+--#region Restore
+
+-- restore one tile to restore * its original amount, shared by restore_ore and restore_all_ore
+-- only touches the active scrap type, fully drained tiles are recreated (only with inf scrap off, inf ore never drains)
+---@param surface LuaSurface
+---@param orig_ore LuaEntity -- from fake fulgora
+---@param restore number
+local function restore_tile(surface, orig_ore, restore)
+	local orig_amount = orig_ore.amount
+	local amount = math.ceil(orig_amount * restore)
+
+	-- find_entity takes a single name, fine here since only the active type is restored (convert needs both types, so find_entities_filtered there)
+	local opos = orig_ore.position
+	local old_ore = surface.find_entity(const.ACTIVE_SCRAP, opos)
+	if old_ore == nil and not const.INF_SCRAP_ENABLED and surface.is_chunk_generated{x=math.floor(opos.x / 32), y=math.floor(opos.y / 32)} then
+		-- fully drained, only finite tiles can deplete (with inf scrap on, a missing tile is off-island finite scrap, ignored)
+		-- ungenerated chunks get their tiles from mapgen (chunk selection only returns generated chunks, so this should always pass)
+		old_ore = surface.create_entity{name="scrap", position=opos, snap_to_grid=true, preserve_ghosts_and_corpses=true}
+	end
+	
+	if old_ore ~= nil then -- may fail if chunks are not generated yet?
+		if old_ore.name == "vault-scrap" then
+			local initial = math.max(orig_amount, amount)
+			if initial < INF_SCRAP_MIN then initial = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT end -- important to avoid depth bug (?)
+			old_ore.initial_amount = initial -- before amount, the minimum depends on it
+
+			-- this enforces minimum if setting to a low percentage
+			-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
+			local minimum = get_inf_scrap_minimum(initial) + INF_SCRAP_DEPLETED_BUMP_AMOUNT
+			if amount < minimum then amount = minimum end
+		elseif amount < 1 then
+			amount = 1 -- not allowed to set amount=0, and 0 would deplete finite tiles without on_resource_depleted
+		end
+		old_ore.amount = amount
+	end
+end
 
 -- Restore the scrap around a vault ruin to a percentage of the original (mapgen) amount, read from fake fulgora
 -- only changes amounts, never the type (that is original_mapgen.convert_ore_and_restore_vaults, from the inf scrap setting)
@@ -363,33 +411,7 @@ function ore.restore_ore(vault, restore)
 	local orig_ores = fake_surface and fake_surface.find_entities_filtered{position=position, radius=radius, type="resource", name=const.SCRAP_TYPES} or {}
 
 	for _,orig_ore in pairs(orig_ores) do
-		local orig_amount = orig_ore.amount
-		local amount = math.ceil(orig_amount * restore)
-
-		---@type LuaEntity? -- typecheck does not allow surface.create_entity in if to assign LuaEntity? to this unless I do this
-		local old_ore = surface.find_entities_filtered{position=orig_ore.position, type="resource", name=const.ACTIVE_SCRAP}[1] -- TODO: why not find_entity?
-		local opos = orig_ore.position
-		if old_ore == nil and not const.INF_SCRAP_ENABLED and surface.is_chunk_generated{x=math.floor(opos.x / 32), y=math.floor(opos.y / 32)} then
-			-- fully drained, only finite tiles can deplete (with inf scrap on, a missing tile is off-island finite scrap, ignored)
-			-- ungenerated chunks get their tiles from mapgen
-			old_ore = surface.create_entity{name="scrap", position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
-		end
-		
-		if old_ore ~= nil then -- may fail if chunks are not generated yet?
-			if old_ore.name == "vault-scrap" then
-				local initial = math.max(orig_amount, amount)
-				if initial < INF_SCRAP_MIN then initial = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT end -- important to avoid depth bug (?)
-				old_ore.initial_amount = initial -- before amount, the minimum depends on it
-
-				-- this enforces minimum if setting to a low percentage
-				-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
-				local minimum = get_inf_scrap_minimum(initial) + INF_SCRAP_DEPLETED_BUMP_AMOUNT
-				if amount < minimum then amount = minimum end
-			elseif amount < 1 then
-				amount = 1 -- not allowed to set amount=0, and 0 would deplete finite tiles without on_resource_depleted
-			end
-			old_ore.amount = amount
-		end
+		restore_tile(surface, orig_ore, restore)
 	end
 	
 	-- rescan overlapping vaults (ore is part of more than one radius), finite initial raised for restore > 100% and drained tiles
@@ -415,34 +437,7 @@ function ore.restore_all_ore(surface, restore)
 	local orig_ores = fake_surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES}
 
 	for _,orig_ore in pairs(orig_ores) do
-		local orig_amount = orig_ore.amount
-		local amount = math.ceil(orig_amount * restore)
-
-		---@type LuaEntity? -- typecheck does not allow surface.create_entity in if to assign LuaEntity? to this unless I do this
-		local old_ore = surface.find_entities_filtered{position=orig_ore.position, type="resource", name=const.ACTIVE_SCRAP}[1] -- TODO: why not find_entity?
-		local opos = orig_ore.position
-		assert(surface.is_chunk_generated{x=math.floor(opos.x / 32), y=math.floor(opos.y / 32)})
-		if old_ore == nil and not const.INF_SCRAP_ENABLED then
-			-- fully drained, only finite tiles can deplete (with inf scrap on, a missing tile is off-island finite scrap, ignored)
-			-- ungenerated chunks get their tiles from mapgen
-			old_ore = surface.create_entity{name="scrap", position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
-		end
-		
-		if old_ore ~= nil then -- may fail if chunks are not generated yet?
-			if old_ore.name == "vault-scrap" then
-				local initial = math.max(orig_amount, amount)
-				if initial < INF_SCRAP_MIN then initial = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT end -- important to avoid depth bug (?)
-				old_ore.initial_amount = initial -- before amount, the minimum depends on it
-
-				-- this enforces minimum if setting to a low percentage
-				-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
-				local minimum = get_inf_scrap_minimum(initial) + INF_SCRAP_DEPLETED_BUMP_AMOUNT
-				if amount < minimum then amount = minimum end
-			elseif amount < 1 then
-				amount = 1 -- not allowed to set amount=0, and 0 would deplete finite tiles without on_resource_depleted
-			end
-			old_ore.amount = amount
-		end
+		restore_tile(surface, orig_ore, restore)
 	end
 	
 	local radius = const.VAULT_DEFENSE_RADIUS
@@ -460,7 +455,9 @@ function ore.restore_all_ore(surface, restore)
 		common.update_drill_connections_near(surface, e.position, radius)
 	end
 end
+--#endregion
 
+--#region Debug drain visualisation
 local VIS_DRAIN = false
 if const.DEBUG and VIS_DRAIN then
 	script.on_nth_tick(1, function(event)
@@ -486,5 +483,6 @@ if const.DEBUG and VIS_DRAIN then
 		--game.print("drains: "..serpent.line(drains))
 	end)
 end
+--#endregion
 
 return ore

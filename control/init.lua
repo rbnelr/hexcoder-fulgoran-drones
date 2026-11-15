@@ -9,6 +9,20 @@ local ore = require("control.ore_tracking")
 local original_mapgen = require("control.original_mapgen")
 local dead_bots = require("control.dead_bots")
 
+-- copy of this mod's startup settings, to tell which of them changed in on_configuration_changed
+-- (data.mod_startup_settings_changed is true for any mod's startup settings, and on install)
+---@return table<string, ModSettingValue>
+local function get_startup_settings()
+	local copy = {}
+	local prefix = const.MOD_NAME.."-"
+	for name, setting in pairs(settings.startup) do
+		if string.sub(name, 1, #prefix) == prefix then
+			copy[name] = setting.value
+		end
+	end
+	return copy
+end
+
 -- 'somewhat lazy' init ideally called in every handler, intentionally global
 -- used during dev, but manually resetting via ctrl+alt on load makes this obsolete
 -- TODO: remove init() calls everywhere?
@@ -21,6 +35,7 @@ function init()
 	if s.poll_repaired == nil then s.poll_repaired = {} end
 	if s.active_vaults == nil then s.active_vaults = {} end
 	if s.render_objs == nil then s.render_objs = {} end
+	if s.startup_settings == nil then s.startup_settings = get_startup_settings() end
 	
 	-- create enemy drone force
 	if game.forces[const.DRONE_FORCE] == nil then
@@ -144,27 +159,41 @@ script.register_metatable("OreTracker", ore.OreTracker)
 ---@field fake_surfaces FakeSurfaces? -- original_mapgen
 ---@field settings_changed boolean?
 ---@field highest_quality_unlocked integer -- 1-5
+---
+---@field startup_settings table<string, ModSettingValue> -- copy of our startup settings at the last init/on_configuration_changed, see get_startup_settings
 
----@class Damaged
----@field entity LuaEntity
----@field icon LuaRenderObject
+script.on_init(init) -- only gets called on mod install, both on new game start with mod installed and late install on existing save
 
-script.on_init(init)
 -- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
-
-local DO_DEV_RESET = true
+local DO_DEV_RESET = false
 script.on_configuration_changed(function(data)
-	local setting_changed = data.mod_startup_settings_changed
-	local changes = data.mod_changes[const.MOD_NAME]
+	-- changes -> mod version changed (including install on running game, has old_version==nil)
+	-- mod_startup_settings_changed -> startup settings (of any mod!) have changed (or install on running game), so compare our own copy instead
+	local mod_change = data.mod_changes[const.MOD_NAME]
+	
+	local old_settings = storage.startup_settings or {} -- nil: save from before startup_settings existed, everything counts as changed
+	local new_settings = get_startup_settings()
+	storage.startup_settings = new_settings
+	
+	local changed_settings = {} ---@type table<string, true>
+	for name, value in pairs(new_settings) do
+		if old_settings[name] ~= value then changed_settings[name] = true end -- all ours are bool/number, no table compare needed
+	end
+	-- only these need the reset, the rest only affects the data stage (or the game removes prototypes itself), debug is covered by dev_reset
+	local important_setting_changed =
+		changed_settings[const.MOD_NAME.."-inf-scrap"] or -- converts the ore finite<->infinite
+		changed_settings[const.MOD_NAME.."-vault-defense-radius"] -- trackers were scanned with the old radius
+	-- could potentially despawn bot resource at higher quality when no quality is wanted, but not worth it
 	
 	-- dev reset calls on_configuration_changed even with no changes,
 	-- unfortunately this also triggers on any third party mod changes
 	local dev_reset = DO_DEV_RESET and const.DEBUG
 	
-	if changes or setting_changed or dev_reset then
+	if mod_change or important_setting_changed or dev_reset then
 		-- only logged when we act on it (in reset), third party mod changes alone are not interesting
 		data.migrations = nil -- one empty table per prototype type, just noise
 		data["_dev_reset"] = dev_reset -- include in print
+		data["_changed_settings"] = changed_settings
 		local reason = serpent.line(data)
 
 		if dev_reset then -- dev reset
@@ -173,20 +202,15 @@ script.on_configuration_changed(function(data)
 			return
 		end
 		
-		-- reset + init works too, why is this a pattern I see often? because this can be used instead of script.on_init?
-		--local old = changes.old_version
-		--if not old then
-		--	init()
-		--	return
-		--end
+		-- installing on existing save does on_init then on_configuration_changed (with mod_startup_settings_changed=true!)
+		-- do not reset+init again!
+		if mod_change and mod_change.old_version == nil then return end
 		
 		-- reset + init, kinda works, but may be arkward
 		reset(reason)
 		init()
 		return
 	end
-	-- setting_changed: inf scrap toggle handled by reset + init (original_mapgen.convert_ore_and_restore_vaults)
-	-- vault-scrap prototype is always defined (hidden when off), so it is not deleted
 end)
 
 script.on_event(defines.events.on_runtime_mod_setting_changed, common.update_runtime_settings)
