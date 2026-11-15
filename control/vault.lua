@@ -122,7 +122,8 @@ function get_or_init_vault(entity, source_event)
 	if const.DEBUG then
 		--rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
 		--	surface=vault.surface, filled=true, color={0,1,0}, time_to_live=60}
-		game.print(const.PRINT_PREFIX.."init vault ".. serpent.line{entity})
+		local p = entity.position
+		log(dbg_print(string.format("Registered vault ruin at [gps=%d,%d,%s] (from %s)", math.floor(p.x), math.floor(p.y), entity.surface.name, source_event or "lazy")))
 	end
 	
 	return vault
@@ -294,19 +295,18 @@ function Vault:update_targets()
 	-- technically we scan for center of entity, not bounding box, which is probably fine
 	-- but for drills that means it you can technically have drill that mines ore inside the radius, while itself being outside
 	-- TODO: could handle this, (count it for has_drills, and potentially even making it a target) but this really shouldn't happen in gameplay
-	local p = self.entity.position
-	for _,e in pairs(self.entity.surface.find_entities_filtered{
-						position=p, radius=const.VAULT_DEFENSE_RADIUS, type = const.TARGETS }) do
+	for _,entity in pairs(self.entity.surface.find_entities_filtered{
+			position=self.entity.position, radius=const.VAULT_DEFENSE_RADIUS, type=const.TARGETS }) do
 		--game.print(serpent.line(e))
 		
-		dmg.fix_building(e.unit_number, e)
+		dmg.fix_building(entity.unit_number, entity)
 		
-		if not e.disabled_by_script then
-			e.is_military_target = true
-			self.targets[e.unit_number] = e
+		if not entity.disabled_by_script then
+			entity.is_military_target = true
+			self.targets[entity.unit_number] = entity
 		end
 		
-		if e.type == "mining-drill" then
+		if entity.type == "mining-drill" then
 			self.has_drills = true
 		end
 	end

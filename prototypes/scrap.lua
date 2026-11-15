@@ -58,7 +58,7 @@ function scrap.data_updates()
 
 	-- split the scrap autoplace into normal scrap and vault-scrap (vault islands only)
 	-- fulgora_vaults_and_starting_vault is 0 or 1 (built only from comparisons), so positions and amounts stay identical, only the type changes
-	-- existing surfaces keep their own map_gen_settings, control (recreate_fulgora.update_autoplace_settings) adds/removes vault-scrap there
+	-- existing surfaces keep their own map_gen_settings, control (original_mapgen.update_autoplace_settings) adds/removes vault-scrap there
 	local VAULT_MASK_NOISE = "fulgora_vaults_and_starting_vault"
 	local scrap_res = data.raw["resource"]["scrap"]
 	local vault_scrap = data.raw["resource"]["vault-scrap"]

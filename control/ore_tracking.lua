@@ -1,7 +1,7 @@
 local const = require("const")
 local myutil = require("lib.myutil")
 local common = require("control.common")
-local recreare_fulgora = require("control.recreate_fulgora")
+local original_mapgen = require("control.original_mapgen")
 
 local ore = {}
 
@@ -313,9 +313,10 @@ end
 function OreTracker:scan_initial_finite(surface, position, radius)
 	if const.INF_SCRAP_ENABLED then return end
 	
-	local fake_surface = recreare_fulgora.recreate_initial_surface_and_load_chunks(surface, position, radius)
+	local fake_surface = original_mapgen.recreate_initial_surface_and_load_chunks(surface, original_mapgen.chunks_in_radius(surface, position, radius))
 	-- both types on both surfaces, fake fulgora may have been created with the other inf scrap setting (reused surface), so its types can't be trusted
-	local initial_ores = fake_surface.find_entities_filtered{position=position, radius=radius, type="resource", name=const.SCRAP_TYPES}
+	-- nil: no generated chunks in radius, so no ore either
+	local initial_ores = fake_surface and fake_surface.find_entities_filtered{position=position, radius=radius, type="resource", name=const.SCRAP_TYPES} or {}
 	
 	local current = {}
 	for _,ore in pairs(surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES, position=position, radius=radius}) do
@@ -343,7 +344,7 @@ function OreTracker:scan_initial_finite(surface, position, radius)
 end
 
 -- Restore the scrap around a vault ruin to a percentage of the original (mapgen) amount, read from fake fulgora
--- only changes amounts, never the type (that is recreate_fulgora.convert_ore_and_restore_vaults, from the inf scrap setting)
+-- only changes amounts, never the type (that is original_mapgen.convert_ore_and_restore_vaults, from the inf scrap setting)
 -- only touches the active scrap type, fully drained tiles are recreated (only with inf scrap off, inf ore never drains)
 -- note: for infinite ores, the yield % depends on the "normal" amount as defined in the ore prototype
 --       and the actual minimum depends on the initial amount
@@ -357,8 +358,9 @@ function ore.restore_ore(vault, restore)
 	local surface = vault.entity.surface
 	local radius = const.VAULT_DEFENSE_RADIUS
 
-	local fake_surface = recreare_fulgora.recreate_initial_surface_and_load_chunks(surface, position, radius)
-	local orig_ores = fake_surface.find_entities_filtered{position=position, radius=radius, type="resource", name=const.SCRAP_TYPES}
+	local fake_surface = original_mapgen.recreate_initial_surface_and_load_chunks(surface, original_mapgen.chunks_in_radius(surface, position, radius))
+	-- nil: no generated chunks in radius, so no ore either
+	local orig_ores = fake_surface and fake_surface.find_entities_filtered{position=position, radius=radius, type="resource", name=const.SCRAP_TYPES} or {}
 
 	for _,orig_ore in pairs(orig_ores) do
 		local orig_amount = orig_ore.amount
@@ -403,6 +405,60 @@ function ore.restore_ore(vault, restore)
 
 	-- recreated drained tiles
 	common.update_drill_connections_near(surface, position, radius)
+end
+
+---@param surface LuaSurface
+---@param restore number -- fraction of the original amount
+function ore.restore_all_ore(surface, restore)
+	local fake_surface = original_mapgen.recreate_initial_surface_and_load_chunks(surface, original_mapgen.vault_island_chunks(surface))
+	if fake_surface == nil then return end -- no generated vault island chunks
+	local orig_ores = fake_surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES}
+
+	for _,orig_ore in pairs(orig_ores) do
+		local orig_amount = orig_ore.amount
+		local amount = math.ceil(orig_amount * restore)
+
+		---@type LuaEntity? -- typecheck does not allow surface.create_entity in if to assign LuaEntity? to this unless I do this
+		local old_ore = surface.find_entities_filtered{position=orig_ore.position, type="resource", name=const.ACTIVE_SCRAP}[1] -- TODO: why not find_entity?
+		local opos = orig_ore.position
+		assert(surface.is_chunk_generated{x=math.floor(opos.x / 32), y=math.floor(opos.y / 32)})
+		if old_ore == nil and not const.INF_SCRAP_ENABLED then
+			-- fully drained, only finite tiles can deplete (with inf scrap on, a missing tile is off-island finite scrap, ignored)
+			-- ungenerated chunks get their tiles from mapgen
+			old_ore = surface.create_entity{name="scrap", position=orig_ore.position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
+		end
+		
+		if old_ore ~= nil then -- may fail if chunks are not generated yet?
+			if old_ore.name == "vault-scrap" then
+				local initial = math.max(orig_amount, amount)
+				if initial < INF_SCRAP_MIN then initial = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT end -- important to avoid depth bug (?)
+				old_ore.initial_amount = initial -- before amount, the minimum depends on it
+
+				-- this enforces minimum if setting to a low percentage
+				-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
+				local minimum = get_inf_scrap_minimum(initial) + INF_SCRAP_DEPLETED_BUMP_AMOUNT
+				if amount < minimum then amount = minimum end
+			elseif amount < 1 then
+				amount = 1 -- not allowed to set amount=0, and 0 would deplete finite tiles without on_resource_depleted
+			end
+			old_ore.amount = amount
+		end
+	end
+	
+	local radius = const.VAULT_DEFENSE_RADIUS
+	-- rescan overlapping vaults (ore is part of more than one radius), finite initial raised for restore > 100% and drained tiles
+	-- important!, lowered amounts count as mined, clear that or it triggers huge waves
+	-- this also restarts the mining rate window, so the gui shows the new rate instead of an average (wave timer is kept)
+	for _,v in pairs(storage.vaults) do
+		local e = v.entity
+		local tracker = v.scrap_tracker
+		tracker:scan_initial_finite(e.surface, e.position, radius)
+		tracker:scan(e.surface, e.position, radius, v.has_drills)
+		tracker:reset_mined(e.surface, e.position, radius, v.has_drills) -- no scan, already scanned above
+	
+		-- recreated drained tiles
+		common.update_drill_connections_near(surface, e.position, radius)
+	end
 end
 
 local VIS_DRAIN = false

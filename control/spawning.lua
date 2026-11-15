@@ -233,7 +233,7 @@ function Vault:_spawn_wave_bots(size, freq, bot_quality_tier)
 	self:_queue_spawn_drones(wave, "fulgoran-distractor", bot_quality_tier, n2, delay+0, 9*dur2)
 	self:_queue_spawn_drones(wave, "fulgoran-destroyer", bot_quality_tier, n3, delay+3.5, 10*dur3)
 	
-	--game.print("_spawn_wave: "..serpent.block(wave))
+	--log(dbg_print{"_spawn_wave_bots ", serpent.block(wave)})
 	return wave
 end
 

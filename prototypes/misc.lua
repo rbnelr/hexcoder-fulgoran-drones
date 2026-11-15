@@ -1,5 +1,5 @@
 local const = require("const")
-local common = require("prototypes.common")
+local myutil = require("lib.myutil")
 
 local misc = {}
 
@@ -22,7 +22,7 @@ function misc.data_updates()
 	-- this may be annoying, would be great as a hotkey or at least toggable at runtime
 	if const.ALLOW_DRILLS_WITHOUT_ORE then
 		for _,drill in pairs(data.raw["mining-drill"]) do
-			if common.list_contains(drill.resource_categories, "basic-solid") then -- not pumpjack
+			if myutil.list_contains(drill.resource_categories, "basic-solid") then -- not pumpjack
 				drill.require_resources_to_place = false
 			end
 		end

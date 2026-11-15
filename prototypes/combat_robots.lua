@@ -1,6 +1,6 @@
 local const = require("const")
-local common = require("prototypes.common")
 local meld = require("__core__.lualib.meld")
+local meld_helper = require("lib.meld_helper")
 
 local combat_robots = {}
 
@@ -613,7 +613,7 @@ local function capsule_recipes()
 		}
 	})
 	meld(data.raw["technology"]["distractor"], {
-		prerequisites = common.meld_add_or_assign{"battery-equipment"}
+		prerequisites = meld_helper.add_or_assign{"battery-equipment"}
 	})
 
 	-- destroyer capsule takes 4 distractors, spawns 4 destroyers now instead of 5
@@ -633,7 +633,7 @@ local function capsule_recipes()
 		}
 	})
 	meld(data.raw["technology"]["destroyer"], {
-		prerequisites = common.meld_add_or_assign{"electromagnetic-plant"}
+		prerequisites = meld_helper.add_or_assign{"electromagnetic-plant"}
 	})
 end
 

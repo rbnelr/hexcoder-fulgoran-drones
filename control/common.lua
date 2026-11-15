@@ -146,4 +146,29 @@ function common.update_drill_connections_near(surface, position, radius)
 	end
 end
 
+-- debug print that also logs, call like this so log keep the right source line ref:
+-- if const.DEBUG then log(dbg_print{"mgs ", "appended", <LocalisedString>}) end  or
+-- if const.DEBUG then log(dbg_print(<LocalisedString>, sound, color)) end
+-- command feedback (one player, no log): dbg_print("...", true, nil, player)
+---@param msg LocalisedString
+---@param sound boolean?
+---@param color Color?
+---@param player LuaPlayer? -- print only to this player, default all players
+---@return LocalisedString
+function dbg_print(msg, sound, color, player)
+	msg = {"", const.PRINT_PREFIX, msg}
+	local print_settings = {
+		skip = defines.print_skip.never, -- don't deduplicate messages
+		game_state = false, -- messages disappear (isn't this generally the case? like you can't scroll up in the console)
+		sound = sound and defines.print_sound.use_player_settings or defines.print_sound.never,
+		color = color or {1, 0.5, 0},
+	}
+	if player then
+		player.print(msg, print_settings)
+	else
+		game.print(msg, print_settings)
+	end
+	return msg
+end
+
 return common

@@ -58,7 +58,7 @@ local function on_entity_create(event)
 	end
 end
 
-local built_filter = myutil.merge(dmg.event_filter, {
+local built_filter = myutil.merge(dmg.filter_targets, {
 	{filter="type", type="simple-entity"},
 	{filter="name", name=const.VAULT_NAME, mode="and"}
 })
@@ -80,9 +80,9 @@ script.on_event(defines.events.on_entity_died, function(event)
 		end
 		--remove_alert(event)
 	end
-end, dmg.event_filter)
+end, dmg.filter_targets)
 
-script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.on_dmg_filter)
+script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.filter_targets_on_dmg)
 
 -- register vaults in newly generated chunks (fresh, nothing can have been mined there yet)
 script.on_event(defines.events.on_chunk_generated, function(event)

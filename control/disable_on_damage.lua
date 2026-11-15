@@ -76,6 +76,10 @@ function dmg.building_partially_repaired(id, e)
 	--storage.marked_military[id] = e
 end
 
+-- TODO: check if is_military_target can be changed for construction and logi bots, and if setting to false prevents them from being killed
+-- if so, or if <protected> works, could add a setting where player bots are safe, but would be weird if they could repair while attack is active
+-- TODO: see if there is any way to prevent repairs temporarily
+
 -- reset building
 -- either because building was restored by sufficient repair
 -- or building was destroyed or we otherwise want to reset it
@@ -87,7 +91,11 @@ end
 ---@param is_military_target boolean?
 function dmg.restore_building(id, e, data, is_military_target)
 	if e and e.valid and e.surface.name == "fulgora" then -- at least restrict to fulgora
-		e.is_military_target = is_military_target or false -- TODO: may be incorrect if the building was a military_target originally (only turrets?), but probably irrelevant
+		-- TODO: may be incorrect if the building was a military_target originally (only turrets?), but probably irrelevant
+		-- uninstall should restore this state as I belive allow_run_time_change_of_is_military_target is false
+		-- but other mods may set allow_run_time_change_of_is_military_target, so maybe we should get this right
+		-- TODO: is_military_target boolean|"reset", set to vurnerable,non vurnerable or reset to the default state for the prototype?, maybe test new protected variable
+		e.is_military_target = is_military_target or false
 		--storage.marked_military[id] = is_military_target and e or nil
 		
 		e.disabled_by_script = false
@@ -123,13 +131,13 @@ function dmg.fix_all_icons()
 	end
 end
 
-dmg.event_filter = {}
-dmg.on_dmg_filter = {}
+dmg.filter_targets = {}
+dmg.filter_targets_on_dmg = {}
 for _,type in pairs(const.TARGETS) do
-	table.insert(dmg.event_filter, {filter="type", type=type})
+	table.insert(dmg.filter_targets, {filter="type", type=type})
 	
-	table.insert(dmg.on_dmg_filter, {filter="type", type=type})
-	table.insert(dmg.on_dmg_filter, {filter="final-health", value=1, comparison="<=", mode="and"})
+	table.insert(dmg.filter_targets_on_dmg, {filter="type", type=type})
+	table.insert(dmg.filter_targets_on_dmg, {filter="final-health", value=1, comparison="<=", mode="and"})
 end
 
 function dmg.on_entity_damaged(event)

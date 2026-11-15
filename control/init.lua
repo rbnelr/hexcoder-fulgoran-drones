@@ -6,7 +6,7 @@ require("control.spawning") -- adds functions to Vault
 local depth_scaling = require("control.depth_scaling") -- adds functions to Vault
 local dmg = require("control.disable_on_damage")
 local ore = require("control.ore_tracking")
-local recreate_fulgora = require("control.recreate_fulgora")
+local original_mapgen = require("control.original_mapgen")
 local dead_bots = require("control.dead_bots")
 
 -- 'somewhat lazy' init ideally called in every handler, intentionally global
@@ -30,12 +30,16 @@ function init()
 	end
 	
 	if init then
+		if const.DEBUG then
+			log(dbg_print("Doing mod init"))
+		end
+		
 		dead_bots.update_unlocked_qualities()
 		
 		local surface = game.get_surface("fulgora")
 		if surface then
-			-- respawn vaults, vault scrap to inf scrap setting
-			recreate_fulgora.convert_ore_and_restore_vaults(surface) -- freezes the game for a bit, warn user or make user trigger it manually?
+			-- respawn vaults, and convert vault scrap between finite<->infinite on existing chunks
+			original_mapgen.convert_ore_and_restore_vaults(surface) -- freezes the game for a bit, warn user or make user trigger it manually?
 			
 			for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
 				get_or_init_vault(e, "init")
@@ -52,9 +56,22 @@ function init()
 	end
 end
 
--- reset for dev purposes
--- but may also be used for deinstalling mod
-local function reset()
+-- safely clear mod storage and reset all game state for dev purposes or deinstalling mod
+-- manually delete our entities (vault near wall, hidden waypoints, drones) (not needed for uninstall, could be slow)
+-- reset local_effect.quality on drills around mods (important since that would get stuck otherwise)
+-- clear this mods LuaRendering
+-- delete drone force (would keep existing)
+-- delete fake surface (would keep existing)
+-- reset buildings disabled by drones, important or else disabled machines would get stuck
+--   (reset disabled_by_script, is_military_target, custom_status message and disabled icon)
+-- storage forgets about vaults, but they will be found and initialized again by init()
+--  (and restored to identical state other than the active wave and rng)
+---@param reason string? -- logged, from describe_config_changes
+local function reset(reason)
+	if const.DEBUG then
+		log(dbg_print("Doing mod reset"..(reason and (": "..reason) or "")))
+	end
+	
 	local surface = game.get_surface("fulgora")
 	if surface then
 		-- delete neutral entities
@@ -65,6 +82,7 @@ local function reset()
 		for _,e in pairs(surface.find_entities_filtered{force=const.DRONE_FORCE}) do
 			e.destroy()
 		end
+		-- TODO: are projectiles and particles handled too, or do we even need to bother with them?
 		
 		depth_scaling.reset_all_drills_local_quality_effect(surface)
 	end
@@ -85,8 +103,11 @@ local function reset()
 		game.merge_forces(drone_force, game.forces["player"])
 	end
 	
+	original_mapgen.delete_all_fake_surfaces()
+	
 	-- fix_building only makes sure buildings that are stuck depite being repaired get enabled
 	-- if used for deinstall, want restore_building instead
+	-- TODO: make this work correctly for uninstall (restore all buildings, not just fix_building = restore if repaired yet somehow still disabled)
 	local s = storage
 	if s and s.poll_repaired then
 		for _,e in pairs(s.poll_repaired) do
@@ -95,10 +116,9 @@ local function reset()
 			end
 		end
 	end
-	-- this makes us forget vaults, active waves and bots
-	storage = {}
 	
-	-- vaults will be rescanned, but active bots will linger until dying by timeout
+	--
+	storage = {}
 end
 
 
@@ -121,7 +141,7 @@ script.register_metatable("OreTracker", ore.OreTracker)
 ---@field render_objs table<player_index, LuaRenderObject[]?>
 ---
 ---@field friend_end_tick integer?
----@field last_used_fake_fulgora MapTick?
+---@field fake_surfaces FakeSurfaces? -- original_mapgen
 ---@field settings_changed boolean?
 ---@field highest_quality_unlocked integer -- 1-5
 
@@ -134,8 +154,6 @@ script.on_init(init)
 
 local DO_DEV_RESET = true
 script.on_configuration_changed(function(data)
-	log("on_configuration_changed:".. serpent.line(data))
-	
 	local setting_changed = data.mod_startup_settings_changed
 	local changes = data.mod_changes[const.MOD_NAME]
 	
@@ -144,8 +162,13 @@ script.on_configuration_changed(function(data)
 	local dev_reset = DO_DEV_RESET and const.DEBUG
 	
 	if changes or setting_changed or dev_reset then
+		-- only logged when we act on it (in reset), third party mod changes alone are not interesting
+		data.migrations = nil -- one empty table per prototype type, just noise
+		data["_dev_reset"] = dev_reset -- include in print
+		local reason = serpent.line(data)
+
 		if dev_reset then -- dev reset
-			reset()
+			reset(reason)
 			init()
 			return
 		end
@@ -158,11 +181,11 @@ script.on_configuration_changed(function(data)
 		--end
 		
 		-- reset + init, kinda works, but may be arkward
-		reset()
+		reset(reason)
 		init()
 		return
 	end
-	-- setting_changed: inf scrap toggle handled by reset + init (recreate_fulgora.convert_ore_and_restore_vaults)
+	-- setting_changed: inf scrap toggle handled by reset + init (original_mapgen.convert_ore_and_restore_vaults)
 	-- vault-scrap prototype is always defined (hidden when off), so it is not deleted
 end)
 

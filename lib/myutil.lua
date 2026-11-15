@@ -1,5 +1,46 @@
 local util = require("util")
+
 local myutil = {}
+
+-- true if list contains value, or any of values if values is a table
+---@param list any[]
+---@param values any[]|any
+---@return boolean
+function myutil.list_contains(list, values)
+	if type(values) == "table" then
+		for _,value in pairs(values) do
+			for _,item in pairs(list) do
+				if value == item then
+					return true
+				end
+			end
+		end
+	else
+		local value = values
+		for _,item in pairs(list) do
+			if value == item then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- concat lists into new list
+-- does not deduplicate
+-----@param list any[]
+-----@param list2 any[]
+-----@return any[]
+--function myutil.list_concat(list, list2)
+--	local new_list = {}
+--	for _,v in pairs(list) do
+--		table.insert(new_list, v)
+--	end
+--	for _,v in pairs(list2) do
+--		table.insert(new_list, v)
+--	end
+--	return new_list
+--end
 
 -- merge tables (copy of tbl1 with the values of tbl2 appended), used for event filters
 function myutil.merge(tbl1, tbl2)
