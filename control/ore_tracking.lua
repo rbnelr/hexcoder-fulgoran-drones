@@ -133,7 +133,6 @@ end
 -- has_drills: mining is possible until the next scan, keep the per-tile amounts, otherwise drop them (on_drill_built() takes a new baseline)
 -- two versions for simplicity and potential perf, inf scrap is a startup setting
 if const.INF_SCRAP_ENABLED then
-	--#region Infinite
 	-- infinite: initial is initial_amount, minimum includes the bump, mined corrected for yield and our faster drain
 	---@param surface LuaSurface
 	---@param position MapPosition
@@ -170,7 +169,9 @@ if const.INF_SCRAP_ENABLED then
 		self.scan_tick = game.tick
 	end
 	
-	script.on_event(defines.events.on_resource_depleted, function(event)
+	-- registered in control/events.lua
+	---@param event EventData.on_resource_depleted
+	function ore.on_resource_depleted(event)
 		local ore = event.entity
 		if ore.name ~= "vault-scrap" then return end
 		init()
@@ -207,10 +208,8 @@ if const.INF_SCRAP_ENABLED then
 		--		new_yield=ore.amount / INF_SCRAP_NORMAL * 100,
 		--	})
 		--end
-	end)
-	--#endregion
+	end
 else
-	--#region Finite
 	-- finite: registers initial on first sight, fake minimum is 20% of initial, mined out tiles are in depleted_initial
 	---@param surface LuaSurface
 	---@param position MapPosition
@@ -278,7 +277,9 @@ else
 		self.scan_tick = game.tick
 	end
 
-	script.on_event(defines.events.on_resource_depleted, function(event)
+	-- registered in control/events.lua
+	---@param event EventData.on_resource_depleted
+	function ore.on_resource_depleted(event)
 		local ore = event.entity
 		if ore.name ~= "scrap" then return end
 		init()
@@ -310,8 +311,7 @@ else
 				end
 			end
 		end
-	end)
-	--#endregion
+	end
 end
 
 -- finite: rebuild initial amounts and mined out tiles from fake fulgora (slow, cheap during init since convert just generated it), scan() after this to update depth
@@ -460,7 +460,8 @@ end
 --#region Debug drain visualisation
 local VIS_DRAIN = false
 if const.DEBUG and VIS_DRAIN then
-	script.on_nth_tick(1, function(event)
+	-- on_nth_tick(1) in control/events.lua, nil when off
+	function ore.debug_vis_drain(event)
 		local player = game.get_player(1) ---@cast player -nil
 		for _,vault in pairs(player.surface.find_entities_filtered{name=const.VAULT_NAME, position=player.position, radius=40}) do
 			for _,drill in pairs(player.surface.find_entities_filtered{type="mining-drill", position=vault.position, radius=const.VAULT_DEFENSE_RADIUS}) do
@@ -481,7 +482,7 @@ if const.DEBUG and VIS_DRAIN then
 		end
 
 		--game.print("drains: "..serpent.line(drains))
-	end)
+	end
 end
 --#endregion
 

@@ -24,18 +24,19 @@ local depth_scaling = {}
 -- quality output of regular scrap mined with drill quality effect ("-" = under 1%)
 -- "value" tiers: 1, 1.3, 1.6, 1.9, 2.5 (most quality effects scale like this)
 -- "science" tiers: 1x, 2x, 3x, 4x, 6x (science yield scales like this)
--- TODO: now that tiers are established, list them too
--- | effect   | normal | uncommon | rare | epic | legendary | eff. value | eff. science |
--- |----------|--------|----------|------|------|-----------|------------|--------------|
--- | +0%      |   100% |        - |    - |    - |         - |       1.00 |         1.00 |
--- | +50%     |    50% |      48% |   2% |    - |         - |       1.16 |         1.53 |
--- | +100%    |      - |      90% |  10% |    - |         - |       1.33 |         2.10 |
--- | +500%    |      - |      50% |  48% |   2% |         - |       1.46 |         2.53 |
--- | +1000%   |      - |        - |  90% |  10% |         - |       1.63 |         3.10 |
--- | +5000%   |      - |        - |  50% |  48% |        3% |       1.76 |         3.55 |
--- | +10000%  |      - |        - |    - |  90% |       10% |       1.96 |         4.20 |
--- | +50000%  |      - |        - |    - |  50% |       50% |       2.20 |         5.00 |
--- | +100000% |      - |        - |    - |    - |      100% |       2.50 |         6.00 |
+-- "tier": scrap_tier() that quality_level_to_drill_effect() maps to this effect (before distance falloff and spread)
+--  0-1 linear, then each tier is 10x effect, linear within the tier (so x.44 = 5x the tier's start), MAX_SCRAP_QUALITY = max tier + 1
+-- | tier | effect   | normal | uncommon | rare | epic | legendary | eff. value | eff. science |
+-- |------|----------|--------|----------|------|------|-----------|------------|--------------|
+-- | 0    | +0%      |   100% |        - |    - |    - |         - |       1.00 |         1.00 |
+-- | 0.5  | +50%     |    50% |      48% |   2% |    - |         - |       1.16 |         1.53 |
+-- | 1    | +100%    |      - |      90% |  10% |    - |         - |       1.33 |         2.10 |
+-- | 1.44 | +500%    |      - |      50% |  48% |   2% |         - |       1.46 |         2.53 |
+-- | 2    | +1000%   |      - |        - |  90% |  10% |         - |       1.63 |         3.10 |
+-- | 2.44 | +5000%   |      - |        - |  50% |  48% |        3% |       1.76 |         3.55 |
+-- | 3    | +10000%  |      - |        - |    - |  90% |       10% |       1.96 |         4.20 |
+-- | 3.44 | +50000%  |      - |        - |    - |  50% |       50% |       2.20 |         5.00 |
+-- | 4    | +100000% |      - |        - |    - |    - |      100% |       2.50 |         6.00 |
 
 -- quality scrap is capped to quality tech unlocks by the engine
 -- bots are capped by us via dead_bots.downgrade_locked_qualities()

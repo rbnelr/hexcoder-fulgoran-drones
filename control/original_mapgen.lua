@@ -63,7 +63,9 @@ function original_mapgen.delete_all_fake_surfaces()
 end
 
 -- actually delete fake surfaces after multiple requests could use them (unused for some seconds)
-script.on_nth_tick(60, function(event)
+-- on_nth_tick(60) in control/events.lua
+---@param event NthTickEventData
+function original_mapgen.delete_unused_fake_surfaces(event)
 	local fake_surfaces = storage.fake_surfaces
 	if fake_surfaces == nil then return end
 	for name, tick in pairs(fake_surfaces) do
@@ -71,7 +73,7 @@ script.on_nth_tick(60, function(event)
 			original_mapgen.delete_fake_surface(name) -- clears fake_surfaces[name], assigning nil to an existing key is fine while iterating
 		end
 	end
-end)
+end
 
 -- create a new fake surface with copied map_gen_settings from real_surface
 -- use previously generated version if it has not been auto-deleted, to hopefully improve performance

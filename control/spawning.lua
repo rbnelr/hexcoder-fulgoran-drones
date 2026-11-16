@@ -6,6 +6,8 @@ local depth_scaling = require("control.depth_scaling")
 local myutil = require("lib.myutil")
 local round = myutil.round
 
+local spawning = {} -- only event handlers, the rest is added to Vault
+
 local function spawn_position()
 	local spawn_r_x = const.VAULT_SPAWN_RADIUS
 	local spawn_r_y = spawn_r_x * const.VAULT_SHAFT_ELLIPSE_K
@@ -122,7 +124,9 @@ end
 -- projectile automatically spawns bot, but we use callback to keep tracking the bot
 -- and to set force and time to live
 -- quality projectiles automatically spawn bots at correct quality
-script.on_event(defines.events.on_trigger_created_entity, function(event)
+-- registered in control/events.lua
+---@param event EventData.on_trigger_created_entity
+function spawning.on_trigger_created_entity(event)
 	local bot = event.entity
 	local source = event.source
 	-- we are not actually being told the projectile, which makes things harder as I can't associate an id with the spawned bot
@@ -145,7 +149,7 @@ script.on_event(defines.events.on_trigger_created_entity, function(event)
 			--emerging projectile cleared in update_emerging
 		end
 	end
-end)
+end
 
 ---@param drop_loot boolean?
 function Vault:_kill_all_bots(drop_loot)
@@ -347,3 +351,4 @@ function Vault:update_waves()
 		self.cur_rng2 = nil
 	end
 end
+return spawning

@@ -9,6 +9,10 @@ local ore = require("control.ore_tracking")
 local original_mapgen = require("control.original_mapgen")
 local dead_bots = require("control.dead_bots")
 
+-- mod lifecycle handlers (registered in control/events.lua), the global init() is defined here too
+-- not named init because of the global function (file was init.lua)
+local initialize = {}
+
 -- copy of this mod's startup settings, to tell which of them changed in on_configuration_changed
 -- (data.mod_startup_settings_changed is true for any mod's startup settings, and on install)
 ---@return table<string, ModSettingValue>
@@ -162,11 +166,10 @@ script.register_metatable("OreTracker", ore.OreTracker)
 ---
 ---@field startup_settings table<string, ModSettingValue> -- copy of our startup settings at the last init/on_configuration_changed, see get_startup_settings
 
-script.on_init(init) -- only gets called on mod install, both on new game start with mod installed and late install on existing save
-
 -- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
 local DO_DEV_RESET = false
-script.on_configuration_changed(function(data)
+---@param data ConfigurationChangedData
+function initialize.on_configuration_changed(data)
 	-- changes -> mod version changed (including install on running game, has old_version==nil)
 	-- mod_startup_settings_changed -> startup settings (of any mod!) have changed (or install on running game), so compare our own copy instead
 	local mod_change = data.mod_changes[const.MOD_NAME]
@@ -211,6 +214,11 @@ script.on_configuration_changed(function(data)
 		init()
 		return
 	end
-end)
+end
 
-script.on_event(defines.events.on_runtime_mod_setting_changed, common.update_runtime_settings)
+---@param event EventData.on_runtime_mod_setting_changed
+function initialize.on_runtime_mod_setting_changed(event)
+	common.update_runtime_settings(event)
+end
+
+return initialize

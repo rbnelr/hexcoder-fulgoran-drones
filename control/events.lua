@@ -7,6 +7,14 @@ local depth_scaling = require("control.depth_scaling")
 local dead_bots = require("control.dead_bots")
 local movement = require("control.bot_movement")
 local gui = require("control.gui")
+local spawning = require("control.spawning")
+local ore = require("control.ore_tracking")
+local original_mapgen = require("control.original_mapgen")
+local initialize = require("control.initialize")
+
+-- All event registrations of the mod are in register_all() at the end of this file, other files only export their handlers
+-- (one handler per event and nth_tick period per mod, so this also avoids conflicts)
+-- commands stay in control/commands.lua and control/tests.lua (tests also registers its own on_nth_tick at runtime)
 
 local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 	[defines.target_type.entity] = function(event)
@@ -26,13 +34,14 @@ local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 		storage.render_objs[event.useful_id] = nil
 	end,
 }
-script.on_event(defines.events.on_object_destroyed, function(event)
+---@param event EventData.on_object_destroyed
+local function on_object_destroyed(event)
 	local handler = deathrattles[event.type]
 	if handler ~= nil then
 		init()
 		handler(event)
 	end
-end)
+end
 
 local function on_entity_create(event)
 	init()
@@ -62,15 +71,8 @@ local built_filter = myutil.merge(dmg.filter_targets, {
 	{filter="type", type="simple-entity"},
 	{filter="name", name=const.VAULT_NAME, mode="and"}
 })
--- None are triggered by map generator, on_chunk_generated handles newly generated vaults
-script.on_event(defines.events.on_built_entity, on_entity_create, built_filter)
-script.on_event(defines.events.on_robot_built_entity, on_entity_create, built_filter)
-script.on_event(defines.events.on_space_platform_built_entity, on_entity_create, built_filter)
-script.on_event(defines.events.script_raised_built, on_entity_create, built_filter)
-script.on_event(defines.events.script_raised_revive, on_entity_create, built_filter)
-script.on_event(defines.events.on_entity_cloned, on_entity_create, built_filter) -- source to destination
-
-script.on_event(defines.events.on_entity_died, function(event)
+---@param event EventData.on_entity_died
+local function on_entity_died(event)
 	if event.entity.surface.name == "fulgora" then
 		if const.IS_TARGET[event.entity.type] then
 			-- TODO: why am I calling this again? I think to reset non-military state so that revived entity will actually get attacked
@@ -80,22 +82,18 @@ script.on_event(defines.events.on_entity_died, function(event)
 		end
 		--remove_alert(event)
 	end
-end, dmg.filter_targets)
-
-script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.filter_targets_on_dmg)
+end
 
 -- register vaults in newly generated chunks (fresh, nothing can have been mined there yet)
-script.on_event(defines.events.on_chunk_generated, function(event)
+---@param event EventData.on_chunk_generated
+local function on_chunk_generated(event)
 	if event.surface.name == "fulgora" then
 		init()
 		for _,e in pairs(event.surface.find_entities_filtered{name=const.VAULT_NAME, area=event.area}) do
 			get_or_init_vault(e, "on_chunk_generated")
 		end
 	end
-end)
-
--- on_trigger_created_entity in control/spawning.lua
--- on_resource_depleted in control/ore_tracking.lua
+end
 
 -- This was an attempt at preventing alerts on select entities via script, but it did not work
 -- we can't disable or mute alterts per surface, only per type
@@ -131,11 +129,9 @@ end)
 --	end
 --end) -- can be filtered to only enemy force killing things, but my actual drone force only exists after init
 
-script.on_event(defines.events.on_research_finished, dead_bots.update_unlocked_qualities)
-script.on_event(defines.events.on_research_reversed, dead_bots.update_unlocked_qualities) -- unresearched from editor
-
 ---- Tick
-script.on_event(defines.events.on_tick, function(event)
+---@param event EventData.on_tick
+local function on_tick(event)
 	--local prof = helpers.create_profiler()
 	--common._dev_reset()
 	init()
@@ -180,12 +176,11 @@ script.on_event(defines.events.on_tick, function(event)
 	
 	--prof.stop()
 	--game.print(prof)
-end)
-
--- specific on_nth_tick handlers in other placs
+end
 
 ---- Gui + viz circle
-script.on_event(defines.events.on_selected_entity_changed, function(event)
+---@param event EventData.on_selected_entity_changed
+local function on_selected_entity_changed(event)
 	local player = game.get_player(event.player_index) ---@cast player -nil
 	local selected = player.selected
 	local prev = event.last_entity
@@ -194,11 +189,53 @@ script.on_event(defines.events.on_selected_entity_changed, function(event)
 		gui.update_viz(player)
 		gui.update_info_gui(player)
 	end
-end)
+end
 -- on_selected_entity_changed viz can get stuck sometimes
 -- seemingly on_selected_entity_changed does not handle going into map view, and there's no event for map view switch?
 -- so poll for this, should be okay
-script.on_nth_tick(20, function(event)
+---@param event NthTickEventData
+local function poll_viz(event)
 	init()
 	gui.update_all_viz()
-end)
+end
+
+---- Registration
+local function register_all()
+	script.on_event(defines.events.on_object_destroyed, on_object_destroyed)
+
+	-- None are triggered by map generator, on_chunk_generated handles newly generated vaults
+	script.on_event(defines.events.on_built_entity, on_entity_create, built_filter)
+	script.on_event(defines.events.on_robot_built_entity, on_entity_create, built_filter)
+	script.on_event(defines.events.on_space_platform_built_entity, on_entity_create, built_filter)
+	script.on_event(defines.events.script_raised_built, on_entity_create, built_filter)
+	script.on_event(defines.events.script_raised_revive, on_entity_create, built_filter)
+	script.on_event(defines.events.on_entity_cloned, on_entity_create, built_filter) -- source to destination
+
+	script.on_event(defines.events.on_entity_died, on_entity_died, dmg.filter_targets)
+	script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.filter_targets_on_dmg)
+	script.on_event(defines.events.on_chunk_generated, on_chunk_generated)
+	script.on_event(defines.events.on_trigger_created_entity, spawning.on_trigger_created_entity)
+	script.on_event(defines.events.on_resource_depleted, ore.on_resource_depleted) -- inf or finite version, by the inf scrap setting
+
+	script.on_event(defines.events.on_research_finished, dead_bots.update_unlocked_qualities)
+	script.on_event(defines.events.on_research_reversed, dead_bots.update_unlocked_qualities) -- unresearched from editor
+	if const.HARVESTABLE_BOTS then
+		script.on_event(const.MOD_NAME.."-on-create-combat-bot-remnant", dead_bots.on_create_remnant)
+		script.on_event(const.MOD_NAME.."-on-combat-bot-died", dead_bots.on_bot_died)
+	end
+
+	script.on_event(defines.events.on_tick, on_tick)
+	script.on_event(defines.events.on_selected_entity_changed, on_selected_entity_changed)
+
+	script.on_nth_tick(20, poll_viz)
+	script.on_nth_tick(60, original_mapgen.delete_unused_fake_surfaces)
+	script.on_nth_tick(10*60, dead_bots.update_unlocked_qualities) -- catch research_all_technologies() etc.
+	if ore.debug_vis_drain then
+		script.on_nth_tick(1, ore.debug_vis_drain)
+	end
+end
+
+script.on_init(init) -- only gets called on mod install, both on new game start with mod installed and late install on existing save
+script.on_configuration_changed(initialize.on_configuration_changed)
+script.on_event(defines.events.on_runtime_mod_setting_changed, initialize.on_runtime_mod_setting_changed)
+register_all()

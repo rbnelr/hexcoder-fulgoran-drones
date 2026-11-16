@@ -19,8 +19,6 @@ function dead_bots.update_unlocked_qualities()
 	storage.highest_quality_unlocked = highest
 end
 
-script.on_nth_tick(10*60, dead_bots.update_unlocked_qualities) -- catch research_all_technologies() etc.
-
 ---@param res_name string bot_resource_name
 ---@return string
 function dead_bots.downgrade_locked_qualities(res_name)
@@ -63,19 +61,20 @@ function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
 	end
 end
 
+-- custom event handlers, registered in control/events.lua
 if const.HARVESTABLE_BOTS then -- was const.HARVEST_BOTS (nil, handler never registered)
 	-- only triggers for hostile prototypes
-	script.on_event(const.MOD_NAME.."-on-create-combat-bot-remnant", function(event)
+	function dead_bots.on_create_remnant(event)
 		local surface = game.get_surface(event.surface_index) ---@diagnostic disable-line
 		if surface and surface.name == "fulgora" then
 			--init()
 			dead_bots.add_dead_bot_resource(surface, event.target_position, event.effect_id, 1) ---@diagnostic disable-line
 			-- could selectively spawn normal corpse here, but not needed right now
 		end
-	end)
-	
+	end
+
 	---@param event any where is custom event data type?
-	script.on_event(const.MOD_NAME.."-on-combat-bot-died", function(event)
+	function dead_bots.on_bot_died(event)
 		local surface = game.get_surface(event.surface_index) ---@diagnostic disable-line
 		if surface and surface.name == "fulgora" then
 			--init()
@@ -105,8 +104,7 @@ if const.HARVESTABLE_BOTS then -- was const.HARVEST_BOTS (nil, handler never reg
 				frame_speed = 0.5 + math.random()
 			}
 		end
-	end)
-	
+	end
 end
 
 return dead_bots
