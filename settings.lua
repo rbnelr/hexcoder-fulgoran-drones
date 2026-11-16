@@ -98,4 +98,12 @@ data:extend({
 		setting_type = "startup",
 		default_value = false,
 	},
+	{
+		-- runtime so uninstalling needs no restart, ticking it runs reset() and unregisters all handlers (control/events.lua)
+		type = "bool-setting",
+		name = MOD_NAME.."-uninstall",
+		order = "z",
+		setting_type = "runtime-global",
+		default_value = false,
+	},
 })

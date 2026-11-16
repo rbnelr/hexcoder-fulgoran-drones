@@ -9,6 +9,28 @@ local ore = require("control.ore_tracking")
 local original_mapgen = require("control.original_mapgen")
 local dead_bots = require("control.dead_bots")
 
+---@class obj_id : integer -- register_on_object_destroyed-based id
+---@class unit_number : integer
+---@class player_index : integer
+---@class tile_key : integer
+
+---@class ModStorage
+---@field vaults table<obj_id, Vault> -- all registed vaults, should be all since init() and chunkgen register them as soon as they appear
+---@field poll_vaults StaggerTickState -- stagger_tick state for vaults
+---@field active_vaults table<obj_id, Vault> -- waves with active waves only
+---
+---@field poll_repaired Damaged[]
+---@field poll_prev unit_number?
+---
+---@field render_objs table<player_index, LuaRenderObject[]>
+---
+---@field friend_end_tick integer?
+---@field fake_surfaces FakeSurfaces? -- original_mapgen
+---@field settings_changed boolean?
+---@field highest_quality_unlocked integer -- 1-5
+---
+---@field startup_settings table<string, ModSettingValue> -- copy of our startup settings at the last init/on_configuration_changed, see get_startup_settings
+
 -- mod lifecycle handlers (registered in control/events.lua), the global init() is defined here too
 -- not named init because of the global function (file was init.lua)
 local initialize = {}
@@ -30,7 +52,9 @@ end
 -- 'somewhat lazy' init ideally called in every handler, intentionally global
 -- used during dev, but manually resetting via ctrl+alt on load makes this obsolete
 -- TODO: remove init() calls everywhere?
-function init()
+---@param convert_scrap boolean? -- first init only: convert vault island scrap to the inf scrap setting and respawn missing vaults (slow, fake fulgora)
+--                                  default true (on_init, lazy calls), false when only the mod version or vault radius changed (migrate)
+function init(convert_scrap)
 	local s = storage
 	local init = next(s) == nil
 	
@@ -57,9 +81,11 @@ function init()
 		
 		local surface = game.get_surface("fulgora")
 		if surface then
-			-- respawn vaults, and convert vault scrap between finite<->infinite on existing chunks
-			original_mapgen.convert_ore_and_restore_vaults(surface) -- freezes the game for a bit, warn user or make user trigger it manually?
-			
+			if convert_scrap ~= false then
+				-- respawn vaults, and convert vault scrap between finite<->infinite on existing chunks
+				original_mapgen.convert_ore_and_restore_vaults(surface) -- freezes the game for a bit, warn user or make user trigger it manually?
+			end
+
 			for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
 				get_or_init_vault(e, "init")
 			end
@@ -78,15 +104,17 @@ end
 -- safely clear mod storage and reset all game state for dev purposes or deinstalling mod
 -- manually delete our entities (vault near wall, hidden waypoints, drones) (not needed for uninstall, could be slow)
 -- reset local_effect.quality on drills around mods (important since that would get stuck otherwise)
--- clear this mods LuaRendering
+-- clear this mods LuaRendering and remove guis
 -- delete drone force (would keep existing)
 -- delete fake surface (would keep existing)
 -- reset buildings disabled by drones, important or else disabled machines would get stuck
 --   (reset disabled_by_script, is_military_target, custom_status message and disabled icon)
 -- storage forgets about vaults, but they will be found and initialized again by init()
 --  (and restored to identical state other than the active wave and rng)
+-- leaves the world as if the mod did not exist (also the uninstall), except the dead-<bot> wrecks (deleted with their prototypes on removal)
+---@param convert_scrap boolean? -- vault-scrap -> scrap (uninstall, inf scrap setting changed)
 ---@param reason string? -- logged, from describe_config_changes
-local function reset(reason)
+local function reset(convert_scrap, reason)
 	if const.DEBUG then
 		log(dbg_print("Doing mod reset"..(reason and (": "..reason) or "")))
 	end
@@ -101,9 +129,21 @@ local function reset(reason)
 		for _,e in pairs(surface.find_entities_filtered{force=const.DRONE_FORCE}) do
 			e.destroy()
 		end
-		-- TODO: are projectiles and particles handled too, or do we even need to bother with them?
-		
+		-- emerge/descend projectiles have the drone force too, so they are gone
+		-- dying particles are not entities, one still in the air lands and creates a wreck if the handler is registered (harmless)
+
 		depth_scaling.reset_all_drills_local_quality_effect(surface)
+
+		-- buildings as if the mod did not exist: enabled again if we disabled them (not healed), prototype military state
+		-- (fix_building only enabled stuck buildings that were already repaired), init() makes the ones around vaults military again
+		-- icons go with rendering.clear below
+		for _,e in pairs(surface.find_entities_filtered{type=const.TARGETS}) do
+			dmg.restore_building(e.unit_number, e, nil, false)
+		end
+
+		if convert_scrap then
+			original_mapgen.convert_all_vault_scrap_to_scrap(surface) -- init(true) converts it back
+		end
 	end
 	
 	rendering.clear(const.MOD_NAME)
@@ -123,53 +163,29 @@ local function reset(reason)
 	end
 	
 	original_mapgen.delete_all_fake_surfaces()
-	
-	-- fix_building only makes sure buildings that are stuck depite being repaired get enabled
-	-- if used for deinstall, want restore_building instead
-	-- TODO: make this work correctly for uninstall (restore all buildings, not just fix_building = restore if repaired yet somehow still disabled)
-	local s = storage
-	if s and s.poll_repaired then
-		for _,e in pairs(s.poll_repaired) do
-			if e.entity and e.entity.valid then
-				dmg.fix_building(e.entity.unit_number, e.entity)
-			end
-		end
-	end
-	
+
 	--
 	storage = {}
+end
+
+-- what a mod update or an important startup setting change needs, no real migrations yet
+---@param convert_scrap boolean -- only when the scrap type changes, skips the slow fake fulgora otherwise
+---@param reason string? -- logged
+local function migrate(convert_scrap, reason)
+	reset(convert_scrap, reason)
+	init(convert_scrap)
 end
 
 
 script.register_metatable("Vault", Vault)
 script.register_metatable("OreTracker", ore.OreTracker)
 
----@class obj_id : integer -- register_on_object_destroyed-based id
----@class unit_number : integer
----@class player_index : integer
----@class tile_key : integer
-
----@class ModStorage
----@field vaults table<obj_id, Vault> -- all registed vaults, should be all since init() and chunkgen register them as soon as they appear
----@field poll_vaults StaggerTickState -- stagger_tick state for vaults
----@field active_vaults table<obj_id, Vault> -- waves with active waves only
----
----@field poll_repaired Damaged[]
----@field poll_prev unit_number?
----
----@field render_objs table<player_index, LuaRenderObject[]?>
----
----@field friend_end_tick integer?
----@field fake_surfaces FakeSurfaces? -- original_mapgen
----@field settings_changed boolean?
----@field highest_quality_unlocked integer -- 1-5
----
----@field startup_settings table<string, ModSettingValue> -- copy of our startup settings at the last init/on_configuration_changed, see get_startup_settings
-
 -- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
 local DO_DEV_RESET = false
 ---@param data ConfigurationChangedData
 function initialize.on_configuration_changed(data)
+	if common.UNINSTALL then return end -- paused, reset() already ran, init() runs when unticked
+
 	-- changes -> mod version changed (including install on running game, has old_version==nil)
 	-- mod_startup_settings_changed -> startup settings (of any mod!) have changed (or install on running game), so compare our own copy instead
 	local mod_change = data.mod_changes[const.MOD_NAME]
@@ -183,8 +199,8 @@ function initialize.on_configuration_changed(data)
 		if old_settings[name] ~= value then changed_settings[name] = true end -- all ours are bool/number, no table compare needed
 	end
 	-- only these need the reset, the rest only affects the data stage (or the game removes prototypes itself), debug is covered by dev_reset
-	local important_setting_changed =
-		changed_settings[const.MOD_NAME.."-inf-scrap"] or -- converts the ore finite<->infinite
+	local inf_scrap_changed = changed_settings[const.MOD_NAME.."-inf-scrap"] or false -- converts the ore finite<->infinite
+	local important_setting_changed = inf_scrap_changed or
 		changed_settings[const.MOD_NAME.."-vault-defense-radius"] -- trackers were scanned with the old radius
 	-- could potentially despawn bot resource at higher quality when no quality is wanted, but not worth it
 	
@@ -200,25 +216,46 @@ function initialize.on_configuration_changed(data)
 		local reason = serpent.line(data)
 
 		if dev_reset then -- dev reset
-			reset(reason)
-			init()
+			migrate(true, reason)
 			return
 		end
-		
+
 		-- installing on existing save does on_init then on_configuration_changed (with mod_startup_settings_changed=true!)
 		-- do not reset+init again!
 		if mod_change and mod_change.old_version == nil then return end
-		
+
 		-- reset + init, kinda works, but may be arkward
-		reset(reason)
-		init()
+		-- scrap only converted when the inf scrap setting changed (also for saves without startup_settings: everything counts as changed)
+		migrate(inf_scrap_changed, reason)
 		return
 	end
 end
 
+function initialize.on_init()
+	if common.UNINSTALL then return end -- new game or late install with the checkbox on: stay uninitialized until unticked
+	init()
+end
+
+-- ticking "Prepare for uninstall" runs reset(), unticking init(), control/events.lua then unregisters/registers the other handlers
 ---@param event EventData.on_runtime_mod_setting_changed
 function initialize.on_runtime_mod_setting_changed(event)
-	common.update_runtime_settings(event)
+	if event.setting == common.UNINSTALL_SETTING_NAME then
+		common.UNINSTALL = settings.global[common.UNINSTALL_SETTING_NAME].value --[[@as boolean]]
+		if common.UNINSTALL then
+			reset(true, "uninstall")
+			
+			log(dbg_print("Prepared for uninstall: Killed waves, restored buildings, drill quality removed, vault scrap converted to normal scrap."))
+			log(dbg_print("Save the game now, then remove the mod.", true))
+		else
+			common.update_runtime_settings({name="_mod_load", setting_type="runtime-global"}) -- re-cache once resumed
+			
+			init(true)
+			
+			log(dbg_print("Resuming after prepare for uninstall.", true))
+		end
+	elseif not common.UNINSTALL then -- prepared for uninstall: storage stays empty (settings_changed hack), init() needs that for the first init
+		common.update_runtime_settings(event)
+	end
 end
 
 return initialize

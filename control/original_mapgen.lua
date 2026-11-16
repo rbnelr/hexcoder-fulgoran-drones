@@ -239,12 +239,14 @@ end
 -- add or remove vault-scrap in the surface autoplace settings, only affects chunks generated later
 -- data stage does this for the planet, but an existing surface keeps the settings it was created with
 ---@param surface LuaSurface
-function original_mapgen.update_autoplace_settings(surface)
+---@param enabled boolean? -- default const.INF_SCRAP_ENABLED, false for uninstall
+function original_mapgen.update_autoplace_settings(surface, enabled)
+	if enabled == nil then enabled = const.INF_SCRAP_ENABLED end
 	local mgs = surface.map_gen_settings
 	local settings = mgs.autoplace_settings.entity.settings
-	if (settings["vault-scrap"] ~= nil) ~= const.INF_SCRAP_ENABLED then
+	if (settings["vault-scrap"] ~= nil) ~= enabled then
 		-- runtime AutoplaceControl needs all fields, copy the scrap one (also keeps per-surface scrap settings)
-		settings["vault-scrap"] = const.INF_SCRAP_ENABLED and (settings["scrap"] or {frequency=1, size=1, richness=1}) or nil
+		settings["vault-scrap"] = enabled and (settings["scrap"] or {frequency=1, size=1, richness=1}) or nil
 		surface.map_gen_settings = mgs
 		
 		-- no need to delete the fake surface here, recreate_surface_safe recreates it when the map_gen_settings differ (and can now do that on the same tick)
@@ -405,6 +407,24 @@ local function respawn_vaults(surface, fake_surface, where, radius)
 	--end
 	--
 	--return "success"
+end
+
+-- vault-scrap -> scrap at the same amount, no fake fulgora needed (reset with convert_scrap, uninstall)
+-- so removing the mod (deletes vault-scrap) keeps the scrap, chunks generated from now on get scrap too
+---@param surface LuaSurface
+function original_mapgen.convert_all_vault_scrap_to_scrap(surface)
+	
+	for _,e in pairs(surface.find_entities_filtered{name="vault-scrap"}) do
+		local position, amount = e.position, e.amount
+		e.destroy()
+		surface.create_entity{name="scrap", position=position, amount=amount, snap_to_grid=true, preserve_ghosts_and_corpses=true}
+	end
+	
+	for _,drill in pairs(surface.find_entities_filtered{type="mining-drill"}) do
+		drill.update_connections()
+	end
+	
+	original_mapgen.update_autoplace_settings(surface, false)
 end
 
 -- everything needed when the mod is added to a running game, updated, or the inf scrap setting changed

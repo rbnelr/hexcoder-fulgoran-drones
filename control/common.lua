@@ -29,6 +29,11 @@ end
 -- get each load, then update in on_runtime_mod_setting_changed
 common.update_runtime_settings({name="_mod_load", setting_type="runtime-global"})
 
+-- "Prepare for uninstall": mod paused, reset() has run, only on_runtime_mod_setting_changed is registered (control/events.lua)
+-- read at load to decide what to register, then updated in initialize.on_runtime_mod_setting_changed
+common.UNINSTALL_SETTING_NAME = const.MOD_NAME.."-uninstall"
+common.UNINSTALL = settings.global[common.UNINSTALL_SETTING_NAME].value --[[@as boolean]]
+
 ---- Infinite vault scrap
 
 local INF_SCRAP_PROTO = prototypes.entity["vault-scrap"]

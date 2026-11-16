@@ -1,4 +1,5 @@
 local const = require("const")
+local common = require("control.common")
 local myutil = require("lib.myutil")
 local dmg = require("control.disable_on_damage")
 ---@class Vault
@@ -28,7 +29,7 @@ local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 		-- entities should basically never die anyway, and polling and bot movement handles invalid entities, I think
 	end,
 	[defines.target_type.player] = function(event)
-		for _,v in pairs(storage.render_objs[event.useful_id]) do
+		for _,v in pairs(storage.render_objs[event.useful_id] or {}) do
 			v.destroy()
 		end
 		storage.render_objs[event.useful_id] = nil
@@ -235,7 +236,42 @@ local function register_all()
 	end
 end
 
-script.on_init(init) -- only gets called on mod install, both on new game start with mod installed and late install on existing save
+-- generic, so nothing registered above can be missed (unregistering an unregistered event is fine)
+local function unregister_all()
+	for _,id in pairs(defines.events) do
+		if id ~= defines.events.on_runtime_mod_setting_changed then
+			script.on_event(id, nil)
+		end
+	end
+	script.on_nth_tick(nil) -- all periods, also the one of control/tests.lua
+	if const.HARVESTABLE_BOTS then -- custom events only exist with the setting
+		script.on_event(const.MOD_NAME.."-on-create-combat-bot-remnant", nil)
+		script.on_event(const.MOD_NAME.."-on-combat-bot-died", nil)
+	end
+end
+
+-- "Prepare for uninstall" (common.UNINSTALL): only this handler stays registered, so no code runs while paused
+-- what is registered must always follow the setting: a joining player registers from the main chunk with the current value
+---@param event EventData.on_runtime_mod_setting_changed
+local function on_runtime_mod_setting_changed(event)
+	local was_uninstall = common.UNINSTALL
+	
+	initialize.on_runtime_mod_setting_changed(event) -- reset() or init() on uninstall toggle
+	
+	if common.UNINSTALL ~= was_uninstall then
+		if common.UNINSTALL then
+			unregister_all()
+		else
+			register_all()
+		end
+	end
+end
+
+-- on_init only gets called on mod install, both on new game start with mod installed and late install on existing save
+-- on_init and on_configuration_changed only run at load, so they stay registered and check common.UNINSTALL themselves
+script.on_init(initialize.on_init)
 script.on_configuration_changed(initialize.on_configuration_changed)
-script.on_event(defines.events.on_runtime_mod_setting_changed, initialize.on_runtime_mod_setting_changed)
-register_all()
+script.on_event(defines.events.on_runtime_mod_setting_changed, on_runtime_mod_setting_changed)
+if not common.UNINSTALL then
+	register_all()
+end

@@ -1,4 +1,5 @@
 local const = require("const")
+local common = require("control.common")
 ---@class Vault
 local Vault = require("control.vault")
 local ore = require("control.ore_tracking")
@@ -6,8 +7,17 @@ local depth_scaling = require("control.depth_scaling")
 
 local HOVER_VAULT_MSG = "Run command while hovering a vault ruin"
 
+-- "Prepare for uninstall": storage is empty and must stay so (init() would start the mod again)
+local function paused(command)
+	if common.UNINSTALL then
+		dbg_print("Paused for uninstall (\"Prepare for uninstall\" in map settings)", true, nil, game.get_player(command.player_index))
+	end
+	return common.UNINSTALL
+end
+
 if const.DEBUG then
 	commands.add_command("vaults-attack", "", function(command)
+		if paused(command) then return end
 		init()
 		
 		local size = command.parameter and tonumber(command.parameter) or 100
@@ -23,6 +33,7 @@ if const.DEBUG then
 		end
 	end)
 	commands.add_command("vaults-end-wave", "", function(command)
+		if paused(command) then return end
 		init()
 		
 		local player = game.get_player(command.player_index) ---@cast player -nil
@@ -38,6 +49,7 @@ end
 commands.add_command("vaults-restore-ore",
 		"<percent> [all]\nrestore the scrap around the hovered vault ruin to a percentage of its original amount (default 100, may be > 100; infinite scrap clamps to its minimum, finite to 1)\nalso recreates fully mined tiles\nall: every vault island on fulgora instead of the hovered vault ruin (slow)",
 		function(command)
+	if paused(command) then return end
 	init()
 
 	local player = game.get_player(command.player_index) ---@cast player -nil

@@ -23,6 +23,8 @@ local VIS_RADIUS_TINT_FILL = {VIS_RADIUS_TINT[1]*0.1,VIS_RADIUS_TINT[2]*0.1,VIS_
 function gui.update_viz(player)
 	init()
 	
+	script.register_on_object_destroyed(player)
+	
 	local draws = storage.render_objs[player.index]
 	if draws then -- remove previous rendering
 		for _,d in pairs(draws) do

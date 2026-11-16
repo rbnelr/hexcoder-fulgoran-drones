@@ -21,6 +21,7 @@ local const = require("const")
 local dmg = {}
 
 local RESTORED_HP = 2.0/3 -- 2/3 is where HP bar becomes green
+dmg.STATUS_LABEL = "damaged by drones" -- custom_status label, tells our disabled buildings apart (reset() checks it too)
 
 -- TODO: LuaEntity.protected is this relevant? "Automated weapons won't target protected entities."
 -- currently setting is_military_target=false to avoid drones from keeping to shoot things
@@ -40,7 +41,7 @@ function dmg.building_fully_damaged(id, e, force)
 	e.disabled_by_script = true
 	e.custom_status = {
 		diode=defines.entity_status_diode.red,
-		label="damaged by drones"
+		label=dmg.STATUS_LABEL
 	}
 	
 	-- workaround to stop drones getting stuck attacking this target
@@ -83,23 +84,24 @@ end
 -- reset building
 -- either because building was restored by sufficient repair
 -- or building was destroyed or we otherwise want to reset it
--- this may get called with buildings we didn't actually touch, safe except for other mods trying to use disabled_by_script
--- could kinda fix this by tracking which buildings we modify, but not 100% safe either
+-- this may get called with buildings we didn't actually touch (built, died, reset() scans all targets)
+-- was: disabled_by_script cleared unconditionally ("safe except for other mods trying to use disabled_by_script"),
+--   now only together with our status label, which is always set with it
 ---@param id unit_number
 ---@param e LuaEntity?
 ---@param data Damaged?
----@param is_military_target boolean?
+---@param is_military_target boolean? -- true: attackable (repaired near a vault), false/nil: prototype default (turrets military, drills etc. not)
 function dmg.restore_building(id, e, data, is_military_target)
-	if e and e.valid and e.surface.name == "fulgora" then -- at least restrict to fulgora
-		-- TODO: may be incorrect if the building was a military_target originally (only turrets?), but probably irrelevant
-		-- uninstall should restore this state as I belive allow_run_time_change_of_is_military_target is false
-		-- but other mods may set allow_run_time_change_of_is_military_target, so maybe we should get this right
-		-- TODO: is_military_target boolean|"reset", set to vurnerable,non vurnerable or reset to the default state for the prototype?, maybe test new protected variable
-		e.is_military_target = is_military_target or false
+	assert(e.surface.name == "fulgora")
+	if e and e.valid then
+		-- was `is_military_target or false`, which made turrets and radars non-military everywhere outside vaults
+		-- the prototype default is also the state without the mod (reset/uninstall), Vault:update_targets makes buildings near vaults military
+		-- TODO: maybe test new protected variable
+		e.is_military_target = is_military_target or e.prototype.is_military_target
 		--storage.marked_military[id] = is_military_target and e or nil
-		
-		e.disabled_by_script = false
-		if e.custom_status and e.custom_status.label == "damaged by drones" then
+
+		if e.custom_status and e.custom_status.label == dmg.STATUS_LABEL then
+			e.disabled_by_script = false
 			e.custom_status = nil
 		end
 	end
@@ -107,8 +109,10 @@ function dmg.restore_building(id, e, data, is_military_target)
 	if data and data.icon then
 		data.icon.destroy()
 	end
-	
-	storage.poll_repaired[id] = nil
+
+	if storage.poll_repaired then -- nil if reset() runs before any init()
+		storage.poll_repaired[id] = nil
+	end
 end
 
 -- fix stuck disabled_by_script or icons, probably happening only during development
@@ -162,7 +166,7 @@ end
 ---@param e LuaEntity
 function dmg.on_entity_event(e)
 	init()
-	dmg.restore_building(e.unit_number, e, nil, false) -- TODO: why false here?, I guess I try to keep buildings non-military while no attack is active
+	dmg.restore_building(e.unit_number, e, nil, false) -- false: prototype default, Vault:update_targets makes it military near vaults
 end
 
 ---@param event EventData.on_tick
