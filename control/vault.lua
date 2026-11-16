@@ -195,37 +195,31 @@ end
 -- clears prev_wave or makes active_wave the prev_wave
 ---@param force_inactive boolean? -- kill all bots
 function Vault:end_wave(force_inactive)
-	--self.next_bot_id = nil
 	if self.active_wave then
 		self.active_wave.end_tick = game.tick
 		
 		-- rng reset in update_waves
-		
-		if force_inactive then
-			self:_kill_all_bots(false)
-			assert(not self:bots_active())
-			
-			-- no longer needs to be updated
-			storage.active_vaults[self.id] = nil
-		end
 	
-		-- active wave (or nil) becomes previous wave
-		-- never set prev_wave to nil so we can call end_wave() before start_wave
+		-- active_wave becomes prev_wave
+		-- never set prev_wave to nil
 		self.prev_wave = self.active_wave
 		self.active_wave = nil
-		
-		if not self:bots_active() then
-			-- reduce entity count, waypoints only while wave active
-			self:delete_waypoints()
-			
-			-- stop updating bots
-			storage.active_vaults[self.id] = nil
-		end
-		
-		-- do not reset active_vaults, since bots may still exist, wait for on_tick to clear it
-		
-		self:update_alert()
 	end
+	
+	if force_inactive then
+		self:_kill_all_bots(false)
+		assert(not self:bots_active())
+	end
+	
+	if not self:bots_active() then
+		-- reduce entity count, waypoints only while wave active
+		self:delete_waypoints()
+		
+		-- stop updating bots
+		storage.active_vaults[self.id] = nil
+	end
+	
+	self:update_alert()
 end
 
 -- create random invisible waypoints to act as drone movement targets

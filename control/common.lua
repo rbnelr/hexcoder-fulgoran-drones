@@ -12,7 +12,8 @@ storage = storage
 ---@param event EventData.on_runtime_mod_setting_changed|{name:"_mod_load", setting_type:string}
 function common.update_runtime_settings(event)
 	if event.name ~= "_mod_load" then
-		if storage.settings_changed then return end -- dumb hack
+		-- on_tick does the expensive update once per tick, re-reading the settings is cheap
+		-- was an early out when already set, but while the game is paused no tick clears the flag, so changing a setting again before unpausing was skipped and the cache stayed wrong
 		storage.settings_changed = true
 	end
 	

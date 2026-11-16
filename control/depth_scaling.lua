@@ -21,7 +21,10 @@ local depth_scaling = {}
 -- weirdly this means 1000% is 100% >= uncommon, but then 100% >= rare and 10% >= epic so no uncommon is output
 -- so quality rewards basically scale in powers of 10
 
--- quality output of regular scrap mined with drill quality effect ("-" = under 1%)
+-- verified 2026-11-16 (/vaults-test test_mining_quality_roll, 100k outputs per effect, +50% to +99900%):
+--  P(quality >= k) = min(q * 10^-(k-1), 1), not chained per step (was assumed chained, which undercounted the higher qualities)
+--  roll_bot_quality_from_tier rolls the same way
+-- quality output of regular scrap mined with drill quality effect ("-" = under 0.1%)
 -- "value" tiers: 1, 1.3, 1.6, 1.9, 2.5 (most quality effects scale like this)
 -- "science" tiers: 1x, 2x, 3x, 4x, 6x (science yield scales like this)
 -- "tier": scrap_tier() that quality_level_to_drill_effect() maps to this effect (before distance falloff and spread)
@@ -29,11 +32,11 @@ local depth_scaling = {}
 -- | tier | effect   | normal | uncommon | rare | epic | legendary | eff. value | eff. science |
 -- |------|----------|--------|----------|------|------|-----------|------------|--------------|
 -- | 0    | +0%      |   100% |        - |    - |    - |         - |       1.00 |         1.00 |
--- | 0.5  | +50%     |    50% |      48% |   2% |    - |         - |       1.16 |         1.53 |
--- | 1    | +100%    |      - |      90% |  10% |    - |         - |       1.33 |         2.10 |
--- | 1.44 | +500%    |      - |      50% |  48% |   2% |         - |       1.46 |         2.53 |
--- | 2    | +1000%   |      - |        - |  90% |  10% |         - |       1.63 |         3.10 |
--- | 2.44 | +5000%   |      - |        - |  50% |  48% |        3% |       1.76 |         3.55 |
+-- | 0.5  | +50%     |    50% |      45% | 4.5% | 0.5% |         - |       1.17 |         1.56 |
+-- | 1    | +100%    |      - |      90% |   9% | 0.9% |      0.1% |       1.33 |         2.11 |
+-- | 1.44 | +500%    |      - |      50% |  45% | 4.5% |      0.5% |       1.47 |         2.56 |
+-- | 2    | +1000%   |      - |        - |  90% |   9% |        1% |       1.64 |         3.12 |
+-- | 2.44 | +5000%   |      - |        - |  50% |  45% |        5% |       1.78 |         3.60 |
 -- | 3    | +10000%  |      - |        - |    - |  90% |       10% |       1.96 |         4.20 |
 -- | 3.44 | +50000%  |      - |        - |    - |  50% |       50% |       2.20 |         5.00 |
 -- | 4    | +100000% |      - |        - |    - |    - |      100% |       2.50 |         6.00 |
@@ -63,6 +66,32 @@ local QSCRAP_SPREAD_TOP_HEAVY = 2
 
 local BOT_SPREAD_RANGE = 0.5
 local BOT_SPREAD_TOP_HEAVY = 2
+
+-- rough output mix with spread: effective tier = tier * (1 - range * rand^top_heavy), averages (1 - range/3) * tier
+-- (numerically integrated with the verified roll, "-" = under 0.1%, value/science weights as in the table above)
+-- scrap (range 1, top-heavy 2), drill within QSCRAP_DIST_FALLOFF_MIN_DIST (at the radius edge: tier - QSCRAP_DIST_FALLOFF)
+--  never gets rid of normal scrap, since the tier can spread down to 0
+-- | tier | normal | uncommon | rare | epic | legendary | value | science |
+-- |------|--------|----------|------|------|-----------|-------|---------|
+-- | 0.5  |    67% |      30% | 3.0% | 0.3% |         - |  1.11 |    1.37 |
+-- | 1    |    33% |      60% | 6.0% | 0.6% |         - |  1.22 |    1.74 |
+-- | 1.5  |    19% |      55% |  23% | 2.3% |      0.3% |  1.33 |    2.09 |
+-- | 2    |    14% |      35% |  46% | 4.6% |      0.5% |  1.43 |    2.43 |
+-- | 2.5  |    11% |      24% |  45% |  18% |      2.0% |  1.54 |    2.78 |
+-- | 3    |   8.9% |      19% |  31% |  38% |      4.2% |  1.64 |    3.14 |
+-- | 3.5  |   7.5% |      15% |  22% |  38% |       17% |  1.78 |    3.59 |
+-- | 4    |   6.5% |      13% |  17% |  27% |       36% |  1.93 |    4.09 |
+-- bots (range 0.5, top-heavy 2)
+-- | tier | normal | uncommon | rare | epic | legendary | value | science |
+-- |------|--------|----------|------|------|-----------|-------|---------|
+-- | 0.5  |    58% |      38% | 3.8% | 0.4% |         - |  1.14 |    1.46 |
+-- | 1    |    17% |      75% | 7.5% | 0.8% |         - |  1.28 |    1.93 |
+-- | 1.5  |   2.2% |      64% |  31% | 3.1% |      0.3% |  1.41 |    2.36 |
+-- | 2    |      - |      30% |  63% | 6.3% |      0.7% |  1.54 |    2.78 |
+-- | 2.5  |      - |      11% |  61% |  25% |      2.8% |  1.67 |    3.22 |
+-- | 3    |      - |     4.0% |  37% |  53% |      5.9% |  1.80 |    3.66 |
+-- | 3.5  |      - |     0.8% |  22% |  53% |       24% |  1.97 |    4.24 |
+-- | 4    |      - |        - |  12% |  36% |       51% |  2.17 |    4.90 |
 
 ---@param depth number 0-1
 ---@return number 0-1
@@ -110,16 +139,22 @@ function depth_scaling.roll_bot_quality_from_tier(bot_tier)
 	end
 	
 	-- LuaQualityPrototype.roll_quality does also exist, but would need to run quality_level_to_drill_effect to get effect?
+	--local roll = math.random() / chance -- clever, but div by 0!
+	--local up
+	--if     roll >= 1.0 then   up = 1
+	--elseif roll >= 0.1 then   up = 2
+	--elseif roll >= 0.01 then  up = 3
+	--elseif roll >= 0.001 then up = 4
+	--else                      up = 5 end
+	--return math.min(tier + up, const.MAX_QUALITY_ID)
+	
+	-- TODO: handle modded quality chances (the 10% can be an arbitary number
+	-- could store in array next to QUALITY_IDS (quality prototype next_probability/chain_probability)
 	local rng = math.random()
-	--if     rng >= chance then    -- tier = tier + 1
-	--elseif rng >= chance*0.1 then   tier = tier + 2
-	--elseif rng >= chance*0.01 then  tier = tier + 3
-	--elseif rng >= chance*0.001 then tier = tier + 4
-	--else                            tier = tier + 5 end
-	--return math.min(tier, 4)
-	while tier < const.MAX_QUALITY_ID do
+	-- decrease chance each iteration, don't test when we reach max
+	tier = tier + 1
+	while tier < const.MAX_QUALITY_ID and rng < chance do
 		tier = tier + 1
-		if rng >= chance then break end
 		chance = chance*0.1
 	end
 	return tier
