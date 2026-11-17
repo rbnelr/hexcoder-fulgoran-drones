@@ -12,6 +12,7 @@ local spawning = require("control.spawning")
 local ore = require("control.ore_tracking")
 local original_mapgen = require("control.original_mapgen")
 local initialize = require("control.initialize")
+local drills_without_ore = require("control.drills_without_ore")
 
 -- All event registrations of the mod are in register_all() at the end of this file, other files only export their handlers
 -- (one handler per event and nth_tick period per mod, so this also avoids conflicts)
@@ -72,6 +73,20 @@ local built_filter = myutil.merge(dmg.filter_targets, {
 	{filter="type", type="simple-entity"},
 	{filter="name", name=const.VAULT_NAME, mode="and"}
 })
+
+-- player builds additionally check drills (and drill ghosts) without ore away from vaults, when the setting allows placing them everywhere
+local player_built_filter = built_filter
+if const.ALLOW_DRILLS_WITHOUT_ORE then
+	player_built_filter = myutil.merge(built_filter, {{filter="ghost_type", type="mining-drill"}})
+end
+---@param event EventData.on_built_entity
+local function on_built_entity(event)
+	if const.ALLOW_DRILLS_WITHOUT_ORE then
+		if drills_without_ore.on_built_entity(event) then return end -- removed
+		if event.entity.type == "entity-ghost" then return end -- only passed the filter for the drill check
+	end
+	on_entity_create(event)
+end
 ---@param event EventData.on_entity_died
 local function on_entity_died(event)
 	if event.entity.surface.name == "fulgora" then
@@ -205,7 +220,7 @@ local function register_all()
 	script.on_event(defines.events.on_object_destroyed, on_object_destroyed)
 
 	-- None are triggered by map generator, on_chunk_generated handles newly generated vaults
-	script.on_event(defines.events.on_built_entity, on_entity_create, built_filter)
+	script.on_event(defines.events.on_built_entity, on_built_entity, player_built_filter)
 	script.on_event(defines.events.on_robot_built_entity, on_entity_create, built_filter)
 	script.on_event(defines.events.on_space_platform_built_entity, on_entity_create, built_filter)
 	script.on_event(defines.events.script_raised_built, on_entity_create, built_filter)
