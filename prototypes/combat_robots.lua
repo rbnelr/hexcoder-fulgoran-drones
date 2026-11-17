@@ -697,19 +697,11 @@ end
 
 --#region Final fixes: render layers, bullet trails
 
--- Render layers, relative to the vault near-wall ("smoke", see vault_ruin.lua), which hides emerging drones (projectiles, drawn at "projectile", no render_layer field)
--- Layer order (low to high): object (buildings, trees) < higher-object-* < elevated rails < explosion < projectile < smoke (near-wall) < air-object (drones, flying robots)
--- Between layers order is strict, within a layer things are sorted (by y?)
---  beams default to "projectile" and explosions to "explosion", so attacks were drawn under the near-wall while the drones were over it
---  => all beams (combat robots, laser turret, tesla turret/gun, electric, modded) and beam explosions (bullet-trails tracers) go to "air-object"
---     they were already above all buildings, so this only changes order against smoke, the near-wall and flying things
---  => effects at combat robots (source_effects, e.g. defender gunshot, only used by defender in vanilla) go to "air-object" too
---     hits at the target stay, so they still hide behind the wall if the target is behind it
---  => combat robot dying particles go to "projectile": over explosions (death explosion hid the falling debris) and buildings, but still under the near-wall
---     (default "object" sorts with buildings, so debris falling behind a building was hidden)
--- all in place (no copies), shared prototypes are changed for everything using them
--- final_fixes so prototypes changed by other mods' data-updates are included
--- must run before harvestable_drones_quality_resource, which copies the vanilla dying particles
+-- Render layers around the vault near-wall (vault_ruin.lua, "air-object"; "smoke" flickered when zoomed out), which hides emerging drones (projectiles, always "projectile")
+-- order: object (buildings) < explosion < projectile < smoke < air-object (drones), possibly sorted by position within a layer (seemingly not for projectiles though)
+--  beams (default "projectile"), beam explosions (bullet-trails tracers) and robot gunshots (source_effects) -> "air-object", so attacks draw over the wall like the drones
+--  dying particles (default "object", hidden behind buildings) -> "projectile": over buildings and the death explosion, behind the wall like the explosion
+-- in place for everything using these prototypes, final_fixes to include other mods; must run before harvestable_drones_quality_resource (copies the dying particles)
 local AIR_LAYER = "air-object"
 local DYING_PARTICLE_LAYER = "projectile"
 

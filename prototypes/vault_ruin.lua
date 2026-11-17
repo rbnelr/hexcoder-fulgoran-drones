@@ -44,6 +44,8 @@ function vault_ruin.data_updates()
 	})
 
 	-- vault ruin graphic to hide spawning drones, and create illusion that they ascend out of hole
+	local vault_pictures = data.raw["simple-entity"][const.VAULT_NAME].pictures
+	-- TODO: can't we just make near graphic a layer of the vault itself? we don't rely on y position for draw order sorting so, but render_layer is a per entity property?
 	data:extend{
 		{
 			type = "simple-entity", -- use optimized-decorative instead?
@@ -54,14 +56,14 @@ function vault_ruin.data_updates()
 			selection_priority = 1,
 			--minable = {minable=false, mining_time=999999999},
 			max_health = 1000000, healing_per_tick = 1000000/60,
-			pictures = {
+			
+			pictures = meld(table.deepcopy(vault_pictures), { -- meld from vault_pictures so flags/mipmap or whatever matches
 				{width = 960, height = 640, filename = const.MOD_DIR.."/graphics/fulgoran-ruin-vault-near-wall.png",
-				shift = util.by_pixel( 18.5/2, -6/2), scale = 0.5}
-			},
+				shift = util.by_pixel( 18.5/2, -6/2), scale = 0.5},
+			}),
 			-- must be above "projectile" (emerge/descend projectiles, dying particles), but below "air-object" so hostile beams draw over it
-			--render_layer = "higher-object-under",
-			--render_layer = "air-object", -- hid beams (default "projectile" layer)
-			render_layer = "smoke",
+			render_layer = "air-object", -- hid beams (default "projectile" layer), but beams are now air-object too, which ends up rendering above like we want
+			--render_layer = "smoke", -- above air-object but below projectiles, this caused the graphic to flicker and blur weirdly when zoomed out
 			icon = data.raw["simple-entity"][const.VAULT_NAME].icon,
 			collision_box = nil,
 			collision_mask = { layers = {} },
