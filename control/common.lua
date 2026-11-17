@@ -49,64 +49,43 @@ common.INF_SCRAP_DEPLETED_BUMP_AMOUNT = math.max(math.floor(INF_SCRAP_PROTO.norm
 common.INF_SCRAP_DEPLETION_TO_MINING = 1 / INF_SCRAP_PROTO.infinite_depletion_resource_amount -- == const.INF_DEPLETION_RATE
 
 common.WAVE_MIN_TIME = 20/60 -- allow for endless waves, 20 seconds to ensure mining rate is accurate, TODO: could lower
-common.WAVE_MIN_SIZE = 3
-common.WAVE_MAX_SIZE = 1000
+-- size multiplier limits, apply to variation*mining rate multiplier, applies to bot counts which depend on depth
+common.WAVE_MIN_SIZE = 0.1 -- TODO: tune
+common.WAVE_MAX_SIZE = 5 -- TODO: tune
 
 common.BASE_MINING_RATE = 1000 -- 1500 is ~10 big drills, mining below full speed, this can go up to 10k with a more drills and speed modules
 common.BASE_FREQUENCY = 1 / 10
-common.BASE_SIZE = 50
 
-common.BASE_DEPTH_START_MULT = 0.25
-common.BASE_DEPTH_END_MULT = 1.5
+---@class AnimCurve: {depth:number, val:number}[]
 
-common.BOT_COSTS = {
+---@type AnimCurve
+common.DEPTH_FREQ_CURVE = {{depth=0, val=0.5}, {depth=1, val=3}} -- TODO: tune
+
+---@type table<string, AnimCurve>
+common.BOT_COUNTS_CURVE = { -- TODO: tune, depth curve was 25% to 150% of whatever size was
+	["fulgoran-defender"  ] = {{depth=0, val=0.75*25}, {depth=0.3, val=0.45*62.5}, {depth=0.7, val=0.20*112.5}, {depth=1, val=30}},
+	["fulgoran-distractor"] = {{depth=0, val=0.25*25/6}, {depth=0.3, val=0.35*62.5/6}, {depth=0.7, val=0.45*112.5/6}, {depth=1, val=0.50*150/6}},
+	["fulgoran-destroyer" ] = {{depth=0, val=0.00*25/10}, {depth=0.3, val=0.20*62.5/10}, {depth=0.7, val=0.35*112.5/10}, {depth=1, val=0.40*150/10}},
+}
+
+-- wave threat (sum of THREAT_PER_BOT * count) that counts as 100%, a wave a basic "reasonable" defense setup usually manages
+-- later game setups
+common.THREAT_NORMAL = 100 -- TODO: tune
+common.THREAT_PER_BOT = {
 	["fulgoran-defender"] = 1,
 	["fulgoran-distractor"] = 6,
 	["fulgoran-destroyer"] = 10,
 }
----@type table<number, table<string, number>> -- depth -> (robot -> cost ratio)
-common.BOT_RATIOS_PROGRESSION = {
-	[1] = {
-		["fulgoran-defender"] = 0.75,
-		["fulgoran-distractor"] = 0.25,
-		["fulgoran-destroyer"] = 0.00,
-	},
-	[2] = {
-		["fulgoran-defender"] = 0.45,
-		["fulgoran-distractor"] = 0.35,
-		["fulgoran-destroyer"] = 0.20,
-	},
-	[3] = {
-		["fulgoran-defender"] = 0.20,
-		["fulgoran-distractor"] = 0.45,
-		["fulgoran-destroyer"] = 0.35,
-	},
-	[4] = {
-		["fulgoran-defender"] = 0.10,
-		["fulgoran-distractor"] = 0.50,
-		["fulgoran-destroyer"] = 0.40,
-	},
-}
----@param depth number 0-1
----@return table<string, number> ratios
-function common.get_bot_ratio(depth)
-	local i
-	local t
-	local prog = common.BOT_RATIOS_PROGRESSION
-	if     depth < 0.3 then i = 1; t = (depth / 0.3)
-	elseif depth < 0.7 then i = 2; t = ((depth - 0.3) / 0.4)
-	else                    i = 3; t = ((depth - 0.7) / 0.3)
+
+local _threat_curve = {}
+for type,curve in pairs(common.BOT_COUNTS_CURVE) do
+	for i,v in pairs(curve) do
+		_threat_curve[i] = _threat_curve[i] or {depth=v.depth, val=0}
+		assert(_threat_curve[i].depth == v.depth)
+		_threat_curve[i].val = _threat_curve[i].val + (v.val * common.THREAT_PER_BOT[type])
 	end
-	
-	local prev = prog[i]
-	local next = prog[i+1]
-	local t2 = (1-t)
-	return {
-		["fulgoran-defender"] = t2 * prev["fulgoran-defender"] + t * next["fulgoran-defender"],
-		["fulgoran-distractor"] = t2 * prev["fulgoran-distractor"] + t * next["fulgoran-distractor"],
-		["fulgoran-destroyer"] = t2 * prev["fulgoran-destroyer"] + t * next["fulgoran-destroyer"],
-	}
 end
+
 
 -- infinite resource minimum amount is actually increased if initial yield > 100%
 ---@param initial_amount integer
@@ -175,6 +154,46 @@ function dbg_print(msg, sound, color, player)
 		game.print(msg, print_settings)
 	end
 	return msg
+end
+
+
+-- returns uniform random in x-range to x+range
+---@param x number
+---@param range number
+---@param rng number? -- must be 0-1
+---@return number
+function common.rand_variation(x, range, rng)
+	rng = rng or math.random()
+	return x + (rng*2-1) * range
+end
+
+---@param at number
+---@param a number
+---@param bt number
+---@param b number
+---@param t number
+---@return number
+local function interpolate(at, a, bt, b, t)
+	local k = (t-at) / (bt-at)
+	k = math.min(math.max(k, 0), 1)
+	local k2 = (1-k)
+	return k2 * a + k * b
+end
+---@param curve AnimCurve
+---@param depth number
+---@return number?
+function common.eval_curve(curve, depth)
+	local i = 1
+	local count = #curve
+	if count <= 1 then
+		return count == 1 and curve[1] or nil
+	end
+	while i < count - 1 and depth > curve[i+1].depth do
+		i = i + 1
+	end -- depth can be past end, if so interpolate clamps depth
+	local a, b = curve[i], curve[i+1]
+	
+	return interpolate(a.depth, a.val, b.depth, b.val, depth)
 end
 
 return common

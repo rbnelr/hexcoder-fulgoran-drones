@@ -31,6 +31,7 @@ local ore = require("control.ore_tracking")
 ---@field end_tick MapTick?
 ---@field size number?
 ---@field freq number?
+---@field threat number?
 ---@field bot_quality_tier number? -- 0-(MAX_BOT_QUALITY-1)
 ---@field bot_types table<string, integer>
 ---@field bot_qualities table<string, integer>
@@ -179,8 +180,8 @@ end
 -- offially end wave and optionally kill existing bots
 -- does not make the vault inactive if bots are still active (if not on_tick does this)
 -- clears prev_wave or makes active_wave the prev_wave
----@param force_inactive boolean? -- kill all bots
-function Vault:end_wave(force_inactive)
+---@param kill_bots boolean?
+function Vault:end_wave(kill_bots)
 	if self.active_wave then
 		self.active_wave.end_tick = game.tick
 		
@@ -192,7 +193,7 @@ function Vault:end_wave(force_inactive)
 		self.active_wave = nil
 	end
 	
-	if force_inactive then
+	if kill_bots then
 		self:_kill_all_bots(false)
 		assert(not self:bots_active())
 	end
@@ -315,7 +316,8 @@ function Vault:update_alert()
 			force.add_custom_alert(self.entity,
 				{type="entity", name=const.VAULT_NAME},
 				{"alert.active-attack",
-				string.format("%.0f", latest_wave.size or -1),
+				string.format("%.0f", latest_wave.threat or -1),
+				--string.format("%.0f", latest_wave.size or -1),
 				-- string.format("%.2f", latest_wave.freq or -1)
 				}, true)
 		end

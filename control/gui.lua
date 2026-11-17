@@ -190,6 +190,7 @@ local function wave_table_def(num_q)
 		GUI{type="label", caption=L("waves"), style={base="subheader_caption_label", left_padding=0, height=HEADER_HEIGHT, vertical_align="center"}},
 		GUI{type="label", caption="", style={left_margin=4}}, -- small gap after the label column
 		GUI{type="label", caption=L("size"), style={height=HEADER_HEIGHT, vertical_align="center", minimal_width=SIZE_COLUMN_WIDTH, horizontal_align="right"}},
+		GUI{type="label", caption=L("threat"), style={height=HEADER_HEIGHT, vertical_align="center", minimal_width=SIZE_COLUMN_WIDTH, horizontal_align="right"}},
 	}
 	local bot_cells, qual_cells = {}, {}
 	for _,n in ipairs(WAVE_TABLE_BOTS) do
@@ -205,6 +206,7 @@ local function wave_table_def(num_q)
 		table.insert(wave_cells, GUI{type="label", name=row.."_label", caption=labels[row], style=style})
 		table.insert(wave_cells, GUI{type="label", name=row.."_time", caption="", style={base=style, left_margin=4}})
 		table.insert(wave_cells, GUI{type="label", name=row.."_size", caption="", style=style})
+		table.insert(wave_cells, GUI{type="label", name=row.."_threat", caption="", style=style})
 		for i=1,#WAVE_TABLE_BOTS do
 			table.insert(bot_cells, GUI{type="label", name=row.."_bot"..i, caption=""})
 		end
@@ -217,7 +219,7 @@ local function wave_table_def(num_q)
 		subheader(),
 		GUI{type="flow", direction="horizontal", style={horizontal_spacing=COLUMN_SPACING, top_margin=-SUBHEADER_HEIGHT + SUBHEADER_PAD,
 			left_padding=8, right_padding=8, bottom_padding=4}}:add{
-			tbl(3, 3):add(wave_cells), -- label, time, size
+			tbl(4, 3):add(wave_cells), -- label, time, size, threat
 			vline(),
 			tbl(#WAVE_TABLE_BOTS, 1):add(bot_cells),
 			vline(),
@@ -302,11 +304,13 @@ local window_defs = {} ---@type table<integer, GuiDef> -- per quality column cou
 ---@param row string
 ---@param time LocalisedString
 ---@param size string
+---@param threat string
 ---@param counts BotCounts? -- bots and qualities of a wave, nil for the next wave
 ---@param num_q integer
-local function set_wave_row(refs, row, time, size, counts, num_q)
+local function set_wave_row(refs, row, time, size, threat, counts, num_q)
 	refs[row.."_time"].caption = time
 	refs[row.."_size"].caption = size
+	refs[row.."_threat"].caption = threat
 	local types = counts and counts.bot_types or {}
 	for i,n in ipairs(WAVE_TABLE_BOTS) do
 		local count = types[n]
@@ -508,14 +512,27 @@ function gui.update_info_gui_content(vault, refs, num_q)
 	local function wave_time(wave, key)
 		return wave and L(key, string.format("%.1f", (game.tick - wave.start_tick) / 3600)) or "--"
 	end
-	local function wave_size(s, fmt)
-		return s and string.format(fmt, s) or "--"
+	-- size is a multiplier on the depth bot counts, threat is in common.THREAT_NORMAL units, both shown in %
+	local function percent(s, fmt)
+		return s and string.format(fmt, s * 100) or "--"
+	end
+	local function threat(w)
+		return w and w.threat and w.threat / common.THREAT_NORMAL
+	end
+	-- expected threat of the next wave (actual counts are rolled at spawn)
+	local next_threat
+	if size then
+		next_threat = 0
+		for bot,curve in pairs(common.BOT_COUNTS_CURVE) do
+			next_threat = next_threat + size * (common.eval_curve(curve, depth) or 0) * common.THREAT_PER_BOT[bot]
+		end
+		next_threat = next_threat / common.THREAT_NORMAL
 	end
 	-- next wave also shown while one is active (waves can overlap)
-	set_wave_row(refs, "next", eta and L("next-eta", string.format("%.1f", eta)) or "--", wave_size(size, "~%.0f%%"), nil, num_q)
+	set_wave_row(refs, "next", eta and L("next-eta", string.format("%.1f", eta)) or "--", percent(size, "~%.0f%%"), percent(next_threat, "~%.0f%%"), nil, num_q)
 	-- bots of the previous wave can still be around while the active one spawns
-	set_wave_row(refs, "active", wave_time(active, "active-for"), wave_size(active and active.size, "%.0f%%"), active, num_q)
-	set_wave_row(refs, "last", wave_time(prev, "last-ago"), wave_size(prev and prev.size, "%.0f%%"), prev, num_q)
+	set_wave_row(refs, "active", wave_time(active, "active-for"), percent(active and active.size, "%.0f%%"), percent(threat(active), "%.0f%%"), active, num_q)
+	set_wave_row(refs, "last", wave_time(prev, "last-ago"), percent(prev and prev.size, "%.0f%%"), percent(threat(prev), "%.0f%%"), prev, num_q)
 	refs.active_label.style = active and "bold_label" or "bold_grey_label" -- same font, normal vs bold would resize the column
 
 	gui.update_info_gui_fast_content(vault, refs.content)
