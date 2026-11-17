@@ -85,6 +85,14 @@ data:extend({
 		maximum_value = 60,
 	},
 	{
+		-- misc: lets drills be pre-built where drone wrecks will land (turns require_resources_to_place off for all solid drills, prototypes/misc.lua)
+		type = "bool-setting",
+		name = MOD_NAME.."-drills-without-ore",
+		order = "e0",
+		setting_type = "startup",
+		default_value = false,
+	},
+	{
 		type = "bool-setting",
 		name = MOD_NAME.."-buff-drones",
 		order = "e1",

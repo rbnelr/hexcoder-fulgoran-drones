@@ -10,10 +10,10 @@ const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value -
 const.HARVESTABLE_BOTS = settings.startup[const.MOD_NAME.."-dead-bot-resource"].value --[["@as boolean"]]
 const.BUFFED_DRONES = settings.startup[const.MOD_NAME.."-buff-drones"].value --[["@as boolean"]]
 const.NERF_TURRETS = settings.startup[const.MOD_NAME.."-nerf-turret-turn"].value --[["@as boolean"]]
+-- was a hardcoded true, TODO: a fix that is not anti-QOL (only near vaults), see release_plan.md 2.3
+const.ALLOW_DRILLS_WITHOUT_ORE = settings.startup[const.MOD_NAME.."-drills-without-ore"].value --[["@as boolean"]]
 
 ---- Hardcoded settings, some of these could be made settings
--- TODO: make this a setting or experiment with it so it's not anti-QOL
-const.ALLOW_DRILLS_WITHOUT_ORE = true
 
 -- expired drones (time_to_live ran out, destroy_action) leave dead-<bot> wrecks like killed ones (dying_trigger_effect)
 -- off: expired drones drop the vanilla remnants, wrecks only pile up where drones were actually killed
