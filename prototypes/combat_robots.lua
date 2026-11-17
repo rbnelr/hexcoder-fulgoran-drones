@@ -4,12 +4,6 @@ local meld_helper = require("lib.meld_helper")
 
 local combat_robots = {}
 
-local BOT_NAMES = {
-	["defender"]="fulgoran-defender",
-	["distractor"]="fulgoran-distractor",
-	["destroyer"]="fulgoran-destroyer",
-}
-
 --#region Lights and particles
 local function cone_light(scale, rotation, intensity, color)
 	local dist = 7 * scale
@@ -120,12 +114,12 @@ end
 
 -- projectile that looks like a drone, to create illusion of drones acending out of hole before they actually become active
 
--- projectiles can be covered up by fulgoran-ruin-vault-near-wall
+-- projectiles are covered up by the vault's front wall (vault_ruin.lua)
 -- what was also suggested was rendering manually with LuaRendering (allow for fading in from black etc.)
 -- and using smoke-with-trigger (which has features for fade in, but possibly can't actually move in a line?)
 --- slow projectiles that look like bots and spawn bots on "hit", used to make it look like bots are ascending before actually being spawned
 local function emerge_projectiles()
-	for name, hostile_name in pairs(BOT_NAMES) do -- was pairs(data.raw["combat-robot"]), which asserts on modded combat robots
+	for name, hostile_name in pairs(const.BOT_NAMES) do -- was pairs(data.raw["combat-robot"]), which asserts on modded combat robots
 		data:extend{
 			drone_projectile(name, hostile_name, "hexcoder-"..name.."-emerge", 0.01, const.EMERGE_SPEEDS, {
 				type = "direct",
@@ -142,7 +136,7 @@ local function emerge_projectiles()
 			}),
 		}
 		if const.DRONES_TRY_TO_RETURN then
-			-- reverse of emerge: returning bot is destroy()ed by script and replaced by this, ends hidden behind the near-wall
+			-- reverse of emerge: returning bot is destroy()ed by script and replaced by this, ends hidden behind the vault's front wall
 			data:extend{ drone_projectile(name, hostile_name, "hexcoder-"..name.."-descend", 0.01, const.DESCEND_SPEEDS, nil) } 
 		end
 	end
@@ -184,7 +178,7 @@ end
 -- Add hostile versions of combat bot entities to be able to color them individually instead of one color per force
 -- and to allow hostile ones to spawn resource and player ones not
 local function hostile_copies()
-	for name, hostile_name in pairs(BOT_NAMES) do
+	for name, hostile_name in pairs(const.BOT_NAMES) do
 		local hostile_bot = table.deepcopy(data.raw["combat-robot"][name])
 		hostile_bot.name = hostile_name
 		hostile_bot.localised_name = {"", {"entity-name."..name}, " (Fulgoran)"}
@@ -254,7 +248,7 @@ local function harvestable_drones()
 			mask = { width = 120, height =  64, shift = util.by_pixel(1.5, -11), },
 		},
 	}
-	for name, hostile_name in pairs(BOT_NAMES) do
+	for name, hostile_name in pairs(const.BOT_NAMES) do
 		local capsule = data.raw["capsule"][name.."-capsule"]
 		local robot = data.raw["combat-robot"][hostile_name]
 		local corpse = data.raw["corpse"][name.."-remnants"]
@@ -391,7 +385,7 @@ local function harvestable_drones()
 end
 -- Need to make quality variants for bot resource, because afaik resources can't have quality
 local function harvestable_drones_quality_resource()
-	for name, hostile_name in pairs(BOT_NAMES) do
+	for name, hostile_name in pairs(const.BOT_NAMES) do
 		local res_name = "dead-"..name
 		local tint = const.DRONE_TINT[hostile_name]
 		local normal_resource = data.raw["resource"][res_name]
@@ -604,7 +598,7 @@ local function balance()
 	})
 	
 	-- lights for vanilla bots
-	for name, hostile_name in pairs(BOT_NAMES) do
+	for name, hostile_name in pairs(const.BOT_NAMES) do
 		data.raw["combat-robot"][name].light = util.table.deepcopy(DRONE_LIGHTS[name])
 	end
 end
@@ -653,7 +647,7 @@ end
 -- dead-<bot>-recycling: copy of the capsule recycling with capsules swapped for wrecks
 -- must run after the recycler generated the recycling recipes (its data-updates)
 local function dead_bot_recycling()
-	for name, hostile_name in pairs(BOT_NAMES) do
+	for name, hostile_name in pairs(const.BOT_NAMES) do
 		local real_recyc = data.raw["recipe"][name.."-capsule-recycling"]
 		local auto_recyc = data.raw["recipe"]["dead-"..name.."-recycling"]
 
@@ -697,7 +691,7 @@ end
 
 --#region Final fixes: render layers, bullet trails
 
--- Render layers around the vault near-wall (vault_ruin.lua, "air-object"; "smoke" flickered when zoomed out), which hides emerging drones (projectiles, always "projectile")
+-- Render layers around the vault's front wall (vault_ruin.lua, drawn by the vault at "air-object"; "smoke" flickered when zoomed out), which hides emerging drones (projectiles, always "projectile")
 -- order: object (buildings) < explosion < projectile < smoke < air-object (drones), possibly sorted by position within a layer (seemingly not for projectiles though)
 --  beams (default "projectile"), beam explosions (bullet-trails tracers) and robot gunshots (source_effects) -> "air-object", so attacks draw over the wall like the drones
 --  dying particles (default "object", hidden behind buildings) -> "projectile": over buildings and the death explosion, behind the wall like the explosion

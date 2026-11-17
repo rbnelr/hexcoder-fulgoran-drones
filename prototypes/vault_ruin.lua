@@ -43,34 +43,20 @@ function vault_ruin.data_updates()
 		}
 	})
 
-	-- vault ruin graphic to hide spawning drones, and create illusion that they ascend out of hole
-	local vault_pictures = data.raw["simple-entity"][const.VAULT_NAME].pictures
-	-- TODO: can't we just make near graphic a layer of the vault itself? we don't rely on y position for draw order sorting so, but render_layer is a per entity property?
-	data:extend{
-		{
-			type = "simple-entity", -- use optimized-decorative instead?
-			name = const.VAULT_NEAR_WALL_NAME,
-			flags = {"placeable-neutral", "placeable-off-grid"},
-			order = "b[decorative]-l[rock]-d[fulgora]-e[ruin]-g[vault]",
-			hidden = true,
-			selection_priority = 1,
-			--minable = {minable=false, mining_time=999999999},
-			max_health = 1000000, healing_per_tick = 1000000/60,
-			
-			pictures = meld(table.deepcopy(vault_pictures), { -- meld from vault_pictures so flags/mipmap or whatever matches
-				{width = 960, height = 640, filename = const.MOD_DIR.."/graphics/fulgoran-ruin-vault-near-wall.png",
-				shift = util.by_pixel( 18.5/2, -6/2), scale = 0.5},
-			}),
-			-- must be above "projectile" (emerge/descend projectiles, dying particles), but below "air-object" so hostile beams draw over it
-			render_layer = "air-object", -- hid beams (default "projectile" layer), but beams are now air-object too, which ends up rendering above like we want
-			--render_layer = "smoke", -- above air-object but below projectiles, this caused the graphic to flicker and blur weirdly when zoomed out
-			icon = data.raw["simple-entity"][const.VAULT_NAME].icon,
-			collision_box = nil,
-			collision_mask = { layers = {} },
-			selection_box = {{0,0}, {0,0}},
-			selectable_in_game = false,
-		}
-	}
+	-- front wall of the vault drawn over the shaft, hides emerging/descending drones (projectiles, always "projectile") so they seem to rise out of the hole
+	-- render_layer is per entity, but simple-entity has a second sprite set with its own layer (vanilla vulcanus chimneys use it):
+	--  lower_pictures: the vanilla vault at its usual layer, pictures: the front wall on top at "air-object"
+	-- "air-object": beams, gunshots and drones share it and still draw over the wall, dying drones end up behind it (render layers: combat_robots.lua final fixes)
+	-- was "smoke" (the only layer between projectile and air-object), which flickered and blurred when zoomed out
+	local vault = data.raw["simple-entity"][const.VAULT_NAME]
+	local vault_pictures = vault.pictures
+	vault.lower_pictures = vault_pictures
+	vault.lower_render_layer = vault.render_layer or "object"
+	vault.pictures = meld(table.deepcopy(vault_pictures), { -- meld from vault_pictures so flags/mipmap or whatever matches, not sure about dice
+		{width = 960, height = 640, filename = const.MOD_DIR.."/graphics/fulgoran-ruin-vault-front-wall.png",
+		shift = util.by_pixel( 18.5/2, -6/2), scale = 0.5},
+	})
+	vault.render_layer = "air-object"
 
 	-- try to fix the missing vaults
 	-- bumping threshold can fix it, but it's not safe to bump by much without causing duplicate vaults!

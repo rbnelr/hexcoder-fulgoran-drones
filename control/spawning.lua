@@ -15,7 +15,7 @@ local function spawn_position()
 	--return random_in_ellipse_center_bias({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
 	return myutil.random_in_ellipse({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
 end
--- project x onto bottom of ellipse, where bot (projectile) can spawn hidden behind VAULT_NEAR_WALL_NAME entity
+-- project x onto bottom of ellipse, where bot (projectile) can spawn hidden behind the vault's front wall (drawn by the vault itself, prototypes/vault_ruin.lua)
 ---@param x number
 ---@return number y
 local function emerging_obscured_y_pos(x)
@@ -52,7 +52,7 @@ function Vault:_queue_spawn_drones(wave, bot_type, quality_tier, count, delay, d
 	end
 end
 
--- emerging bots: spawn projectile that looks like bot mostly hidden behind the near-wall
+-- emerging bots: spawn projectile that looks like bot mostly hidden behind the vault's front wall
 -- once the projectile hits the spot it ws aiming at, it spawns the real bot
 -- TODO: projectile and or particles and bots have actual z axis, do we need to fake z via y here?
 function Vault:update_emerging()
@@ -95,7 +95,7 @@ function Vault:update_emerging()
 	end
 end
 
--- reverse of emerging: destroy bot and spawn descend projectile, finishing hidden behind the near-wall
+-- reverse of emerging: destroy bot and spawn descend projectile, finishing hidden behind the vault's front wall
 -- this particle variant does not spawn a bot at the end
 -- destroy() skips destroy_action, so no particle and no wreck
 ---@param bot LuaEntity

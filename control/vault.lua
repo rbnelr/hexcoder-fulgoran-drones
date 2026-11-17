@@ -6,7 +6,6 @@ local ore = require("control.ore_tracking")
 ---@class Vault
 ---@field id obj_id
 ---@field entity LuaEntity
----@field near_wall LuaEntity?
 ---@field waypoints LuaEntity[]
 ---
 ---@field scrap_tracker OreTracker
@@ -105,15 +104,6 @@ function get_or_init_vault(entity, source_event)
 			false) -- snap_to_grid
 	end
 	
-	vault.near_wall = entity.surface.find_entity(const.VAULT_NEAR_WALL_NAME, entity.position)
-	if vault.near_wall == nil then
-		vault.near_wall = vault.entity.surface.create_entity{
-			name = const.VAULT_NEAR_WALL_NAME, position = vault.entity.position,
-			preserve_ghosts_and_corpses = true, -- ??
-		}
-		vault.near_wall.destructible = false
-	end
-	
 	vault:update_targets() -- make sure to fix buildings
 	
 	-- scanned right away (depth for all vaults)
@@ -138,11 +128,7 @@ function Vault:on_destroyed()
 	self:delete_waypoints()
 	
 	self:update_alert()
-	
-	if self.near_wall and self.near_wall.valid then
-		self.near_wall.destroy()
-	end
-	
+
 	if self.entity and self.entity.valid then
 		self.entity.destroy()
 	end

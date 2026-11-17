@@ -102,7 +102,7 @@ function init(convert_scrap)
 end
 
 -- safely clear mod storage and reset all game state for dev purposes or deinstalling mod
--- manually delete our entities (vault near wall, hidden waypoints, drones) (not needed for uninstall, could be slow)
+-- manually delete our entities (hidden waypoints, drones) (not needed for uninstall, could be slow)
 -- reset local_effect.quality on drills around mods (important since that would get stuck otherwise)
 -- clear this mods LuaRendering and remove guis
 -- delete drone force (would keep existing)
@@ -122,7 +122,7 @@ local function reset(convert_scrap, reason)
 	local surface = game.get_surface("fulgora")
 	if surface then
 		-- delete neutral entities
-		for _,e in pairs(surface.find_entities_filtered{name={const.VAULT_NEAR_WALL_NAME,const.WAYPOINT}}) do
+		for _,e in pairs(surface.find_entities_filtered{name=const.WAYPOINT}) do
 			e.destroy()
 		end
 		-- delete left over hostile drones

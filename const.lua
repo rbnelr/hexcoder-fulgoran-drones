@@ -10,7 +10,6 @@ const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value -
 const.HARVESTABLE_BOTS = settings.startup[const.MOD_NAME.."-dead-bot-resource"].value --[["@as boolean"]]
 const.BUFFED_DRONES = settings.startup[const.MOD_NAME.."-buff-drones"].value --[["@as boolean"]]
 const.NERF_TURRETS = settings.startup[const.MOD_NAME.."-nerf-turret-turn"].value --[["@as boolean"]]
--- was a hardcoded true, TODO: a fix that is not anti-QOL (only near vaults), see release_plan.md 2.3
 const.ALLOW_DRILLS_WITHOUT_ORE = settings.startup[const.MOD_NAME.."-drills-without-ore"].value --[["@as boolean"]]
 
 ---- Hardcoded settings, some of these could be made settings
@@ -38,7 +37,6 @@ const.SCRAP_TYPES = {"scrap", "vault-scrap"} -- vault-scrap always defined, hidd
 const.ACTIVE_SCRAP = const.INF_SCRAP_ENABLED and "vault-scrap" or "scrap"
 
 const.VAULT_NAME = "fulgoran-ruin-vault"
-const.VAULT_NEAR_WALL_NAME = "fulgoran-ruin-vault-near-wall"
 const.WAYPOINT = const.MOD_NAME.."-waypoint"
 
 --const.DRONES = {
@@ -46,6 +44,11 @@ const.WAYPOINT = const.MOD_NAME.."-waypoint"
 --	"fulgoran-distractor",
 --	"fulgoran-destroyer",
 --}
+const.BOT_NAMES = {
+	["defender"]="fulgoran-defender",
+	["distractor"]="fulgoran-distractor",
+	["destroyer"]="fulgoran-destroyer",
+}
 const.IS_DRONE = {
 	["fulgoran-defender"] = true,
 	["fulgoran-distractor"] = true,
