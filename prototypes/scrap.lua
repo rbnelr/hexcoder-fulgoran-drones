@@ -69,7 +69,7 @@ function scrap.data_updates()
 		vault_scrap.autoplace.probability_expression = "("..prob..") * "..VAULT_MASK_NOISE
 		scrap_res.autoplace.probability_expression = "("..prob..") * (1 - "..VAULT_MASK_NOISE..")"
 
-		local entity_settings = data.raw["planet"]["fulgora"].map_gen_settings.autoplace_settings.entity.settings
+		local entity_settings = data.raw["planet"]["fulgora"].map_gen_settings.autoplace_settings.entity.settings ---@cast entity_settings -nil
 		entity_settings["vault-scrap"] = entity_settings["scrap"] or {}
 	else
 		-- no autoplace when off, the prototype only exists so existing vault-scrap can be converted back

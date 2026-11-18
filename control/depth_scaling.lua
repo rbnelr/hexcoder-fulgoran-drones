@@ -1,8 +1,6 @@
 local const = require("const")
 local common = require("control.common")
 local myutil = require("lib.myutil")
----@class Vault
-local Vault = require("control.vault")
 
 local depth_scaling = {}
 
@@ -171,7 +169,7 @@ local function update_drill_local_quality_effect(drill, nearby_vaults)
 	for _,vault in pairs(nearby_vaults) do
 		-- scrap_tier does some math over and over for each drill if we update all drills around vault
 		-- but its preferable over building that into its own list in the caller, if this impacts perf could optimize via caching in here?
-		local tier = depth_scaling.scrap_tier(vault.scrap_tracker.depth)
+		local tier = depth_scaling.scrap_tier(vault.scrap_tracker:scanned_depth())
 		
 		-- linear falloff by a constant along radius
 		local dist = myutil.get_distance(drill.position, vault.entity.position)
@@ -207,13 +205,14 @@ function depth_scaling.reset_all_drills_local_quality_effect(surface)
 end
 
 -- depth is stored in the ore trackers (updated by their poll), nearby vaults may be slightly out of date, but depth changes slowly
-function Vault:update_quality_for_vault_drills()
-	local nearby_vaults = self:find_this_and_overlapping_vaults()
+---@param vault Vault
+function depth_scaling.update_quality_for_vault_drills(vault)
+	local nearby_vaults = vault:find_this_and_overlapping_vaults()
 
-	local e = self.entity
-	-- TODO: cache drills
-	for _,drill in pairs(e.surface.find_entities_filtered{type="mining-drill", position=e.position, radius=const.VAULT_DEFENSE_RADIUS}) do
-		update_drill_local_quality_effect(drill, nearby_vaults)
+	for _,drill in pairs(vault.mining_drills) do
+		if drill.valid then
+			update_drill_local_quality_effect(drill, nearby_vaults)
+		end
 	end
 end
 
@@ -227,8 +226,8 @@ end
 function depth_scaling.update_quality_for_all_vaults(surface)
 	for _,v in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
 		local vault = get_or_init_vault(v)
-		if vault.has_drills then
-			vault:update_quality_for_vault_drills()
+		if vault:has_drills() then
+			depth_scaling.update_quality_for_vault_drills(vault)
 		end
 	end
 end

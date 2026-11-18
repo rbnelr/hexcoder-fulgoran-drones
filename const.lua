@@ -1,3 +1,7 @@
+--Maybe be related? https://github.com/justarandomgeek/vscode-factoriomod-debug/issues/178
+---@diagnostic disable-next-line: duplicate-doc-alias
+---@alias LocalisedString {[1]:string, [integer]:LocalisedString} or ---@alias LocalisedString any
+
 local const = {}
 const.MOD_NAME = "hexcoder-fulgoran-drones"
 const.MOD_DIR = "__"..const.MOD_NAME.."__"
@@ -6,11 +10,11 @@ const.PRINT_PREFIX = "[Vault Drones] " -- prefix for all prints and log lines of
 ---- Startup settings
 const.DEBUG = settings.startup[const.MOD_NAME.."-debug"].value --[[@as boolean]]
 const.VAULT_DEFENSE_RADIUS = settings.startup[const.MOD_NAME.."-vault-defense-radius"].value --[[@as number]]
-const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value --[["@as boolean"]]
-const.HARVESTABLE_BOTS = settings.startup[const.MOD_NAME.."-dead-bot-resource"].value --[["@as boolean"]]
-const.BUFFED_DRONES = settings.startup[const.MOD_NAME.."-buff-drones"].value --[["@as boolean"]]
-const.NERF_TURRETS = settings.startup[const.MOD_NAME.."-nerf-turret-turn"].value --[["@as boolean"]]
-const.ALLOW_DRILLS_WITHOUT_ORE = settings.startup[const.MOD_NAME.."-drills-without-ore"].value --[["@as boolean"]]
+const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value --[[@as boolean]]
+const.HARVESTABLE_BOTS = settings.startup[const.MOD_NAME.."-dead-bot-resource"].value --[[@as boolean]]
+const.BUFFED_DRONES = settings.startup[const.MOD_NAME.."-buff-drones"].value --[[@as boolean]]
+const.NERF_TURRETS = settings.startup[const.MOD_NAME.."-nerf-turret-turn"].value --[[@as boolean]]
+const.ALLOW_DRILLS_WITHOUT_ORE = settings.startup[const.MOD_NAME.."-drills-without-ore"].value --[[@as boolean]]
 
 ---- Hardcoded settings, some of these could be made settings
 

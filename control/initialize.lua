@@ -2,8 +2,7 @@ local const = require("const")
 local common = require("control.common")
 ---@class Vault
 local Vault = require("control.vault")
-require("control.spawning") -- adds functions to Vault
-local depth_scaling = require("control.depth_scaling") -- adds functions to Vault
+local depth_scaling = require("control.depth_scaling")
 local dmg = require("control.disable_on_damage")
 local ore = require("control.ore_tracking")
 local original_mapgen = require("control.original_mapgen")
@@ -29,7 +28,7 @@ local dead_bots = require("control.dead_bots")
 ---@field settings_changed boolean?
 ---@field highest_quality_unlocked integer -- 1-5
 ---
----@field startup_settings table<string, ModSettingValue> -- copy of our startup settings at the last init/on_configuration_changed, see get_startup_settings
+---@field startup_settings table<string, any> -- copy of our startup settings at the last init/on_configuration_changed, see get_startup_settings
 
 -- mod lifecycle handlers (registered in control/events.lua), the global init() is defined here too
 -- not named init because of the global function (file was init.lua)
@@ -37,7 +36,7 @@ local initialize = {}
 
 -- copy of this mod's startup settings, to tell which of them changed in on_configuration_changed
 -- (data.mod_startup_settings_changed is true for any mod's startup settings, and on install)
----@return table<string, ModSettingValue>
+---@return table<string, any>
 local function get_startup_settings()
 	local copy = {}
 	local prefix = const.MOD_NAME.."-"
@@ -181,7 +180,7 @@ script.register_metatable("Vault", Vault)
 script.register_metatable("OreTracker", ore.OreTracker)
 
 -- ctrl+alt+click when loading to trigger on_configuration_changed without version change, but mod_changes will be empty!
-local DO_DEV_RESET = false
+local DO_DEV_RESET = true
 ---@param data ConfigurationChangedData
 function initialize.on_configuration_changed(data)
 	if common.UNINSTALL then return end -- paused, reset() already ran, init() runs when unticked

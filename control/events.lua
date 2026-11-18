@@ -175,7 +175,7 @@ local function on_tick(event)
 			if update_alerts then
 				vault:update_alert()
 			end
-			vault:update_emerging()
+			spawning.update_emerging(vault)
 			
 			movement.update(vault)
 		else

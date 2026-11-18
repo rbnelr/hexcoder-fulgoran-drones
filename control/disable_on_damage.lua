@@ -92,12 +92,13 @@ end
 ---@param data Damaged?
 ---@param is_military_target boolean? -- true: attackable (repaired near a vault), false/nil: prototype default (turrets military, drills etc. not)
 function dmg.restore_building(id, e, data, is_military_target)
-	assert(e.surface.name == "fulgora")
 	if e and e.valid then
+		assert(e.surface.name == "fulgora")
+		
 		-- was `is_military_target or false`, which made turrets and radars non-military everywhere outside vaults
 		-- the prototype default is also the state without the mod (reset/uninstall), Vault:update_targets makes buildings near vaults military
 		-- TODO: maybe test new protected variable
-		e.is_military_target = is_military_target or e.prototype.is_military_target
+		e.is_military_target = is_military_target or e.prototype.is_military_target or false
 		--storage.marked_military[id] = is_military_target and e or nil
 
 		if e.custom_status and e.custom_status.label == dmg.STATUS_LABEL then
@@ -112,6 +113,17 @@ function dmg.restore_building(id, e, data, is_military_target)
 
 	if storage.poll_repaired then -- nil if reset() runs before any init()
 		storage.poll_repaired[id] = nil
+	end
+end
+
+-- heal to full HP and restore it if drones disabled it, stays military (it is near a vault), for testing (Vault:end_wave repair_buildings)
+---@param id unit_number
+---@param e LuaEntity
+function dmg.repair_and_restore_building(id, e)
+	e.health = e.max_health
+	local data = storage.poll_repaired[id]
+	if data or e.disabled_by_script then -- restore_building only enables buildings with our status label
+		dmg.restore_building(id, e, data, true)
 	end
 end
 

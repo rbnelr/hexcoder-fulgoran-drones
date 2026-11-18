@@ -1,5 +1,6 @@
 local const = require("const")
 local myutil = require("lib.myutil")
+local spawning = require("control.spawning")
 local movement = {}
 
 -- Weyl sequence
@@ -55,7 +56,7 @@ local function choose_next_target(vault, bot)
 		-- lazily swap with last?
 		-- like: pick random, check if valid, if not swap with last and pick that?
 		local list = {}
-		for _,targ in pairs(vault.targets) do
+		for _,targ in pairs(vault.targets_remaining) do
 			if targ and targ.valid and targ.is_military_target then
 				table.insert(list, targ)
 			end
@@ -103,7 +104,7 @@ function movement.update(vault)
 		-- TODO: could try overriding movement via set_movement()?
 		
 		if time_left <= 1 or radius_fraction < time_passed_fraction then -- try to get to center, but vary automatically via time, and accept futher out if out of time
-			vault:descend_bot(bot)
+			spawning.descend_bot(vault, bot)
 			vault.active_bots[id] = nil
 		end
 	end

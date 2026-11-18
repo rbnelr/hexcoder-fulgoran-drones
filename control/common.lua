@@ -1,4 +1,5 @@
 local const = require("const")
+local myutil = require("lib.myutil")
 local common = {}
 
 ---@type ModStorage
@@ -56,7 +57,7 @@ common.WAVE_MAX_SIZE = 5 -- TODO: tune
 common.BASE_MINING_RATE = 1000 -- 1500 is ~10 big drills, mining below full speed, this can go up to 10k with a more drills and speed modules
 common.BASE_FREQUENCY = 1 / 10
 
----@class AnimCurve: {depth:number, val:number}[]
+---@alias AnimCurve {depth:number, val:number}[]
 
 ---@type AnimCurve
 common.DEPTH_FREQ_CURVE = {{depth=0, val=0.5}, {depth=1, val=3}} -- TODO: tune
@@ -68,10 +69,9 @@ common.BOT_COUNTS_CURVE = { -- TODO: tune, depth curve was 25% to 150% of whatev
 	["fulgoran-destroyer" ] = {{depth=0, val=0.00*25/10}, {depth=0.3, val=0.20*62.5/10}, {depth=0.7, val=0.35*112.5/10}, {depth=1, val=0.40*150/10}},
 }
 
--- wave threat (sum of THREAT_PER_BOT * count) that counts as 100%, a wave a basic "reasonable" defense setup usually manages
+-- wave threat interpreted as %, 100% is a wave a basic "reasonable" defense setup usually manages
 -- later game setups
-common.THREAT_NORMAL = 100 -- TODO: tune
-common.THREAT_PER_BOT = {
+common.THREAT_PER_BOT = { -- TODO: tune
 	["fulgoran-defender"] = 1,
 	["fulgoran-distractor"] = 6,
 	["fulgoran-destroyer"] = 10,
@@ -159,12 +159,26 @@ end
 
 -- returns uniform random in x-range to x+range
 ---@param x number
----@param range number
----@param rng number? -- must be 0-1
----@return number
+---@param range number absolute variation, for relative call like rand_variation(x, x*0.3)
+---@param rng number? must be 0-1
+---@return number result uniform in x +- range
 function common.rand_variation(x, range, rng)
 	rng = rng or math.random()
 	return x + (rng*2-1) * range
+end
+
+-- varies a number x randomly by +- number*range
+-- then rounds such that on average equals x
+-- (rand_variation followed by floor or rand would bias the results)
+---@param x number 
+---@param range number absolute variation, for relative call like rand_variation_int(x, x*0.3)
+---@param rng number? must be 0-1
+---@return integer result uniform in x +- range, but integer
+function common.rand_variation_int(x, range, rng)
+	-- hard to explain in a comment how this works
+	rng = rng or math.random()
+	local w = math.max(1, myutil.round(2 * range))
+	return myutil.round(x + (rng - 0.5) * w)
 end
 
 ---@param at number
@@ -186,7 +200,7 @@ function common.eval_curve(curve, depth)
 	local i = 1
 	local count = #curve
 	if count <= 1 then
-		return count == 1 and curve[1] or nil
+		return count == 1 and curve[1].val or nil
 	end
 	while i < count - 1 and depth > curve[i+1].depth do
 		i = i + 1

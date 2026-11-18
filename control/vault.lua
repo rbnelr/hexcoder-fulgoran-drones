@@ -2,6 +2,9 @@ local const = require("const")
 local myutil = require("lib.myutil")
 local dmg = require("control.disable_on_damage")
 local ore = require("control.ore_tracking")
+-- spawning and depth_scaling must not require this file (require cycle)
+local spawning = require("control.spawning")
+local depth_scaling = require("control.depth_scaling")
 
 ---@class Vault
 ---@field id obj_id
@@ -9,8 +12,10 @@ local ore = require("control.ore_tracking")
 ---@field waypoints LuaEntity[]
 ---
 ---@field scrap_tracker OreTracker
----@field targets LuaEntity[] -- NOTE: entities can end up in two vaults target list!, TODO: is currently only used for bot movement, and not ideal for it, want a list of vaild target that changes
----@field has_drills boolean -- mining drills in radius, ore is only scanned while true. TODO: just cache the list of drills here instead? would help quality update performance
+-- target lists are rebuilt by update_targets (every poll and targets add themselves on build), entries can turn invalid before next rebuild, entities can be in two vaults' lists
+---@field targets table<unit_number, LuaEntity> -- all target buildings in radius, incl. disabled ones
+---@field targets_remaining table<unit_number, LuaEntity> -- targets without the disabled ones, for bot movement
+---@field mining_drills table<unit_number, LuaEntity> -- drills in radius, ore is only scanned while there are any
 ---
 --- Waves
 ---@field cur_rng number? -- roll the same size/freq variations until wave actually starts, then reset
@@ -78,8 +83,7 @@ function get_or_init_vault(entity, source_event)
 		
 		wave_timer_start = game.tick, -- first wave counts from vault init
 		
-		--targets={}, -- handled by update_targets()
-		--has_drills=false,
+		--targets={}, targets_remaining={}, mining_drills={}, -- handled by update_targets()
 		
 		emerging_queued={},
 		emerging_projectiles={},
@@ -108,7 +112,7 @@ function get_or_init_vault(entity, source_event)
 	vault:update_targets() -- make sure to fix buildings
 	
 	-- scanned right away (depth for all vaults)
-	vault.scrap_tracker = ore.OreTracker.new(entity.surface, entity.position, const.VAULT_DEFENSE_RADIUS, vault.has_drills, source_event)
+	vault.scrap_tracker = ore.OreTracker.new(entity.surface, entity.position, const.VAULT_DEFENSE_RADIUS, vault:has_drills(), source_event)
 	
 	if const.DEBUG then
 		--rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,
@@ -148,24 +152,42 @@ function Vault:bots_active()
 end
 -- offially start wave and spawn it with given parameters
 -- either called automatically by update_waves or forced by console command
----@param size number?
+-- nil parameters default to what update_waves would do now (size/freq from should_spawn_wave with the current rng, depth from the tracker, quality tier from depth)
+---@param size number? -- multiplier on the depth bot counts
 ---@param freq number?
 ---@param bot_quality_tier number? -- 0-(MAX_BOT_QUALITY-1)
-function Vault:start_wave(size, freq, bot_quality_tier)
+---@param depth number? -- 0-1, for bot counts and default quality tier
+---@return WaveInfo
+function Vault:start_wave(size, freq, bot_quality_tier, depth)
 	-- end active wave if still active
 	self:end_wave()
-	
+
 	-- TODO: update_targets here?
+
+	if depth == nil then
+		local _
+		_, depth = self:find_current_mining_rate_and_depth()
+	end
+	if size == nil or freq == nil then
+		local _, def_size, def_freq = spawning.should_spawn_wave(self, false) -- uses the real depth, not an overridden one
+		size = size or def_size
+		freq = freq or def_freq
+	end
+	bot_quality_tier = bot_quality_tier or depth_scaling.bot_tier(depth)
 	
-	-- mining rate is measured since the last wave start, scans unless update_waves already did this tick
+	-- mining rate is measured since the last wave start, scans if needed (not again this tick)
 	local e = self.entity
-	self.scrap_tracker:reset_mined(e.surface, e.position, const.VAULT_DEFENSE_RADIUS, self.has_drills)
+	self.scrap_tracker:reset_mined(e.surface, e.position, const.VAULT_DEFENSE_RADIUS, self:has_drills())
 	self.wave_timer_start = game.tick
-	
+
+	-- every wave gets new random variation for time and size
+	self.cur_rng = nil
+	self.cur_rng2 = nil
+
 	-- create new waypoints every attack, ends up more random (and previously handled radius changes)
 	self:create_waypoints()
-	
-	local new_wave = self:_spawn_wave_bots(size, freq, bot_quality_tier)
+
+	local new_wave = spawning.spawn_wave_bots(self, size, freq, bot_quality_tier, depth)
 	
 	assert(self.active_wave == nil)
 	self.active_wave = new_wave
@@ -177,15 +199,43 @@ function Vault:start_wave(size, freq, bot_quality_tier)
 	
 	return new_wave
 end
+-- poll (staggered on_tick in events.lua): targets, ore scan, drill quality, and start the automatic wave when due
+function Vault:update_waves()
+	self:update_targets()
+	
+	-- allow waves to overlap
+	-- so current or prev wave counts start_tick is counted for mining rate
+	-- if mining rate high enough or settings aggressive enough and bots still active waves will overlap
+	-- existing bots will remain and eventually die or return while new ones emerge
+	-- new wave start will counts as new wave for gui and for should_spawn_wave logic
+	--if self:bots_active() then return end
+	
+	-- scan every poll while mining is possible (drills now or at the last scan, see OreTracker:scan_if_needed), keeps depth current for drill quality
+	-- without drills no scans, rare min size waves still happen
+	-- TODO: player could be near and mine by hand but well, probably does not matter
+	self:find_current_mining_rate_and_depth()
+	
+	if self:has_drills() then
+		depth_scaling.update_quality_for_vault_drills(self) -- drill quality from depth
+	end
+	
+	local trigger_wave, size, freq = spawning.should_spawn_wave(self, true)
+	if trigger_wave then
+		-- depth and quality tier default to the current depth
+		self:start_wave(size, freq)
+	end
+end
+
 -- offially end wave and optionally kill existing bots
 -- does not make the vault inactive if bots are still active (if not on_tick does this)
 -- clears prev_wave or makes active_wave the prev_wave
 ---@param kill_bots boolean?
-function Vault:end_wave(kill_bots)
+---@param repair_buildings boolean? -- heal all targets in radius to full HP and enable the ones drones disabled (for testing)
+function Vault:end_wave(kill_bots, repair_buildings)
 	if self.active_wave then
 		self.active_wave.end_tick = game.tick
 		
-		-- rng reset in update_waves
+		-- rng reset in start_wave
 	
 		-- active_wave becomes prev_wave
 		-- never set prev_wave to nil
@@ -194,10 +244,19 @@ function Vault:end_wave(kill_bots)
 	end
 	
 	if kill_bots then
-		self:_kill_all_bots(false)
+		spawning.kill_all_bots(self, false)
 		assert(not self:bots_active())
 	end
 	
+	if repair_buildings then
+		-- targets are refreshed every poll and on build, entries can be invalid
+		for id,b in pairs(self.targets) do
+			if b.valid then
+				dmg.repair_and_restore_building(id, b)
+			end
+		end
+	end
+
 	if not self:bots_active() then
 		-- reduce entity count, waypoints only while wave active
 		self:delete_waypoints()
@@ -268,27 +327,44 @@ end
 function Vault:has_targets()
 	return next(self.targets) ~= nil
 end
+---@return boolean
+function Vault:has_drills()
+	return next(self.mining_drills) ~= nil
+end
+
+-- OreTracker:find_current_mining_rate_and_depth with this vault's position, radius and drills (scans if needed)
+---@return number mining_rate -- per minute
+---@return number depth -- 0-1
+function Vault:find_current_mining_rate_and_depth()
+	local e = self.entity
+	return self.scrap_tracker:find_current_mining_rate_and_depth(e.surface, e.position, const.VAULT_DEFENSE_RADIUS, self:has_drills())
+end
+
 function Vault:update_targets()
-	-- build new list, no cleanup needed for old one
+	-- build new lists, no cleanup needed for old ones
 	self.targets = {}
-	self.has_drills = false
-	
+	self.targets_remaining = {}
+	self.mining_drills = {}
+
 	-- technically we scan for center of entity, not bounding box, which is probably fine
 	-- but for drills that means it you can technically have drill that mines ore inside the radius, while itself being outside
-	-- TODO: could handle this, (count it for has_drills, and potentially even making it a target) but this really shouldn't happen in gameplay
+	-- TODO: could handle this, (count it in mining_drills, and potentially even making it a target) but this really shouldn't happen in gameplay
 	for _,entity in pairs(self.entity.surface.find_entities_filtered{
 			position=self.entity.position, radius=const.VAULT_DEFENSE_RADIUS, type=const.TARGETS }) do
 		--game.print(serpent.line(e))
-		
-		dmg.fix_building(entity.unit_number, entity)
+		local id = entity.unit_number ---@cast id -nil
+
+		dmg.fix_building(id, entity)
+
+		self.targets[id] = entity
 		
 		if not entity.disabled_by_script then
 			entity.is_military_target = true
-			self.targets[entity.unit_number] = entity
+			self.targets_remaining[id] = entity
 		end
-		
+
 		if entity.type == "mining-drill" then
-			self.has_drills = true
+			self.mining_drills[id] = entity
 		end
 	end
 	

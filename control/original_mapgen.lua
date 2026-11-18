@@ -243,7 +243,7 @@ end
 function original_mapgen.update_autoplace_settings(surface, enabled)
 	if enabled == nil then enabled = const.INF_SCRAP_ENABLED end
 	local mgs = surface.map_gen_settings
-	local settings = mgs.autoplace_settings.entity.settings
+	local settings = mgs.autoplace_settings.entity.settings ---@cast settings -nil
 	if (settings["vault-scrap"] ~= nil) ~= enabled then
 		-- runtime AutoplaceControl needs all fields, copy the scrap one (also keeps per-surface scrap settings)
 		settings["vault-scrap"] = enabled and (settings["scrap"] or {frequency=1, size=1, richness=1}) or nil
@@ -333,7 +333,7 @@ end
 local function convert_vault_scrap(surface, fake_surface, to, where, radius)
 	local orig_ores = where == "all" and
 		fake_surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES} or
-		fake_surface.find_entities_filtered{position=where, radius=radius, type="resource", name=const.SCRAP_TYPES}
+		fake_surface.find_entities_filtered{position=where --[[@as MapPosition]], radius=radius, type="resource", name=const.SCRAP_TYPES}
 
 	local converted = convert_ores(surface, orig_ores, to)
 	if converted > 0 then
@@ -342,7 +342,7 @@ local function convert_vault_scrap(surface, fake_surface, to, where, radius)
 				drill.update_connections()
 			end
 		else
-			common.update_drill_connections_near(surface, where, radius)
+			common.update_drill_connections_near(surface, where --[[@as MapPosition]], radius)
 		end
 	end
 	return converted
@@ -359,7 +359,7 @@ local function respawn_vaults(surface, fake_surface, where, radius)
 
 	local initial_vaults = where == "all" and
 		fake_surface.find_entities_filtered{name=const.VAULT_NAME} or
-		fake_surface.find_entities_filtered{position=where, radius=radius, name=const.VAULT_NAME}
+		fake_surface.find_entities_filtered{position=where --[[@as MapPosition]], radius=radius, name=const.VAULT_NAME}
 
 	-- this is conventient, but ignores existing vaults and just overlaps them
 	--fake_surfase.clone_entities{entities=initial_vaults,

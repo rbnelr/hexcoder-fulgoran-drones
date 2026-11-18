@@ -662,8 +662,9 @@ local function dead_bot_recycling()
 			enabled = true,
 		})
 		for _,v in pairs(dead_recyc.results) do
-			if v.name:find("-capsule") then
-				v.name = "dead-"..v.name:gsub("-capsule", "")
+			local n = v.name --[[@as string]]
+			if v.type == "item" and n:find("-capsule") then
+				v.name = "dead-"..n:gsub("-capsule", "")
 			end
 		end
 		data.raw["recipe"]["dead-"..name.."-recycling"] = dead_recyc

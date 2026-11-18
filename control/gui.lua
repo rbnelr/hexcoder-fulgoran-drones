@@ -3,6 +3,7 @@ local common = require("control.common")
 ---@class Vault
 local Vault = require("control.vault")
 local depth_scaling = require("control.depth_scaling")
+local spawning = require("control.spawning")
 local gui_util = require("lib.gui_util")
 local GUI = gui_util.GUI
 
@@ -25,6 +26,7 @@ function gui.update_viz(player)
 	
 	script.register_on_object_destroyed(player)
 	
+	---@type LuaRenderObject[]?
 	local draws = storage.render_objs[player.index]
 	if draws then -- remove previous rendering
 		for _,d in pairs(draws) do
@@ -117,10 +119,6 @@ local GAUGE_CURSOR_H = 7
 local GAUGE_CURSOR_GAP = 1 -- to the bar
 local GAUGE_TIER_W = 20 -- tier label, estimated "4.3" in default-small
 local GAUGE_TIER_H = 14
-
----@class BotCounts
----@field bot_types table<string, integer>
----@field bot_qualities table<string, integer>
 
 -- drones of this vault currently out (all waves mixed): alive or flying out of the shaft (queued ones not counted)
 ---@param vault Vault
@@ -305,18 +303,18 @@ local window_defs = {} ---@type table<integer, GuiDef> -- per quality column cou
 ---@param time LocalisedString
 ---@param size string
 ---@param threat string
----@param counts BotCounts? -- bots and qualities of a wave, nil for the next wave
+---@param wave WaveInfo? -- bot and quality counts, nil for the next wave
 ---@param num_q integer
-local function set_wave_row(refs, row, time, size, threat, counts, num_q)
+local function set_wave_row(refs, row, time, size, threat, wave, num_q)
 	refs[row.."_time"].caption = time
 	refs[row.."_size"].caption = size
 	refs[row.."_threat"].caption = threat
-	local types = counts and counts.bot_types or {}
+	local types = wave and wave.bot_types or {}
 	for i,n in ipairs(WAVE_TABLE_BOTS) do
 		local count = types[n]
 		refs[row.."_bot"..i].caption = count and count > 0 and tostring(count) or ""
 	end
-	local quals = counts and counts.bot_qualities or {}
+	local quals = wave and wave.bot_qualities or {}
 	local total = 0
 	for _,count in pairs(quals) do total = total + count end
 	for i=1,num_q do
@@ -485,16 +483,11 @@ end
 ---@param refs GuiRefs
 ---@param num_q integer -- quality columns of the wave table
 function gui.update_info_gui_content(vault, refs, num_q)
-	local time_since_start = (game.tick - vault.wave_timer_start) / 3600
-	--local time_between = (game.tick - (vault.wave_end_tick)) / 3600
-
+	-- scans if needed
+	local mining_rate, depth = vault:find_current_mining_rate_and_depth()
 	local scrap = vault.scrap_tracker
-	local e = vault.entity
-	scrap:scan(e.surface, e.position, const.VAULT_DEFENSE_RADIUS, vault.has_drills)
-	local mining_rate = scrap:mining_rate()
-
+	
 	-- represent per vault evolution as "depth mined" in approx 0-100 meters (really just %)
-	local depth = scrap.depth
 
 	--refs.mining1.caption = string.format("%6d (%d/m)", scrap.mined, mining_rate)
 	refs.mining_rate.caption = L("per-minute", string.format("%d", mining_rate))
@@ -507,32 +500,25 @@ function gui.update_info_gui_content(vault, refs, num_q)
 
 	-- waves
 	-- Note that this factors in random variation
-	local trigger_wave, size, freq, eta = vault:should_spawn_wave(mining_rate, depth, time_since_start, false)
+	local trigger_wave, size, freq, eta = spawning.should_spawn_wave(vault, false)
 	local active, prev = vault.active_wave, vault.prev_wave
 	local function wave_time(wave, key)
 		return wave and L(key, string.format("%.1f", (game.tick - wave.start_tick) / 3600)) or "--"
 	end
-	-- size is a multiplier on the depth bot counts, threat is in common.THREAT_NORMAL units, both shown in %
+	-- size is a multiplier on the depth bot counts (x100 for %), threat is already in %
 	local function percent(s, fmt)
 		return s and string.format(fmt, s * 100) or "--"
 	end
-	local function threat(w)
-		return w and w.threat and w.threat / common.THREAT_NORMAL
+	local function threat(t, fmt)
+		return t and string.format(fmt, t) or "--"
 	end
-	-- expected threat of the next wave (actual counts are rolled at spawn)
-	local next_threat
-	if size then
-		next_threat = 0
-		for bot,curve in pairs(common.BOT_COUNTS_CURVE) do
-			next_threat = next_threat + size * (common.eval_curve(curve, depth) or 0) * common.THREAT_PER_BOT[bot]
-		end
-		next_threat = next_threat / common.THREAT_NORMAL
-	end
+	-- threat of the next wave without the per type variation (actual counts are rolled at spawn)
+	local next_threat = size and select(2, spawning.estimate_bot_counts(size, depth))
 	-- next wave also shown while one is active (waves can overlap)
-	set_wave_row(refs, "next", eta and L("next-eta", string.format("%.1f", eta)) or "--", percent(size, "~%.0f%%"), percent(next_threat, "~%.0f%%"), nil, num_q)
+	set_wave_row(refs, "next", eta and L("next-eta", string.format("%.1f", eta)) or "--", percent(size, "~%.0f%%"), threat(next_threat, "~%.0f%%"), nil, num_q)
 	-- bots of the previous wave can still be around while the active one spawns
-	set_wave_row(refs, "active", wave_time(active, "active-for"), percent(active and active.size, "%.0f%%"), percent(threat(active), "%.0f%%"), active, num_q)
-	set_wave_row(refs, "last", wave_time(prev, "last-ago"), percent(prev and prev.size, "%.0f%%"), percent(threat(prev), "%.0f%%"), prev, num_q)
+	set_wave_row(refs, "active", wave_time(active, "active-for"), percent(active and active.size, "%.0f%%"), threat(active and active.threat, "%.0f%%"), active, num_q)
+	set_wave_row(refs, "last", wave_time(prev, "last-ago"), percent(prev and prev.size, "%.0f%%"), threat(prev and prev.threat, "%.0f%%"), prev, num_q)
 	refs.active_label.style = active and "bold_label" or "bold_grey_label" -- same font, normal vs bold would resize the column
 
 	gui.update_info_gui_fast_content(vault, refs.content)
@@ -569,6 +555,16 @@ function gui.update_info_gui_content(vault, refs, num_q)
 	place_marks(refs.bot_marks, bot_marks)
 end
 
+-- the cursor over the panel clears player.selected, which closed the panel, then the vault behind it got selected again (flicker)
+-- the panel has nothing to click, so let the cursor pass through to the world (set on all elements, the docs don't say whether children inherit it)
+---@param elem LuaGuiElement
+local function ignore_interaction(elem)
+	elem.ignored_by_interaction = true
+	for _,child in pairs(elem.children) do
+		ignore_interaction(child)
+	end
+end
+
 ---@param player LuaPlayer
 function gui.update_info_gui(player)
 	local existing = player.gui.left[WINDOW_NAME]
@@ -584,6 +580,7 @@ function gui.update_info_gui(player)
 		window_defs[num_q] = window_defs[num_q] or get_window_def(num_q)
 		local window, refs = window_defs[num_q]:add_to(player.gui.left)
 		gui.update_info_gui_content(vault, refs, num_q)
+		ignore_interaction(window)
 	end
 end
 --#endregion

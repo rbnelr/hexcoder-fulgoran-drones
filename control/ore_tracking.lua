@@ -42,7 +42,7 @@ local FINITE_FLOOR_RATIO = common.INF_SCRAP_MIN_RATIO
 -- tiles in ungenerated chunks are unknown (not depleted) until generated, like inf ore
 -- depth = fraction of drainable amount gone, per tile down to a floor (tiles below it count as 0, not negative), inf ore floor is its minimum, so 100m depth = minimum yield (inf ore can only lose ~80%)
 --  same 20% used for finite ores for simplicity, which also allows benefitting from max quality for some time until actually depleted
--- depth only depends on the ore (progression curve is applied later), so it is stored
+-- depth only depends on the ore (progression curve is applied later), computed from remaining/drainable of the last scan
 
 -- vault.scrap_tracker always exists and is scanned on vault registration (depth for all vaults, waves happen without drills too)
 -- per-tile amounts are only kept while drills are around (memory), on_drill_built() takes a new baseline
@@ -54,7 +54,6 @@ local FINITE_FLOOR_RATIO = common.INF_SCRAP_MIN_RATIO
 ---@field drainable number -- initially drainable (initial minus minimum), summed per tile
 ---@field initial_total number? -- finite only: actual initial amount, incl. mined out tiles (drainable stops at the 20% floor, confusing in the gui)
 ---@field amount_total number? -- finite only: actual current amount
----@field depth number -- 0-1
 ---@field mined number -- mining rate since tick (drain, but adjusted when yield <100%)
 ---@field tick MapTick -- last reset_mined() (wave start) or creation
 ---@field scan_tick MapTick -- last scan(), reset_mined() skips its scan if already scanned this tick
@@ -97,25 +96,36 @@ function OreTracker:on_drill_built(surface, position, radius)
 	end
 end
 
--- mined per minute since tick
+-- scan unless already scanned this tick, and only while mining was possible since the last scan:
+-- drills now, or at the last scan (amounts are only kept while drills are around, so that counts the mining until they were removed)
+-- without drills nothing can be mined, so mined and depth stay valid
+-- restore_ore and on_drill_built still call scan() directly, ore changes there without drills
+---@param surface LuaSurface
+---@param position MapPosition
+---@param radius number
+---@param has_drills boolean
+function OreTracker:scan_if_needed(surface, position, radius, has_drills)
+	if self.scan_tick ~= game.tick and (has_drills or self.amounts) then
+		self:scan(surface, position, radius, has_drills)
+	end
+end
+
+-- mined per minute since tick, call scan_if_needed first (find_current_mining_rate_and_depth does)
 ---@return number
 function OreTracker:mining_rate()
 	return self.mined / math.max((game.tick - self.tick) / 3600, 0.01)
 end
 
 -- start a new mining rate window, on wave start
--- scans first unless already scanned this tick, so mining before the reset does not land in the new window
+-- scans first if needed, so mining before the reset does not land in the new window
 ---@param surface LuaSurface
 ---@param position MapPosition
 ---@param radius number
 ---@param has_drills boolean
 function OreTracker:reset_mined(surface, position, radius, has_drills)
-	local tick = game.tick
-	if self.scan_tick ~= tick then
-		self:scan(surface, position, radius, has_drills)
-	end
+	self:scan_if_needed(surface, position, radius, has_drills)
 	self.mined = 0
-	self.tick = tick
+	self.tick = game.tick
 end
 
 ---@param remaining number
@@ -123,6 +133,25 @@ end
 ---@return number depth 0-1
 local function calc_depth(remaining, drainable)
 	return drainable > 0 and math.min(math.max(1 - remaining / drainable, 0), 1) or 0
+end
+
+-- depth from the last scan, without scanning
+-- for overlapping vaults during drill quality updates, where a stale depth is fine
+---@return number depth 0-1
+function OreTracker:scanned_depth()
+	return calc_depth(self.remaining, self.drainable)
+end
+
+-- mining rate since the last wave start and depth, scans if needed (scan_if_needed: once per tick, while drills are or were around)
+---@param surface LuaSurface
+---@param position MapPosition
+---@param radius number
+---@param has_drills boolean
+---@return number mining_rate -- per minute
+---@return number depth -- 0-1
+function OreTracker:find_current_mining_rate_and_depth(surface, position, radius, has_drills)
+	self:scan_if_needed(surface, position, radius, has_drills)
+	return self:mining_rate(), calc_depth(self.remaining, self.drainable)
 end
 --#endregion
 
@@ -165,7 +194,6 @@ if const.INF_SCRAP_ENABLED then
 		self.mined = self.mined + mined
 		self.remaining = remaining
 		self.drainable = drainable
-		self.depth = calc_depth(remaining, drainable)
 		self.scan_tick = game.tick
 	end
 	
@@ -273,7 +301,6 @@ else
 		self.drainable = drainable
 		self.initial_total = initial_total
 		self.amount_total = amount_total
-		self.depth = calc_depth(remaining, drainable)
 		self.scan_tick = game.tick
 	end
 
@@ -421,8 +448,8 @@ function ore.restore_ore(vault, restore)
 		local e = v.entity
 		local tracker = v.scrap_tracker
 		tracker:scan_initial_finite(e.surface, e.position, radius)
-		tracker:scan(e.surface, e.position, radius, v.has_drills)
-		tracker:reset_mined(e.surface, e.position, radius, v.has_drills) -- no scan, already scanned above
+		tracker:scan(e.surface, e.position, radius, v:has_drills())
+		tracker:reset_mined(e.surface, e.position, radius, v:has_drills()) -- no scan, already scanned above
 	end
 
 	-- recreated drained tiles
@@ -448,8 +475,8 @@ function ore.restore_all_ore(surface, restore)
 		local e = v.entity
 		local tracker = v.scrap_tracker
 		tracker:scan_initial_finite(e.surface, e.position, radius)
-		tracker:scan(e.surface, e.position, radius, v.has_drills)
-		tracker:reset_mined(e.surface, e.position, radius, v.has_drills) -- no scan, already scanned above
+		tracker:scan(e.surface, e.position, radius, v:has_drills())
+		tracker:reset_mined(e.surface, e.position, radius, v:has_drills()) -- no scan, already scanned above
 	
 		-- recreated drained tiles
 		common.update_drill_connections_near(surface, e.position, radius)
