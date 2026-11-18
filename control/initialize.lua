@@ -152,6 +152,10 @@ local function reset(convert_scrap, reason)
 		if existing then
 			existing.destroy()
 		end
+		local pinned = player.gui.left["hexcoder_fulgoran_drones_vault_pinned"]
+		if pinned then
+			pinned.destroy()
+		end
 	end
 	
 	local drone_force = game.forces[const.DRONE_FORCE]

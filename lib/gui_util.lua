@@ -89,6 +89,21 @@ function GuiDef:add_to(parent, name, refs)
 	return elem, refs
 end
 
+-- named descendants of an existing element (names unique), like the refs add_to returns
+---@param elem LuaGuiElement
+---@param refs GuiRefs?
+---@return GuiRefs
+function gui_util.get_refs(elem, refs)
+	refs = refs or {}
+	for _, child in pairs(elem.children) do
+		if child.name ~= "" then
+			refs[child.name] = child
+		end
+		gui_util.get_refs(child, refs)
+	end
+	return refs
+end
+
 ---@param args GuiDef
 ---@return GuiDef
 local function GUI(args)

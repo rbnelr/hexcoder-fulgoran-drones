@@ -242,6 +242,8 @@ local function register_all()
 
 	script.on_event(defines.events.on_tick, on_tick)
 	script.on_event(defines.events.on_selected_entity_changed, on_selected_entity_changed)
+	script.on_event(const.MOD_NAME.."-pin-vault", gui.on_pin_input)
+	script.on_event(defines.events.on_gui_click, gui.on_gui_click)
 
 	script.on_nth_tick(20, poll_viz)
 	script.on_nth_tick(60, original_mapgen.delete_unused_fake_surfaces)
@@ -259,6 +261,7 @@ local function unregister_all()
 		end
 	end
 	script.on_nth_tick(nil) -- all periods, also the one of control/tests.lua
+	script.on_event(const.MOD_NAME.."-pin-vault", nil)
 	if const.HARVESTABLE_BOTS then -- custom events only exist with the setting
 		script.on_event(const.MOD_NAME.."-on-create-combat-bot-remnant", nil)
 		script.on_event(const.MOD_NAME.."-on-combat-bot-died", nil)

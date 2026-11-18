@@ -7,6 +7,8 @@ function misc.data()
 	-- vault gui threat counter (control/gui.lua ALIVE_FONT), "scenario-message-dialog" family is IBM Plex Mono, no font file needed
 	data:extend{
 		{type="font", name=const.MOD_NAME.."-counter", from="scenario-message-dialog", size=32},
+		-- left click on a vault pins its gui (control/gui.lua on_pin_input), linked controls don't show in the controls settings
+		{type="custom-input", name=const.MOD_NAME.."-pin-vault", key_sequence="", linked_game_control="open-gui", consuming="none"},
 	}
 end
 
