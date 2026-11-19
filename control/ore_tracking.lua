@@ -14,7 +14,7 @@ local INF_SCRAP_MIN = common.INF_SCRAP_MIN
 local INF_SCRAP_DEPLETED_BUMP_AMOUNT = common.INF_SCRAP_DEPLETED_BUMP_AMOUNT
 local INF_SCRAP_DEPLETION_TO_MINING = common.INF_SCRAP_DEPLETION_TO_MINING
 local get_inf_scrap_minimum = common.get_inf_scrap_minimum
-local int_position_key = myutil.int_position_key
+local tile_position_key = myutil.tile_position_key
 
 -- finite ore has no minimum, use the same 20% as inf ore as floor for depth
 local FINITE_FLOOR_RATIO = common.INF_SCRAP_MIN_RATIO
@@ -62,26 +62,24 @@ ore.OreTracker = OreTracker
 
 -- scans right away
 -- finite tiles take their current amount as initial, fine for vaults registered after init (never mined, drills register nearby vaults before mining)
----@param surface LuaSurface
----@param position MapPosition
----@param radius number
----@param has_drills boolean
+---@param vault Vault -- its scrap_tracker is not set yet
 ---@param source_event string?
 ---@return OreTracker
-function OreTracker.new(surface, position, radius, has_drills, source_event)
+function OreTracker.new(vault, source_event)
 	local self = setmetatable({
 		mined = 0,
 		mined_reset_tick = game.tick,
 	}, OreTracker)
-	
+
 	if source_event ~= "on_chunk_generated" then
-		self:scan_initial_finite(surface, position, radius)
+		self:scan_initial_finite(vault)
 	end
-	
+
 	-- scan current amount for each vault
 	-- infinite ores have initial already
 	-- finite assume current amount is correct (no mining because mapgen vault) or scan_initial_finite was called if old vault in existing save
-	self:scan(surface, position, radius, has_drills)
+	local e = vault.entity
+	self:scan(e.surface, e.position, const.VAULT_DEFENSE_RADIUS, vault:has_drills())
 	return self
 end
 
@@ -170,7 +168,7 @@ if const.INF_SCRAP_ENABLED then
 		local amounts = self.amounts or {}
 		local mined, remaining, drainable = 0, 0, 0
 
-		for _,ore in pairs(surface.find_entities_filtered{type="resource", name="vault-scrap", position=position, radius=radius}) do
+		for _,ore in pairs(surface.find_entities_filtered{type="resource", name="infinite-scrap", position=position, radius=radius}) do
 			local amount = ore.amount
 			local initial = ore.initial_amount ---@cast initial -nil
 			local minimum = get_inf_scrap_minimum(initial) + INF_SCRAP_DEPLETED_BUMP_AMOUNT
@@ -178,7 +176,7 @@ if const.INF_SCRAP_ENABLED then
 			drainable = drainable + math.max(initial - minimum, 0)
 			remaining = remaining + math.max(amount - minimum, 0)
 
-			local key = int_position_key(ore.position)
+			local key = tile_position_key(ore.position)
 			local prev_amount = amounts[key]
 			if prev_amount and amount < prev_amount then
 				local drained = prev_amount - amount
@@ -200,14 +198,14 @@ if const.INF_SCRAP_ENABLED then
 	---@param event EventData.on_resource_depleted
 	function ore.on_resource_depleted(event)
 		local ore = event.entity
-		if ore.name ~= "vault-scrap" then return end
+		if ore.name ~= "infinite-scrap" then return end
 		init()
 
 		--assert(ore.amount <= get_inf_scrap_minimum(ore.initial_amount))
 
 		-- infinite at minimum: bump so it keeps depleting and mining stays visible to scan
 		local position = ore.position
-		local key = int_position_key(position)
+		local key = tile_position_key(position)
 		local bump = INF_SCRAP_DEPLETED_BUMP_AMOUNT
 		local old_amount = ore.amount
 		ore.amount = old_amount + bump
@@ -252,7 +250,7 @@ else
 		-- present tiles: remaining, mined
 		for _,ore in pairs(surface.find_entities_filtered{type="resource", name="scrap", position=position, radius=radius}) do
 			local amount = ore.amount
-			local key = int_position_key(ore.position)
+			local key = tile_position_key(ore.position)
 
 			local initial = initial_amounts[key]
 			if initial == nil then
@@ -303,7 +301,7 @@ else
 		-- finite ore depleted, removed by the game after this
 		-- last amount counts as mined, initial stays so depth keeps counting the tile
 		local position = ore.position
-		local key = int_position_key(position)
+		local key = tile_position_key(position)
 		for _,ve in pairs(ore.surface.find_entities_filtered{name=const.VAULT_NAME, position=position, radius=const.VAULT_DEFENSE_RADIUS}) do
 			local vault = get_vault(ve)
 			local scrap = vault and vault.scrap_tracker
@@ -319,143 +317,158 @@ else
 	end
 end
 
--- finite: rebuild initial amounts and mined out tiles from fake fulgora (slow, cheap during init since convert just generated it), scan() after this to update depth
--- needed when tiles may have been mined or changed while not tracked (new install on existing save, restore_ore)
--- inf ore has initial_amount, nothing to do
----@param surface LuaSurface
----@param position MapPosition
----@param radius number
-function OreTracker:scan_initial_finite(surface, position, radius)
-	if const.INF_SCRAP_ENABLED then return end
-	
-	local fake_surface = original_mapgen.recreate_initial_surface_and_load_chunks(surface, original_mapgen.chunks_in_radius(surface, position, radius))
-	-- both types on both surfaces, fake fulgora may have been created with the other inf scrap setting (reused surface), so its types can't be trusted
-	-- nil: no generated chunks in radius, so no ore either
-	local initial_ores = fake_surface and fake_surface.find_entities_filtered{position=position, radius=radius, type="resource", name=const.SCRAP_TYPES} or {}
-	
-	local current = {}
-	for _,ore in pairs(surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES, position=position, radius=radius}) do
-		current[int_position_key(ore.position)] = ore
-	end
-	
+-- initial amount per tile in the vault's radius
+-- original vaults (original_mapgen.is_original_vault): from fake fulgora, incl. mined out tiles
+--  tiles in chunks the real surface has not generated are left out (fake fulgora generates all around), scan registers those tiles once generated
+-- other vaults (cloned, moved): the original ore at their position belongs to something else, so use what we know:
+--  inf: initial_amount of each tile, finite: tracker initials (incl. mined out tiles), else the current amount
+---@param vault Vault
+---@param tracker OreTracker? -- the vault's tracker, nil while it is created
+---@return table<tile_key, number>
+local function find_initial_amounts(vault, tracker)
+	local e = vault.entity
+	local surface, position, radius = e.surface, e.position, const.VAULT_DEFENSE_RADIUS
 	local initial_amounts = {}
-	for _,orig in pairs(initial_ores) do
-		local pos = orig.position
-		local key = int_position_key(pos)
-		local ore = current[key]
-		if ore == nil then
-			-- missing tiles were finite, inf ore never disappears
-			-- unless the chunk is not generated on the real surface yet (fake fulgora generates all around), scan registers those tiles once generated
+
+	local fake_surface = original_mapgen.recreate_initial_surface_and_load_chunks(surface, original_mapgen.chunks_in_radius(surface, position, radius))
+	if original_mapgen.is_original_vault(fake_surface, position) then
+		---@cast fake_surface -nil
+		-- both types, fake fulgora may have been created with the other inf scrap setting (reused surface), so its types can't be trusted
+		for _,orig in pairs(fake_surface.find_entities_filtered{position=position, radius=radius, type="resource", name=const.SCRAP_TYPES}) do
+			local pos = orig.position
 			if surface.is_chunk_generated{x=math.floor(pos.x / 32), y=math.floor(pos.y / 32)} then
-				initial_amounts[key] = orig.amount
+				initial_amounts[tile_position_key(pos)] = orig.amount
 			end
-		elseif ore.name == "scrap" then
-			initial_amounts[key] = math.max(orig.amount, ore.amount) -- restore_ore > 100%
+		end
+	else
+		local known = tracker and tracker.initial_amounts -- finite only
+		if known then
+			for key, initial in pairs(known) do
+				initial_amounts[key] = initial
+			end
+		end
+		for _,o in pairs(surface.find_entities_filtered{type="resource", name=const.ACTIVE_SCRAP, position=position, radius=radius}) do
+			local key = tile_position_key(o.position)
+			if initial_amounts[key] == nil then
+				initial_amounts[key] = o.initial_amount or o.amount -- initial_amount: infinite only
+			end
 		end
 	end
-	self.initial_amounts = initial_amounts
+	return initial_amounts
+end
+
+-- finite: rebuild initial amounts incl. mined out tiles (find_initial_amounts), scan() after this to update depth
+-- needed when tiles may have been mined or changed while not tracked (new install on existing save, change_ore)
+-- inf ore has initial_amount, nothing to do
+---@param vault Vault
+function OreTracker:scan_initial_finite(vault)
+	if const.INF_SCRAP_ENABLED then return end
+	self.initial_amounts = find_initial_amounts(vault, self)
 end
 --#endregion
 
 --#region Restore
 
--- restore one tile to restore * its original amount, shared by restore_ore and restore_all_ore
--- only touches the active scrap type, fully drained tiles are recreated (only with inf scrap off, inf ore never drains)
----@param surface LuaSurface
----@param orig_ore LuaEntity -- from fake fulgora
----@param restore number
-local function restore_tile(surface, orig_ore, restore)
-	local orig_amount = orig_ore.amount
-	local amount = math.ceil(orig_amount * restore)
+-- restore the scrap around a vault to restore * its initial amount (find_initial_amounts), fully drained tiles are recreated
+-- only touches the active scrap type (with inf scrap on, a missing tile or finite scrap is off-island or not converted, ignored)
+-- note: for infinite ores, the yield % depends on the "normal" amount as defined in the ore prototype
+--       and the actual minimum depends on the initial amount
+---@param vault Vault
+---@param restore number -- 0-1
+local function restore_scrap_near_vault(vault, restore)
+	local surface = vault.entity.surface
+	for key, initial in pairs(find_initial_amounts(vault, vault.scrap_tracker)) do
+		local position = myutil.tile_position_key_to_center(key)
+		local amount = math.ceil(initial * restore)
 
-	-- find_entity takes a single name, fine here since only the active type is restored (convert needs both types, so find_entities_filtered there)
-	local opos = orig_ore.position
-	local old_ore = surface.find_entity(const.ACTIVE_SCRAP, opos)
-	if old_ore == nil and not const.INF_SCRAP_ENABLED and surface.is_chunk_generated{x=math.floor(opos.x / 32), y=math.floor(opos.y / 32)} then
-		-- fully drained, only finite tiles can deplete (with inf scrap on, a missing tile is off-island finite scrap, ignored)
-		-- ungenerated chunks get their tiles from mapgen (chunk selection only returns generated chunks, so this should always pass)
-		old_ore = surface.create_entity{name="scrap", position=opos, snap_to_grid=true, preserve_ghosts_and_corpses=true}
-	end
-	
-	if old_ore ~= nil then -- may fail if chunks are not generated yet?
-		if old_ore.name == "vault-scrap" then
-			local initial = math.max(orig_amount, amount)
-			if initial < INF_SCRAP_MIN then initial = INF_SCRAP_MIN + INF_SCRAP_DEPLETED_BUMP_AMOUNT end -- important to avoid depth bug (?)
-			old_ore.initial_amount = initial -- before amount, the minimum depends on it
-
-			-- this enforces minimum if setting to a low percentage
-			-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
-			local minimum = get_inf_scrap_minimum(initial) + INF_SCRAP_DEPLETED_BUMP_AMOUNT
-			if amount < minimum then amount = minimum end
-		elseif amount < 1 then
-			amount = 1 -- not allowed to set amount=0, and 0 would deplete finite tiles without on_resource_depleted
+		local o = surface.find_entity(const.ACTIVE_SCRAP, position)
+		if o == nil and not const.INF_SCRAP_ENABLED then
+			-- fully drained, only finite tiles can deplete, find_initial_amounts only returns tiles in generated chunks
+			o = surface.create_entity{name="scrap", position=position, snap_to_grid=true, preserve_ghosts_and_corpses=true}
 		end
-		old_ore.amount = amount
+
+		if o ~= nil then
+			if const.INF_SCRAP_ENABLED then
+				-- this enforces minimum if setting to a low percentage
+				-- also need to bump if setting amount to under minimum, or on_resource_depleted never gets called and estimation will be wrong!
+				-- initial below the minimum raised too, important to avoid depth bug (?)
+				local inf_initial
+				inf_initial, amount = common.clamp_inf_scrap(initial, amount)
+				o.initial_amount = inf_initial -- before amount, the minimum depends on it
+			elseif amount < 1 then
+				amount = 1 -- not allowed to set amount=0, and 0 would deplete finite tiles without on_resource_depleted
+			end
+			o.amount = amount
+		end
 	end
 end
 
--- Restore the scrap around a vault ruin to a percentage of the original (mapgen) amount, read from fake fulgora
--- only changes amounts, never the type (that is original_mapgen.convert_ore_and_restore_vaults, from the inf scrap setting)
--- only touches the active scrap type, fully drained tiles are recreated (only with inf scrap off, inf ore never drains)
--- note: for infinite ores, the yield % depends on the "normal" amount as defined in the ore prototype
---       and the actual minimum depends on the initial amount
--- note: restore >100% will inflate the initial amount to be higher, but <100% will not set it lower
+-- Convert the scrap around vault ruins to the inf scrap setting and/or restore it to a percentage of its initial amount
+-- convert: original vaults (fake fulgora has a vault at the same position) like the map conversion (vault islands only),
+--  other vaults (cloned, moved) convert all scrap in radius in place (current amount as initial)
+-- restore: restore_scrap_near_vault, initial amounts from find_initial_amounts (fake fulgora for original vaults, what we know for others)
 -- TODO: add parameter (and mod setting) to override richness, so that time to reach say, 20% of scrap can be adjusted for finite ores (max quality at 20%?)
 --       and for inf ores, the richness would increase the normal amount such that
----@param vault Vault
----@param restore number -- fraction of the original amount, >= 0, may be > 1 (infinite clamps to its minimum, finite to 1)
-function ore.restore_ore(vault, restore)
-	local position = vault.entity.position
-	local surface = vault.entity.surface
+---@param surface LuaSurface
+---@param where Vault|"all" -- "all": every vault ruin on surface (slow, one fake fulgora request per vault)
+---@param restore number? -- fraction of the initial amount, 0-1 (infinite clamps to its minimum, finite to 1), nil: no restore
+---@param convert boolean -- convert scrap of the other type to the inf scrap setting first
+function ore.change_ore(surface, where, restore, convert)
 	local radius = const.VAULT_DEFENSE_RADIUS
 
-	local fake_surface = original_mapgen.recreate_initial_surface_and_load_chunks(surface, original_mapgen.chunks_in_radius(surface, position, radius))
-	-- nil: no generated chunks in radius, so no ore either
-	local orig_ores = fake_surface and fake_surface.find_entities_filtered{position=position, radius=radius, type="resource", name=const.SCRAP_TYPES} or {}
-
-	for _,orig_ore in pairs(orig_ores) do
-		restore_tile(surface, orig_ore, restore)
+	local vaults = {}
+	if where == "all" then
+		for _,ve in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
+			table.insert(vaults, get_or_init_vault(ve))
+		end
+	else
+		vaults[1] = where
 	end
-	
-	-- rescan overlapping vaults (ore is part of more than one radius), finite initial raised for restore > 100% and drained tiles
+
+	local rescan = {} ---@type table<Vault, true> -- this and overlapping vaults, once each
+	for _,vault in ipairs(vaults) do
+		if convert then
+			local position = vault.entity.position
+			local fake_surface = original_mapgen.recreate_initial_surface_and_load_chunks(surface, original_mapgen.chunks_in_radius(surface, position, radius))
+			if original_mapgen.is_original_vault(fake_surface, position) then
+				---@cast fake_surface -nil
+				original_mapgen.convert_scrap_on_vault_islands(surface, fake_surface, const.ACTIVE_SCRAP, position, radius)
+			else
+				local _, initials = original_mapgen.convert_scrap_in_place(surface, const.ACTIVE_SCRAP, position, radius)
+				-- infinite-scrap -> scrap: the finite tracker never saw these tiles, keep their initial_amount (merged, the tracker knows other tiles too)
+				local initial_amounts = vault.scrap_tracker.initial_amounts
+				if initial_amounts then
+					for key, initial in pairs(initials) do
+						initial_amounts[key] = initial
+					end
+				end
+			end
+		end
+
+		if restore then
+			restore_scrap_near_vault(vault, restore)
+		end
+
+		for _,v in pairs(vault:find_this_and_overlapping_vaults()) do
+			rescan[v] = true
+		end
+	end
+
+	-- rescan overlapping vaults (ore is part of more than one radius), finite initials of converted and recreated tiles
+	-- tiles a vault has no initial for take the current amount (scan), fine for overlapping vaults that are not original
 	-- important!, lowered amounts count as mined, clear that or it triggers huge waves
 	-- this also restarts the mining rate window, so the gui shows the new rate instead of an average (wave timer is kept)
-	for _,v in pairs(vault:find_this_and_overlapping_vaults()) do
+	for v in pairs(rescan) do
 		local e = v.entity
 		local tracker = v.scrap_tracker
-		tracker:scan_initial_finite(e.surface, e.position, radius)
+		tracker:scan_initial_finite(v)
 		tracker:scan(e.surface, e.position, radius, v:has_drills())
 		tracker:reset_mined(e.surface, e.position, radius, v:has_drills()) -- no scan, already scanned above
 	end
 
 	-- recreated drained tiles
-	common.update_drill_connections_near(surface, position, radius)
-end
-
----@param surface LuaSurface
----@param restore number -- fraction of the original amount
-function ore.restore_all_ore(surface, restore)
-	local fake_surface = original_mapgen.recreate_initial_surface_and_load_chunks(surface, original_mapgen.vault_island_chunks(surface))
-	if fake_surface == nil then return end -- no generated vault island chunks
-	local orig_ores = fake_surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES}
-
-	for _,orig_ore in pairs(orig_ores) do
-		restore_tile(surface, orig_ore, restore)
-	end
-	
-	local radius = const.VAULT_DEFENSE_RADIUS
-	-- rescan overlapping vaults (ore is part of more than one radius), finite initial raised for restore > 100% and drained tiles
-	-- important!, lowered amounts count as mined, clear that or it triggers huge waves
-	-- this also restarts the mining rate window, so the gui shows the new rate instead of an average (wave timer is kept)
-	for _,v in pairs(storage.vaults) do
-		local e = v.entity
-		local tracker = v.scrap_tracker
-		tracker:scan_initial_finite(e.surface, e.position, radius)
-		tracker:scan(e.surface, e.position, radius, v:has_drills())
-		tracker:reset_mined(e.surface, e.position, radius, v:has_drills()) -- no scan, already scanned above
-	
-		-- recreated drained tiles
-		common.update_drill_connections_near(surface, e.position, radius)
+	for _,vault in ipairs(vaults) do
+		common.update_drill_connections_near(surface, vault.entity.position, radius)
 	end
 end
 --#endregion

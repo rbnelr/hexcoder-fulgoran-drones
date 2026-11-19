@@ -44,7 +44,7 @@ function tests.run(player, name, args)
 	local fn = test_funcs[name]
 	if fn == nil then
 		local names = {}
-		for n in pairs(test_funcs) do names[#names+1] = n end
+		for n in pairs(test_funcs) do table.insert(names, n) end
 		table.sort(names)
 		dbg_print("Unknown test '"..name.."', available: "..table.concat(names, ", "), true, nil, player)
 		return
@@ -152,10 +152,10 @@ function test_funcs.test_mining_quality_roll(player, num_ore, quality_bonus)
 
 	-- check everything first so nothing is left half built
 	local to_place = {}
-	for _,d in ipairs(DRILL_LAYOUT) do to_place[#to_place+1] = { name="big-mining-drill", position=at(d.pos), direction=d.dir } end
-	for _,p in ipairs(CHEST_LAYOUT)  do to_place[#to_place+1] = { name="steel-chest", position=at(p) } end
-	for _,p in ipairs(BEACON_LAYOUT) do to_place[#to_place+1] = { name="beacon", position=at(p), quality="legendary" } end
-	for _,p in ipairs(POWER_LAYOUT)  do to_place[#to_place+1] = { name=p.name, position=at(p.pos) } end
+	for _,d in ipairs(DRILL_LAYOUT) do table.insert(to_place, { name="big-mining-drill", position=at(d.pos), direction=d.dir }) end
+	for _,p in ipairs(CHEST_LAYOUT)  do table.insert(to_place, { name="steel-chest", position=at(p) }) end
+	for _,p in ipairs(BEACON_LAYOUT) do table.insert(to_place, { name="beacon", position=at(p), quality="legendary" }) end
+	for _,p in ipairs(POWER_LAYOUT)  do table.insert(to_place, { name=p.name, position=at(p.pos) }) end
 	for _,e in ipairs(to_place) do
 		if not surface.can_place_entity{name=e.name, position=e.position, direction=e.direction, force=force} then
 			dbg_print("Can't place "..e.name.." in the test area (16 tiles north of you), move to an empty spot", true, nil, player)
@@ -173,9 +173,9 @@ function test_funcs.test_mining_quality_roll(player, num_ore, quality_bonus)
 	for _,e in ipairs(to_place) do
 		local ent = surface.create_entity{name=e.name, position=e.position, direction=e.direction, quality=e.quality, force=force}
 		---@cast ent -nil
-		entities[#entities+1] = ent
+		table.insert(entities, ent)
 		if ent.type == "mining-drill" then
-			drills[#drills+1] = ent
+			table.insert(drills, ent)
 			ent.get_module_inventory().insert{name="speed-module-3", count=4, quality="legendary"} ---@diagnostic disable-line
 			-- speed modules have a quality penalty in the drill, compensated in the first update once drill.effects is known
 			local effect = ent.local_effect or {}
@@ -185,7 +185,7 @@ function test_funcs.test_mining_quality_roll(player, num_ore, quality_bonus)
 		elseif ent.type == "beacon" then
 			ent.get_module_inventory().insert{name="speed-module-3", count=2, quality="legendary"} ---@diagnostic disable-line
 		elseif ent.type == "container" then
-			chests[#chests+1] = ent
+			table.insert(chests, ent)
 		end
 	end
 
@@ -244,7 +244,7 @@ function test_funcs.test_mining_quality_roll(player, num_ore, quality_bonus)
 		for _,c in pairs(counts) do total = total + c end
 		local effective = {}
 		for _,drill in ipairs(drills) do
-			effective[#effective+1] = string.format("%+.2f%%", (drill.valid and drill.effects and drill.effects.quality or 0)*100)
+			table.insert(effective, string.format("%+.2f%%", (drill.valid and drill.effects and drill.effects.quality or 0)*100))
 		end
 		local chained = expected_chained(quality_bonus)
 		local flat = expected_flat(quality_bonus)
@@ -270,7 +270,7 @@ commands.add_command("vaults-test", "<test name> [params...]\nrun an in-game tes
 	local player = game.get_player(command.player_index) ---@cast player -nil
 	local args = {}
 	for arg in string.gmatch(command.parameter or "", "%S+") do
-		args[#args+1] = tonumber(arg) or arg
+		table.insert(args, tonumber(arg) or arg)
 	end
 	local name = table.remove(args, 1)
 	tests.run(player, name and tostring(name) or "", args) -- "" prints the list

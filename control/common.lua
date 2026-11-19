@@ -36,9 +36,9 @@ common.update_runtime_settings({name="_mod_load", setting_type="runtime-global"}
 common.UNINSTALL_SETTING_NAME = const.MOD_NAME.."-uninstall"
 common.UNINSTALL = settings.global[common.UNINSTALL_SETTING_NAME].value --[[@as boolean]]
 
----- Infinite vault scrap
+---- Infinite scrap
 
-local INF_SCRAP_PROTO = prototypes.entity["vault-scrap"]
+local INF_SCRAP_PROTO = prototypes.entity["infinite-scrap"]
 common.INF_SCRAP_NORMAL = INF_SCRAP_PROTO.normal_resource_amount
 common.INF_SCRAP_MIN = INF_SCRAP_PROTO.minimum_resource_amount
 common.INF_SCRAP_MIN_RATIO = common.INF_SCRAP_MIN / common.INF_SCRAP_NORMAL
@@ -95,6 +95,21 @@ function common.get_inf_scrap_minimum(initial_amount)
 	else
 		return math.floor(initial_amount * common.INF_SCRAP_MIN_RATIO) -- 20% of initial amount, is floored correct?
 	end
+end
+
+-- valid initial and amount for setting infinite-scrap (convert, restore), pass initial = max(original, amount) so amount never ends up > initial
+-- initial below the minimum is raised to minimum + bump
+-- amount is raised to minimum + bump, or on_resource_depleted never gets called and the estimation will be wrong
+-- set initial_amount before amount, the minimum depends on it
+---@param initial number
+---@param amount number
+---@return number initial
+---@return number amount
+function common.clamp_inf_scrap(initial, amount)
+	if initial < common.INF_SCRAP_MIN then initial = common.INF_SCRAP_MIN + common.INF_SCRAP_DEPLETED_BUMP_AMOUNT end
+	local minimum = common.get_inf_scrap_minimum(initial) + common.INF_SCRAP_DEPLETED_BUMP_AMOUNT
+	if amount < minimum then amount = minimum end
+	return initial, amount
 end
 
 -- This is super dodgy, if there are modded drills with high radius we may miss to update them (they won't mine the newly added bot resource)

@@ -35,10 +35,10 @@ const.BOT_RESOURCE_QUALITY_BADGES = true
 const.INF_DEPLETION_RATE = 5
 
 ----
-const.SCRAP_TYPES = {"scrap", "vault-scrap"} -- vault-scrap always defined, hidden if inf scrap is off
+const.SCRAP_TYPES = {"scrap", "infinite-scrap"} -- infinite-scrap always defined, hidden if inf scrap is off
 -- inf scrap is a hard toggle and vault islands get converted on load, so ore tracking only looks at this type
 -- both types (SCRAP_TYPES) only in the conversion code and when reading fake fulgora
-const.ACTIVE_SCRAP = const.INF_SCRAP_ENABLED and "vault-scrap" or "scrap"
+const.ACTIVE_SCRAP = const.INF_SCRAP_ENABLED and "infinite-scrap" or "scrap"
 
 const.VAULT_NAME = "fulgoran-ruin-vault"
 const.WAYPOINT = const.MOD_NAME.."-waypoint"

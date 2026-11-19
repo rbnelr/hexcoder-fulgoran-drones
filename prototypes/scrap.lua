@@ -8,10 +8,10 @@ function scrap.data()
 end
 
 function scrap.data_updates()
-	-- always defined (hidden when off), so turning the setting off does not delete existing vault-scrap, control converts it back
+	-- always defined (hidden when off), so turning the setting off does not delete existing infinite-scrap, control converts it back
 	data:extend{
 		meld(table.deepcopy(data.raw["resource"]["scrap"]), {
-			name = "vault-scrap",
+			name = "infinite-scrap",
 			hidden = not const.INF_SCRAP_ENABLED,
 			localised_name = {"", {"entity-name.scrap"}, " (Vault)"},
 			order = "a[scrap]-a[scrap]-b[inf-vault]",
@@ -56,24 +56,24 @@ function scrap.data_updates()
 		})
 	}
 
-	-- split the scrap autoplace into normal scrap and vault-scrap (vault islands only)
+	-- split the scrap autoplace into normal scrap and infinite-scrap (vault islands only)
 	-- fulgora_vaults_and_starting_vault is 0 or 1 (built only from comparisons), so positions and amounts stay identical, only the type changes
-	-- existing surfaces keep their own map_gen_settings, control (original_mapgen.update_autoplace_settings) adds/removes vault-scrap there
+	-- existing surfaces keep their own map_gen_settings, control (original_mapgen.update_autoplace_settings) adds/removes infinite-scrap there
 	local VAULT_MASK_NOISE = "fulgora_vaults_and_starting_vault"
 	local scrap_res = data.raw["resource"]["scrap"]
-	local vault_scrap = data.raw["resource"]["vault-scrap"]
+	local inf_scrap = data.raw["resource"]["infinite-scrap"]
 	if const.INF_SCRAP_ENABLED and scrap_res.autoplace then
 		local prob = tostring(scrap_res.autoplace.probability_expression)
 
-		vault_scrap.autoplace = table.deepcopy(scrap_res.autoplace)
-		vault_scrap.autoplace.probability_expression = "("..prob..") * "..VAULT_MASK_NOISE
+		inf_scrap.autoplace = table.deepcopy(scrap_res.autoplace)
+		inf_scrap.autoplace.probability_expression = "("..prob..") * "..VAULT_MASK_NOISE
 		scrap_res.autoplace.probability_expression = "("..prob..") * (1 - "..VAULT_MASK_NOISE..")"
 
 		local entity_settings = data.raw["planet"]["fulgora"].map_gen_settings.autoplace_settings.entity.settings ---@cast entity_settings -nil
-		entity_settings["vault-scrap"] = entity_settings["scrap"] or {}
+		entity_settings["infinite-scrap"] = entity_settings["scrap"] or {}
 	else
-		-- no autoplace when off, the prototype only exists so existing vault-scrap can be converted back
-		vault_scrap.autoplace = nil
+		-- no autoplace when off, the prototype only exists so existing infinite-scrap can be converted back
+		inf_scrap.autoplace = nil
 	end
 end
 

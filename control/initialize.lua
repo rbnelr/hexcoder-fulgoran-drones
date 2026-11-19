@@ -82,7 +82,7 @@ function init(convert_scrap)
 		if surface then
 			if convert_scrap ~= false then
 				-- respawn vaults, and convert vault scrap between finite<->infinite on existing chunks
-				original_mapgen.convert_ore_and_restore_vaults(surface) -- freezes the game for a bit, warn user or make user trigger it manually?
+				original_mapgen.convert_ore_and_restore_scrap_near_vaults(surface) -- freezes the game for a bit, warn user or make user trigger it manually?
 			end
 
 			for _,e in pairs(surface.find_entities_filtered{name=const.VAULT_NAME}) do
@@ -111,7 +111,7 @@ end
 -- storage forgets about vaults, but they will be found and initialized again by init()
 --  (and restored to identical state other than the active wave and rng)
 -- leaves the world as if the mod did not exist (also the uninstall), except the dead-<bot> wrecks (deleted with their prototypes on removal)
----@param convert_scrap boolean? -- vault-scrap -> scrap (uninstall, inf scrap setting changed)
+---@param convert_scrap boolean? -- infinite-scrap -> scrap (uninstall, inf scrap setting changed)
 ---@param reason string? -- logged, from describe_config_changes
 local function reset(convert_scrap, reason)
 	if const.DEBUG then
@@ -141,7 +141,9 @@ local function reset(convert_scrap, reason)
 		end
 
 		if convert_scrap then
-			original_mapgen.convert_all_vault_scrap_to_scrap(surface) -- init(true) converts it back
+			-- same amount, so removing the mod (deletes infinite-scrap) keeps the scrap, init(true) converts it back
+			original_mapgen.convert_scrap_in_place(surface, "scrap", "all")
+			original_mapgen.update_autoplace_settings(surface, false) -- chunks generated from now on get scrap too
 		end
 	end
 	
@@ -247,7 +249,7 @@ function initialize.on_runtime_mod_setting_changed(event)
 		if common.UNINSTALL then
 			reset(true, "uninstall")
 			
-			log(dbg_print("Prepared for uninstall: Killed waves, restored buildings, drill quality removed, vault scrap converted to normal scrap."))
+			log(dbg_print("Prepared for uninstall: Killed waves, restored buildings, drill quality removed, infinite scrap converted to normal scrap."))
 			log(dbg_print("Save the game now, then remove the mod.", true))
 		else
 			common.update_runtime_settings({name="_mod_load", setting_type="runtime-global"}) -- re-cache once resumed

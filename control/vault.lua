@@ -112,7 +112,7 @@ function get_or_init_vault(entity, source_event)
 	vault:update_targets() -- make sure to fix buildings
 	
 	-- scanned right away (depth for all vaults)
-	vault.scrap_tracker = ore.OreTracker.new(entity.surface, entity.position, const.VAULT_DEFENSE_RADIUS, vault:has_drills(), source_event)
+	vault.scrap_tracker = ore.OreTracker.new(vault, source_event)
 	
 	if const.DEBUG then
 		--rendering.draw_rectangle{left_top=vault.bounding_box.left_top, right_bottom=vault.bounding_box.right_bottom,

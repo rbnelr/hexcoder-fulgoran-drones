@@ -142,7 +142,7 @@ end
 
 ---@param pos MapPosition
 ---@return tile_key
-function myutil.int_position_key(pos)
+function myutil.tile_position_key(pos)
 	local x = math.floor(pos.x or pos[1]) ---@cast x integer
 	local y = math.floor(pos.y or pos[2]) ---@cast y integer
 	-- lua docs largest integer number without rounding arror: 100,000,000,000,000
@@ -154,6 +154,13 @@ function myutil.int_position_key(pos)
 	-- largest +/- is now 838,860,808,388,608 (>2^49 and <2^50) which is outside lua doc range, but inside actual safe range
 	return y * 100000000 + x -- negative x make y part appear smaller
 	--return y * 100000000 + (x + 8388608) -- use this to avoid?
+end
+
+---@param key tile_key
+---@return MapPosition
+function myutil.tile_position_key_to_center(key)
+	local y = math.floor(key / 100000000 + 0.5)
+	return {x = key - y * 100000000 + 0.5, y = y + 0.5}
 end
 
 -- iteration state of a staggered poll, kept in storage (plain table, starts as {})

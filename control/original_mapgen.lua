@@ -53,7 +53,7 @@ function original_mapgen.delete_all_fake_surfaces()
 	local fake_names = {}
 	for _,surface in pairs(game.surfaces) do
 		if string.sub(surface.name, 1, #FAKE_PREFIX) == FAKE_PREFIX then
-			fake_names[#fake_names+1] = surface.name -- collect first, renaming changes game.surfaces
+			table.insert(fake_names, surface.name) -- collect first, renaming changes game.surfaces
 		end
 	end
 	for _,name in ipairs(fake_names) do
@@ -77,7 +77,7 @@ end
 
 -- create a new fake surface with copied map_gen_settings from real_surface
 -- use previously generated version if it has not been auto-deleted, to hopefully improve performance
--- recreate it if it is stale, its chunks would have wrong positions/amounts (and its vault-scrap is gone if the mod was removed while it existed):
+-- recreate it if it is stale, its chunks would have wrong positions/amounts (and its infinite-scrap is gone if the mod was removed while it existed):
 --  not in storage: non-clean uninstall, storage reset, mod re-added (storage existance should match surface existance)
 --  map_gen_settings differ from the real surface: inf scrap autoplace switched (update_autoplace_settings), editor changes
 -- delete_fake_surface then recreate_surface_safe on the same tick is fine, delete_surface_now frees the name
@@ -129,7 +129,7 @@ function original_mapgen.all_chunks(real_surface)
 	local chunks = {}
 	for cpos in real_surface.get_chunks() do
 		if real_surface.is_chunk_generated(cpos) then
-			chunks[#chunks+1] = cpos
+			table.insert(chunks, cpos)
 		end
 	end
 	return chunks
@@ -145,11 +145,11 @@ function original_mapgen.vault_island_chunks(real_surface)
 	local chunks, positions = {}, {}
 	for cpos in real_surface.get_chunks() do
 		if real_surface.is_chunk_generated(cpos) then
-			chunks[#chunks+1] = cpos
+			table.insert(chunks, cpos)
 			local x, y = cpos.x*32, cpos.y*32
 			for gy = 4, 28, 8 do
 				for gx = 4, 28, 8 do
-					positions[#positions+1] = {x=x+gx, y=y+gy}
+					table.insert(positions, {x=x+gx, y=y+gy})
 				end
 			end
 		end
@@ -163,7 +163,7 @@ function original_mapgen.vault_island_chunks(real_surface)
 		for i,cpos in ipairs(chunks) do
 			for j = (i-1)*16+1, i*16 do
 				if mask[j] > 0.5 then
-					island_chunks[#island_chunks+1] = cpos
+					table.insert(island_chunks, cpos)
 					break
 				end
 			end
@@ -203,7 +203,7 @@ function original_mapgen.chunks_in_radius(real_surface, position, radius)
 			}
 			local cpos = {x=cx, y=cy}
 			if myutil.check_distance(position, nearest, r) and real_surface.is_chunk_generated(cpos) then
-				chunks[#chunks+1] = cpos
+				table.insert(chunks, cpos)
 			end
 		end
 	end
@@ -236,7 +236,7 @@ end
 
 --#region Whole map restore
 
--- add or remove vault-scrap in the surface autoplace settings, only affects chunks generated later
+-- add or remove infinite-scrap in the surface autoplace settings, only affects chunks generated later
 -- data stage does this for the planet, but an existing surface keeps the settings it was created with
 ---@param surface LuaSurface
 ---@param enabled boolean? -- default const.INF_SCRAP_ENABLED, false for uninstall
@@ -244,9 +244,9 @@ function original_mapgen.update_autoplace_settings(surface, enabled)
 	if enabled == nil then enabled = const.INF_SCRAP_ENABLED end
 	local mgs = surface.map_gen_settings
 	local settings = mgs.autoplace_settings.entity.settings ---@cast settings -nil
-	if (settings["vault-scrap"] ~= nil) ~= enabled then
+	if (settings["infinite-scrap"] ~= nil) ~= enabled then
 		-- runtime AutoplaceControl needs all fields, copy the scrap one (also keeps per-surface scrap settings)
-		settings["vault-scrap"] = enabled and (settings["scrap"] or {frequency=1, size=1, richness=1}) or nil
+		settings["infinite-scrap"] = enabled and (settings["scrap"] or {frequency=1, size=1, richness=1}) or nil
 		surface.map_gen_settings = mgs
 		
 		-- no need to delete the fake surface here, recreate_surface_safe recreates it when the map_gen_settings differ (and can now do that on the same tick)
@@ -254,18 +254,55 @@ function original_mapgen.update_autoplace_settings(surface, enabled)
 	end
 end
 
--- swap ores between normal and infinite variant on surface
--- by checking all given orig_ores from recreated (fake) surface, deleting their equivalents on surface and spawning new ones of the <to> type
+-- replace a scrap tile (nil: fully drained) with a new one of the <to> type
+---@param surface LuaSurface
+---@param old_ore LuaEntity?
+---@param position MapPosition
+---@param to "scrap"|"infinite-scrap"
+---@param initial number? -- infinite only
+---@param amount number
+local function replace_ore(surface, old_ore, position, to, initial, amount)
+	if old_ore then
+		old_ore.destroy()
+	end
+	local new_ore = surface.create_entity{name=to, position=position, snap_to_grid=true, preserve_ghosts_and_corpses=true} ---@cast new_ore -nil
+	if initial then
+		new_ore.initial_amount = initial -- before amount, the minimum depends on it
+	end
+	new_ore.amount = amount
+end
+
+---@param surface LuaSurface
+---@param where MapPosition|"all"
+---@param radius number?
+local function update_drills(surface, where, radius)
+	if where == "all" then
+		for _,drill in pairs(surface.find_entities_filtered{type="mining-drill"}) do
+			drill.update_connections()
+		end
+	else
+		common.update_drill_connections_near(surface, where --[[@as MapPosition]], radius)
+	end
+end
+
+-- swap scrap on vault islands to the <to> type, around where or on the whole map, for original vaults and the map conversion
+-- by checking the original ores from recreated (fake) surface, deleting their equivalents on surface and spawning new ones of the <to> type
 -- check if the ores are scrap on a vault island (specific to fulgora, but could make this generic)
 -- tries to keep amount the same, but if 0 on surface (tile is actually missing), it restores it
 -- also enforces correct minimum for infinite ores and assigns their initial_amount to the amount from the fake surface
 -- ore trackers need no reset, amounts stay the same (or get raised to the infinite minimum, which does not count as mined)
--- does not update drills
+-- one find on fake fulgora and one mask query, measured ~2.5x faster than per chunk
 ---@param surface LuaSurface
----@param orig_ores LuaEntity[] -- from fake fulgora
----@param to "scrap"|"vault-scrap"
+---@param fake_surface LuaSurface -- with the chunks generated
+---@param to "scrap"|"infinite-scrap"
+---@param where MapPosition|"all"
+---@param radius? number
 ---@return integer converted
-local function convert_ores(surface, orig_ores, to)
+function original_mapgen.convert_scrap_on_vault_islands(surface, fake_surface, to, where, radius)
+	local orig_ores = where == "all" and
+		fake_surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES} or
+		fake_surface.find_entities_filtered{position=where --[[@as MapPosition]], radius=radius, type="resource", name=const.SCRAP_TYPES}
+
 	local converted = 0
 	if #orig_ores == 0 then return 0 end
 
@@ -289,63 +326,71 @@ local function convert_ores(surface, orig_ores, to)
 				-- ore drained or wrong type
 				local amount = old_ore and old_ore.amount or 0 -- nil: fully drained finite tile
 				local initial
-				if to == "vault-scrap" then
-					-- same rules as ore.restore_ore: initial is the original amount (raised if current is higher)
+				if to == "infinite-scrap" then
+					-- initial is the original amount (raised if current is higher, so amount never ends up > initial)
 					-- amount raised to minimum + bump, or on_resource_depleted never gets called and the estimation will be wrong
-					initial = math.max(orig_ore.amount, amount)
-					-- also bump this to be safe, don't want amount > initial
-					if initial < common.INF_SCRAP_MIN then initial = common.INF_SCRAP_MIN + common.INF_SCRAP_DEPLETED_BUMP_AMOUNT end
-					-- enforce correct minimum + bump to make sure on_resource_depleted still triggers
-					local minimum = common.get_inf_scrap_minimum(initial) + common.INF_SCRAP_DEPLETED_BUMP_AMOUNT
-					if amount < minimum then amount = minimum end
+					initial, amount = common.clamp_inf_scrap(math.max(orig_ore.amount, amount), amount)
 				end
-				
-				if old_ore then
-					old_ore.destroy()
-				end
-				if amount > 0 then -- drained finite tile stays drained
-					local new_ore = surface.create_entity{name=to, position=position, snap_to_grid=true, preserve_ghosts_and_corpses=true} ---@cast new_ore -nil
-					if initial then
-						new_ore.initial_amount = initial -- before amount, the minimum depends on it
-					end
-					new_ore.amount = amount
 
+				if amount > 0 then -- drained finite tile stays drained (amount 0 means old_ore is nil)
+					replace_ore(surface, old_ore, position, to, initial, amount)
 					converted = converted + 1
 				end
 			end
 		end
 	end
-	
-	--game.print("convert_ores: ".. serpent.line{converted=converted, num_orig_ores=#orig_ores})
-	--log("convert_ores: ".. serpent.line{converted=converted, num_orig_ores=#orig_ores})
-	
+
+	--game.print("convert_scrap_on_vault_islands: ".. serpent.line{converted=converted, num_orig_ores=#orig_ores})
+	--log("convert_scrap_on_vault_islands: ".. serpent.line{converted=converted, num_orig_ores=#orig_ores})
+
+	if converted > 0 then
+		update_drills(surface, where, radius)
+	end
 	return converted
 end
 
--- swap scrap on vault islands to the inf scrap setting, around where or on the whole map
--- one find on fake fulgora and one mask query, measured ~2.5x faster than per chunk
----@param surface LuaSurface
----@param fake_surface LuaSurface -- with the chunks generated
----@param to "scrap"|"vault-scrap"
----@param where MapPosition|"all"
----@param radius? number
----@return integer converted
-local function convert_vault_scrap(surface, fake_surface, to, where, radius)
-	local orig_ores = where == "all" and
-		fake_surface.find_entities_filtered{type="resource", name=const.SCRAP_TYPES} or
-		fake_surface.find_entities_filtered{position=where --[[@as MapPosition]], radius=radius, type="resource", name=const.SCRAP_TYPES}
+-- true if fake fulgora has a vault ruin at this position (from mapgen, or respawned from fake fulgora)
+-- false for vaults placed elsewhere (cloned, moved), the original ore at their position belongs to something else
+-- vaults slightly shifted to snap them to grid will detect correctly and vaults manually placed by the player in editor mode on a scrap island center likely will too
+---@param fake_surface LuaSurface? -- with the vault's chunk generated (chunks_in_radius includes it), nil: no generated chunks
+---@param position MapPosition -- vault position
+---@return boolean
+function original_mapgen.is_original_vault(fake_surface, position)
+	return fake_surface ~= nil and fake_surface.find_entity(const.VAULT_NAME, position) ~= nil
+end
 
-	local converted = convert_ores(surface, orig_ores, to)
-	if converted > 0 then
-		if where == "all" then
-			for _,drill in pairs(surface.find_entities_filtered{type="mining-drill"}) do
-				drill.update_connections()
-			end
+-- convert all scrap of the other type in place, around where or on the whole map, current amount as initial, no fake fulgora and no vault island mask
+-- for vaults that are not original (is_original_vault), where convert_scrap_on_vault_islands can't match their tiles
+-- and infinite-scrap -> scrap on reset (uninstall, inf scrap setting changed), so removing the mod (deletes infinite-scrap) keeps the scrap
+---@param surface LuaSurface
+---@param to "scrap"|"infinite-scrap"
+---@param where MapPosition|"all"
+---@param radius number?
+---@return integer converted
+---@return table<tile_key, number> initials -- infinite-scrap -> scrap only: initial_amount of the converted tiles, for the finite tracker
+function original_mapgen.convert_scrap_in_place(surface, to, where, radius)
+	local from = to == "infinite-scrap" and "scrap" or "infinite-scrap"
+	local old_ores = where == "all" and
+		surface.find_entities_filtered{type="resource", name=from} or
+		surface.find_entities_filtered{type="resource", name=from, position=where --[[@as MapPosition]], radius=radius}
+
+	local converted, initials = 0, {}
+	for _,old_ore in pairs(old_ores) do
+		local position, amount = old_ore.position, old_ore.amount
+		local initial
+		if to == "infinite-scrap" then
+			initial, amount = common.clamp_inf_scrap(amount, amount)
 		else
-			common.update_drill_connections_near(surface, where --[[@as MapPosition]], radius)
+			initials[myutil.tile_position_key(position)] = old_ore.initial_amount
 		end
+		replace_ore(surface, old_ore, position, to, initial, amount)
+		converted = converted + 1
 	end
-	return converted
+
+	if converted > 0 then
+		update_drills(surface, where, radius)
+	end
+	return converted, initials
 end
 
 -- respawn destroyed vaults, around where or on the whole map
@@ -409,28 +454,10 @@ local function respawn_vaults(surface, fake_surface, where, radius)
 	--return "success"
 end
 
--- vault-scrap -> scrap at the same amount, no fake fulgora needed (reset with convert_scrap, uninstall)
--- so removing the mod (deletes vault-scrap) keeps the scrap, chunks generated from now on get scrap too
----@param surface LuaSurface
-function original_mapgen.convert_all_vault_scrap_to_scrap(surface)
-	
-	for _,e in pairs(surface.find_entities_filtered{name="vault-scrap"}) do
-		local position, amount = e.position, e.amount
-		e.destroy()
-		surface.create_entity{name="scrap", position=position, amount=amount, snap_to_grid=true, preserve_ghosts_and_corpses=true}
-	end
-	
-	for _,drill in pairs(surface.find_entities_filtered{type="mining-drill"}) do
-		drill.update_connections()
-	end
-	
-	original_mapgen.update_autoplace_settings(surface, false)
-end
-
 -- everything needed when the mod is added to a running game, updated, or the inf scrap setting changed
 -- slow (fake fulgora for every generated chunk), freezes the game
 ---@param surface LuaSurface
-function original_mapgen.convert_ore_and_restore_vaults(surface)
+function original_mapgen.convert_ore_and_restore_scrap_near_vaults(surface)
 	-- before the fake surface gets created, it copies the settings
 	original_mapgen.update_autoplace_settings(surface)
 
@@ -448,7 +475,7 @@ function original_mapgen.convert_ore_and_restore_vaults(surface)
 	end
 
 	local prof_scrap = helpers.create_profiler()
-	local converted = convert_vault_scrap(surface, fake_surface, const.INF_SCRAP_ENABLED and "vault-scrap" or "scrap", "all")
+	local converted = original_mapgen.convert_scrap_on_vault_islands(surface, fake_surface, const.INF_SCRAP_ENABLED and "infinite-scrap" or "scrap", "all")
 	prof_scrap.stop()
 
 	-- after conversion, so trackers of respawned vaults (built event) start from converted ore
