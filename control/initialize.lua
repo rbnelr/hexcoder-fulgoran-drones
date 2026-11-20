@@ -220,11 +220,6 @@ function initialize.on_configuration_changed(data)
 		data["_changed_settings"] = changed_settings
 		local reason = serpent.line(data)
 
-		if dev_reset then -- dev reset
-			migrate(true, reason)
-			return
-		end
-
 		-- installing on existing save does on_init then on_configuration_changed (with mod_startup_settings_changed=true!)
 		-- do not reset+init again!
 		if mod_change and mod_change.old_version == nil then return end

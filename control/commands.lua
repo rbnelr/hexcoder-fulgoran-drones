@@ -73,6 +73,52 @@ if const.DEBUG then
 			dbg_print(HOVER_VAULT_MSG, true, nil, player)
 		end
 	end)
+	
+	--[[
+	commands.add_command("vaults-list",
+			"log all vault ruins with their initial scrap amount (scrap tiles in the defense radius, overlapping vaults count shared tiles twice), summary in chat",
+			function(command)
+		if paused(command) then return end
+		init()
+
+		local totals = {} ---@type number[]
+		for _,vault in pairs(storage.vaults) do
+			local e = vault.entity
+			if e.valid then
+				local tracker = vault.scrap_tracker
+				local initial, current, tiles = 0, 0, 0
+				if const.INF_SCRAP_ENABLED then
+					-- infinite tiles never disappear and keep their initial_amount
+					for _,o in pairs(e.surface.find_entities_filtered{name=const.ACTIVE_SCRAP, position=e.position, radius=const.VAULT_DEFENSE_RADIUS}) do
+						initial = initial + o.initial_amount
+						current = current + o.amount
+						tiles = tiles + 1
+					end
+				else
+					-- finite: tracker initials, incl. mined out tiles
+					initial, current = tracker.initial_total or 0, tracker.amount_total or 0
+					tiles = table_size(tracker.initial_amounts or {})
+				end
+				table.insert(totals, initial)
+
+				local p = e.position
+				log(const.PRINT_PREFIX..string.format("Vault at [gps=%d,%d,%s]: initial %.1fM, current %.1fM, %d tiles (avg %.0fk), depth %.0fm",
+					math.floor(p.x), math.floor(p.y), e.surface.name, initial / 1e6, current / 1e6, tiles,
+					tiles > 0 and initial / tiles / 1e3 or 0, tracker:scanned_depth() * 100))
+			end
+		end
+
+		if #totals == 0 then
+			dbg_print("No vault ruins registered", true, nil, game.get_player(command.player_index))
+			return
+		end
+		table.sort(totals)
+		local sum = 0
+		for _,t in pairs(totals) do sum = sum + t end
+		log(dbg_print(string.format("%d vault ruins: initial scrap avg %.1fM, median %.1fM, min %.1fM, max %.1fM (per vault lines in the log)",
+			#totals, sum / #totals / 1e6, totals[math.ceil(#totals / 2)] / 1e6, totals[1] / 1e6, totals[#totals] / 1e6), true))
+	end)
+	]]
 end
 
 commands.add_command("vaults-change-ore",
