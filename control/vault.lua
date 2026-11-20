@@ -20,6 +20,7 @@ local depth_scaling = require("control.depth_scaling")
 --- Waves
 ---@field cur_rng number? -- roll the same size/freq variations until wave actually starts, then reset
 ---@field cur_rng2 number?
+---@field testing boolean? -- set by /vaults-test wave: no automatic waves, waves (counts, durations, size/freq, drone lifetime) without random variation
 ---@field wave_timer_start MapTick -- vault init or last wave start (we can't default to 0 or first wave never starts), independent of active/prev_wave (wave infos may be nil)
 ---@field active_wave WaveInfo?
 ---@field prev_wave WaveInfo?
@@ -219,6 +220,8 @@ function Vault:update_waves()
 		depth_scaling.update_quality_for_vault_drills(self) -- drill quality from depth
 	end
 	
+	if self.testing then return end -- the test starts its waves itself
+
 	local trigger_wave, size, freq = spawning.should_spawn_wave(self, true)
 	if trigger_wave then
 		-- depth and quality tier default to the current depth

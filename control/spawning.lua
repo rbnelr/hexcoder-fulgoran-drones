@@ -145,7 +145,7 @@ function spawning.on_trigger_created_entity(event)
 		-- force is neutral for some reason, possibly because source==vault (simple-entity) can't actually have a force?
 		bot.force = const.DRONE_FORCE
 
-		local variation = common.rand_variation(1, 0.1)
+		local variation = (vault and vault.testing) and 1 or common.rand_variation(1, 0.1)
 		bot.time_to_live = bot.time_to_live * variation
 		
 		if vault then
@@ -188,15 +188,16 @@ end
 ---@param wave_size number multiplier
 ---@param depth number
 ---@param variation_range number
+---@param rng number? -- 0-1, 0.5 = plain rounding without variation
 ---@return table<string, integer> counts
 ---@return number threat
-function spawning.roll_bot_counts(wave_size, depth, variation_range)
+function spawning.roll_bot_counts(wave_size, depth, variation_range, rng)
 	local threat = 0
 	local counts = {}
 	for _,type in pairs(const.BOT_NAMES) do
 		local avg_count = common.eval_curve(common.BOT_COUNTS_CURVE[type], depth)
 		avg_count = avg_count * wave_size
-		local count = common.rand_variation_int(avg_count, avg_count*variation_range)
+		local count = common.rand_variation_int(avg_count, avg_count*variation_range, rng)
 		
 		counts[type] = count
 		-- TODO: take into account bot quality scaling?
@@ -233,15 +234,16 @@ end
 ---@return WaveInfo wave
 function spawning.spawn_wave_bots(vault, size, freq, bot_quality_tier, depth)
 
-	local counts, threat = spawning.roll_bot_counts(size, depth, 0.3)
+	local counts, threat = spawning.roll_bot_counts(size, depth, 0.3, vault.testing and 0.5 or nil)
 	local n1 = counts["fulgoran-defender"]
 	local n2 = counts["fulgoran-distractor"]
 	local n3 = counts["fulgoran-destroyer"]
 	
 	-- TODO: need to depend on bot counts as well in some way, or else higher depth has higher bot rate but same time
-	local dur1 = common.rand_variation(size, size*0.3) ^ 0.3
-	local dur2 = common.rand_variation(size, size*0.3) ^ 0.3
-	local dur3 = common.rand_variation(size, size*0.3) ^ 0.3
+	local dur_var = vault.testing and 0 or 0.3
+	local dur1 = common.rand_variation(size, size*dur_var) ^ 0.3
+	local dur2 = common.rand_variation(size, size*dur_var) ^ 0.3
+	local dur3 = common.rand_variation(size, size*dur_var) ^ 0.3
 
 	local delay = 2
 
@@ -291,8 +293,10 @@ function spawning.should_spawn_wave(vault, early_out)
 	-- allow calling should_spawn_wave(), and getting same variation rng each time until set to nil
 	vault.cur_rng = vault.cur_rng or math.random()
 	vault.cur_rng2 = vault.cur_rng2 or math.random()
-	local variation = common.rand_variation(1, 0.3, vault.cur_rng) -- percent variation eg 0.2 => 0.8-1.2
-	local variation2 = common.rand_variation(1, 0.3, vault.cur_rng2)
+	local rng1, rng2 = vault.cur_rng, vault.cur_rng2
+	if vault.testing then rng1, rng2 = 0.5, 0.5 end -- no variation
+	local variation = common.rand_variation(1, 0.3, rng1) -- percent variation eg 0.2 => 0.8-1.2
+	local variation2 = common.rand_variation(1, 0.3, rng2)
 	
 	local min_time = common.WAVE_MIN_TIME * variation -- very small min time, keep variation to remove potential patterns
 	if time_since_last < min_time and early_out then
