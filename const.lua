@@ -9,6 +9,7 @@ const.PRINT_PREFIX = "[Vault Drones] " -- prefix for all prints and log lines of
 
 ---- Startup settings
 const.DEBUG = settings.startup[const.MOD_NAME.."-debug"].value --[[@as boolean]]
+const.PROFILE = true -- time every mod function and event handler, /vaults-profile writes the report (control/profiling.lua)
 const.VAULT_DEFENSE_RADIUS = settings.startup[const.MOD_NAME.."-vault-defense-radius"].value --[[@as number]]
 const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value --[[@as boolean]]
 const.HARVESTABLE_BOTS = settings.startup[const.MOD_NAME.."-dead-bot-resource"].value --[[@as boolean]]
