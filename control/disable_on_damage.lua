@@ -192,8 +192,10 @@ function dmg.on_tick(event)
 	
 	local id = storage.poll_prev
 	for i = 1,const.REPAIR_POLL_LIMIT do
+		local data
 		id, data = next(storage.poll_repaired or {}, id)
 		if id == nil then break end
+		---@cast data -nil
 		local e = data.entity
 		if not e.valid then
 			storage.poll_repaired[id] = nil -- apparently safe to do (?)

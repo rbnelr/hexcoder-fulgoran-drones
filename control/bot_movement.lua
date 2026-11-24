@@ -70,9 +70,9 @@ local function choose_next_target(vault, bot)
 	
 	-- no actual target found or wanting to break off, go to waypoint
 	-- go to waypoint acts like a random patrol
-	count = #vault.waypoints
-	idx = math.floor(rnd * (count-0.001))+1
-	targ = vault.waypoints[idx]
+	local count = #vault.waypoints
+	local idx = math.floor(rnd * (count-0.001))+1
+	local targ = vault.waypoints[idx]
 	if targ then return targ end
 	
 	-- no waypoint found?

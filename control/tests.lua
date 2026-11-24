@@ -493,7 +493,7 @@ end
 ---@param vault Vault
 ---@param depth number -- progression 0-1
 ---@param guess number? -- restore fraction from a previous run at this depth
----@return number restore, number actual_depth progression, number ore_depth
+---@return number restore, number actual_depth, number ore_depth
 local function set_depth(surface, vault, depth, guess)
 	local target = depth_scaling.depth_for_progression(depth)
 	local floor = common.INF_SCRAP_MIN_RATIO

@@ -161,7 +161,7 @@ function dead_bots.poll_for_decay(event)
 	local list_size
 	local invalid
 	local max_idx
-	if const.DEBUG then
+	if const.DEBUG and (event.tick%60)==0 then
 		list_size = table_size(s.resources)
 		invalid = 0
 		max_idx = 0
@@ -169,6 +169,8 @@ function dead_bots.poll_for_decay(event)
 			if not res.entity.valid then invalid = invalid + 1 end
 			max_idx = math.max(max_idx, idx)
 		end
+		
+		log(dbg_print(string.format("decay resource: current #resources %d invalid %d max_idx %d", list_size, invalid, max_idx)))
 	end
 	
 	local restarted = myutil.stagger_tick(s.poll, s.resources, 10*60,
@@ -211,9 +213,7 @@ function dead_bots.poll_for_decay(event)
 			assert(decayed_amount <= amount)
 			
 			if decayed_amount < amount then
-				if const.DEBUG then log(dbg_print(
-					string.format("decay resource: %s %d->%d (current #resources %d invalid %d max_idx %d)", serpent.line(entity), amount, decayed_amount,
-					list_size, invalid, max_idx))) end
+				if const.DEBUG then log(dbg_print(string.format("decay resource: %s %d->%d", serpent.line(entity), amount, decayed_amount))) end
 				
 				if decayed_amount > 0 then
 					entity.amount = decayed_amount
@@ -227,17 +227,15 @@ function dead_bots.poll_for_decay(event)
 		end
 	)
 	
-	if restarted then
-		-- compress list, currently holes can really grow it
-		local list = s.resources
+	if restarted then -- HACKY, should probably not actually use stagger_tick here and use custom code instead?
+		-- compact list, currently holes can really grow it
+		local new_list = {}
 		local j = 1
-		for idx,v in pairs(list) do
-			if idx ~= j then
-				list[j] = v
-				list[idx] = nil
-			end
+		for _,v in pairs(s.resources) do
+			new_list[j] = v
 			j = j + 1
 		end
+		s.resources = new_list
 	end
 end
 
