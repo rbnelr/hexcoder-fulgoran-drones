@@ -36,6 +36,33 @@ function misc.data_updates()
 		data.raw["electric-turret"]["laser-turret"].rotation_speed = 0.007 -- was 0.01   0.004
 	end
 
+	-- rocket scorchmarks: with many rocket turrets they turned the whole vault island uniform brown and covered the scrap and wrecks
+	-- own copies so only rockets change, other explosions keep the vanilla scorchmarks
+	--  final_render_layer below "resource" (vanilla "ground-patch-higher2", resources have a fixed layer above it), "decals" like biter corpse ground patches
+	for proj_name, scorchmark_name in pairs{["rocket"]="small-scorchmark-tintable", ["explosive-rocket"]="medium-scorchmark-tintable"} do
+		local scorchmark = table.deepcopy(data.raw["corpse"][scorchmark_name])
+		scorchmark.name = "rocket-"..scorchmark_name
+		scorchmark.final_render_layer = "decals"
+		-- the visible mark is the ground_patch, drawn on ground_patch_render_layer (default "ground-patch", above "resource"), not on final_render_layer
+		scorchmark.ground_patch_render_layer = "decals"
+		scorchmark.time_before_removed = 90*60
+		scorchmark.time_before_shading_off = 45*60
+		-- rockets create them with check_buildability = true, stops the scorchmask spam
+		-- half the vanilla collision box (small 3x3, medium 5x5), so marks can still overlap up to half and don't leave visible gaps
+		scorchmark.collision_box = {{scorchmark.collision_box[1][1] / 2, scorchmark.collision_box[1][2] / 2}, {scorchmark.collision_box[2][1] / 2, scorchmark.collision_box[2][2] / 2}}
+		scorchmark.collision_mask.not_colliding_with_itself = false
+		data:extend{scorchmark}
+
+		local found = false
+		for _,effect in pairs(data.raw["projectile"][proj_name].action.action_delivery.target_effects) do
+			if effect.type == "create-entity" and effect.entity_name == scorchmark_name then
+				effect.entity_name = scorchmark.name
+				found = true
+			end
+		end
+		assert(found, "no "..scorchmark_name.." in "..proj_name)
+	end
+
 	-- this is what my spage rebalance mod does now
 	--for _,planet in pairs{"fulgora"} do -- {"vulcanus", "fulgora", "gleba", "aquilo"}
 	--	data:extend{{

@@ -331,6 +331,11 @@ local function harvestable_drones()
 			subgroup = corpse.subgroup,
 			order = robot.order,
 
+			-- inspectable under buildings (50) and the vault (45), below the drones (54/55)
+			selection_priority = 52,
+			-- small, so the drill around a wreck can still be selected (scrap is 1x1)
+			selection_box = {{-0.3, -0.3}, {0.3, 0.3}},
+
 			cliff_removal_probability = 0, -- do not delete cliffs!
 			tree_removal_probability = 0,
 			tree_removal_max_distance = 0,
@@ -380,6 +385,37 @@ local function harvestable_drones()
 			--factoriopedia_alternative = item.name,
 		})
 
+		-- wrecks drawn as stateless_visualisation (with const.BOT_RESOURCE_LAYER) instead of resource stages, so they stay visible on top of drills
+		-- resource stages always draw under buildings, a stateless_visualisation has its own render_layer
+		-- stages are an empty sprite then, otherwise the wreck would be drawn twice (stages and visualisation pick their variations independently)
+		-- same sheets as stages, one Animation per variation (frames in the sheet are variations)
+		local variations = {}
+		for i=1,3 do
+			local layers = {}
+			for _,sheet in ipairs(resource.stages.sheets) do
+				local layer = table.deepcopy(sheet)
+				layer.flags = nil -- "low-object" is for the resource layer
+				layer.frame_count = nil
+				layer.variation_count = nil
+				layer.x = (i-1) * sheet.width
+				table.insert(layers, layer)
+			end
+			variations[i] = { layers = layers }
+		end
+		resource.stateless_visualisation = {{
+			count = 1,
+			render_layer = const.BOT_RESOURCE_LAYER,
+			animation = variations,
+		}}
+		resource.draw_stateless_visualisation_under_building = true -- if false, resources stop rendering if a building is on top of the tile (even if it would be visible!)
+		resource.stages = { sheet = {
+			filename = "__core__/graphics/empty.png",
+			priority = "extra-high",
+			size = 1,
+			frame_count = 1,
+			variation_count = 1,
+		} }
+
 		data:extend{resource, item}
 	end
 end
@@ -420,17 +456,17 @@ local function harvestable_drones_quality_resource()
 					},
 				})
 				if const.BOT_RESOURCE_QUALITY_BADGES then
-					-- add a fake quality badge to resource graphics
+					-- fake quality badge as a layer of every visualisation variation
 					-- this does not disappear in alt mode like normal badges!
-					table.insert(Qres.stages.sheets, {
-						filename = Q.icon,
-						priority = "extra-high", flags = {"low-object", "icon"}, -- no idea if flags are correct, without it's aliased
-						width = 64, height = 64,
-						scale = 0.125,
-						shift = {-0.375, 0.375},
-						variation_count = 1,
-						frame_sequence = {1, 1, 1},
-					})
+					for _,variation in ipairs(Qres.stateless_visualisation[1].animation) do
+						table.insert(variation.layers, {
+							filename = Q.icon,
+							priority = "extra-high", flags = {"icon"},
+							width = 64, height = 64,
+							scale = 0.125,
+							shift = {-0.375, 0.375},
+						})
+					end
 				end
 				
 				data:extend{Qres}

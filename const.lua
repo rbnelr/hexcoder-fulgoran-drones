@@ -27,6 +27,10 @@ const.EXPIRED_DRONES_HARVESTABLE = true -- false
 const.DRONES_TRY_TO_RETURN = true
 
 const.BOT_RESOURCE_QUALITY_BADGES = true
+-- render layer of the wreck resources' stateless_visualisation (prototypes/combat_robots.lua)
+-- "higher-object-under": above all buildings (and players, belts), below the vault front wall and flying drones ("air-object")
+-- "object": sorted by y with buildings, like a building, so only covers the drill's upper part
+const.BOT_RESOURCE_LAYER = "object"
 
 -- 20M patch, at 20% min has 16M available
 -- 24 Drills 1.25 mining speed / 0.5s mining time = 60 mining/s at 50% drain = 1800/min

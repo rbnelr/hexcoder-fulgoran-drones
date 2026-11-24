@@ -101,7 +101,7 @@ function init(convert_scrap)
 		dead_bots.update_unlocked_qualities()
 		dead_bots.init_decay(surface)
 		
-		dmg.fix_all_icons() -- TODO: slow and probably useless at release
+		--dmg.fix_all_icons() -- TODO: slow and probably useless at release, used to happen in update_targets and was potentially very slow
 	end
 end
 
