@@ -27,7 +27,7 @@ local depth_scaling = require("control.depth_scaling")
 ---
 -- TODO: track sorted into buckets by tick or sort list?
 -- Bots that are spawning or already active (wave may overlap, mixed from all waves)
----@field emerging_queued table<integer, Emerging> -- queued spawns
+---@field emerging_queued Emerging[] -- queued spawns (sorted in reverse order)
 ---@field emerging_projectiles table<integer, LuaEntity> -- emerging bots (projectiles that appear like bots that rise out of the vault)
 ---@field active_bots table<integer, LuaEntity> -- active bots
 --- descending bots (projectiles) are currently not tracked and wave counts as inactive if only descending bots remain

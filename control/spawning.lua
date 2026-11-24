@@ -63,11 +63,17 @@ function spawning.update_emerging(vault)
 	--	VAULT_SHAFT_CENTER, {x=VAULT_SHAFT_RADIUS, y=VAULT_SHAFT_RADIUS*VAULT_SHAFT_ELLIPSE_K},
 	--	{1,1,0, 0.3})
 	
+	-- emerging_queued is sorted latest to earliest, pop off end to keep array valid (allow later table.insert and table.sort)
+	local queued = vault.emerging_queued
+	local count = #queued
 	local cur_tick = game.tick
-	local center = { x = const.VAULT_SHAFT_CENTER.x + vault.entity.position.x,
-	                 y = const.VAULT_SHAFT_CENTER.y + vault.entity.position.y }
-	for id,emerging in pairs(vault.emerging_queued) do
-		if cur_tick >= emerging.tick then
+	
+	if count > 0 and cur_tick >= queued[count].tick then
+		local center = { x = const.VAULT_SHAFT_CENTER.x + vault.entity.position.x,
+		                 y = const.VAULT_SHAFT_CENTER.y + vault.entity.position.y }
+		repeat
+			local emerging = queued[count]
+			
 			local x = center.x + emerging.final_pos.x
 			local y = center.y + emerging.final_pos.y
 			local sy = center.y + emerging_obscured_y_pos(emerging.final_pos.x) + const.BOT_FLOAT_HEIGHT
@@ -82,18 +88,27 @@ function spawning.update_emerging(vault)
 				preserve_ghosts_and_corpses = true, -- ??
 				quality = emerging.quality -- projectile can take quality
 			} ---@cast projectile - nil
-			vault.emerging_queued[id] = nil
 			
 			-- projectiles have no unit_number!
 			--local proj_id = script.register_on_object_destroyed(projectile)
 			--vault.emerging_projectiles[proj_id] = projectile
 			table.insert(vault.emerging_projectiles, projectile)
-		end
+			
+			queued[count] = nil
+			
+			count = count - 1
+		until count <= 0 or cur_tick < queued[count].tick
 	end
+	
+	
+	-- TODO: optimize this, don't run it every tick, either just clear in on_trigger_created_entity, or that + a fallback run occasionally?
+	--- can't actually do this in on_trigger_created_entity, without also getting id via register_on_object_destroyed?
 	-- clear them here instead of in on_trigger_created_entity to handle deleted before it finishes?
-	for id,entity in pairs(vault.emerging_projectiles) do
-		if not entity.valid then
-			vault.emerging_projectiles[id] = nil
+	if (cur_tick % 10) == 0 then -- makes bots_active() wrong for a few ticks
+		for i,entity in pairs(vault.emerging_projectiles) do
+			if not entity.valid then
+				vault.emerging_projectiles[i] = nil
+			end
 		end
 	end
 end
@@ -263,6 +278,8 @@ function spawning.spawn_wave_bots(vault, size, freq, bot_quality_tier, depth)
 	queue_spawn_drones(vault, wave, "fulgoran-defender", bot_quality_tier, n1, delay+1.5, 15*dur1)
 	queue_spawn_drones(vault, wave, "fulgoran-distractor", bot_quality_tier, n2, delay+0, 9*dur2)
 	queue_spawn_drones(vault, wave, "fulgoran-destroyer", bot_quality_tier, n3, delay+3.5, 10*dur3)
+	
+	table.sort(vault.emerging_queued, function(a, b) return a.tick > b.tick end) -- sort latest to earliest so update_emerging can pop items off the end
 	
 	--log(dbg_print{"_spawn_wave_bots ", serpent.block(wave)})
 	return wave
