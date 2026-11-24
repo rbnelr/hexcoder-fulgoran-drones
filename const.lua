@@ -22,7 +22,7 @@ const.ALLOW_DRILLS_WITHOUT_ORE = settings.startup[const.MOD_NAME.."-drills-witho
 -- expired drones (time_to_live ran out, destroy_action) leave dead-<bot> wrecks like killed ones (dying_trigger_effect)
 -- off: expired drones drop the vanilla remnants, wrecks only pile up where drones were actually killed
 -- you have to kill them, this avoids bot buildup on vaults without turrets
-const.EXPIRED_DRONES_HARVESTABLE = false
+const.EXPIRED_DRONES_HARVESTABLE = true -- false
 -- drones fly back into the vault shaft before their time_to_live runs out, so they don't expire
 const.DRONES_TRY_TO_RETURN = true
 
@@ -33,7 +33,7 @@ const.BOT_RESOURCE_QUALITY_BADGES = true
 -- 1800/s*10 = 1M/h = ~16h to deplete (more due to mining deed bots and <100% drain slowing down)
 -- at 50% drain it takes 1/50%=2x as long to drain, integral from 0.2 to 1 for (1/x) is 1.61, so at 100% initial yield it takes 50% longer than expected
 -- with any ore above 100%, it will actually take closer to the expected
-const.INF_DEPLETION_RATE = 5
+const.INF_DEPLETION_RATE = 2
 
 ----
 const.SCRAP_TYPES = {"scrap", "infinite-scrap"} -- infinite-scrap always defined, hidden if inf scrap is off

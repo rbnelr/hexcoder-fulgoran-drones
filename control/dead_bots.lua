@@ -30,6 +30,15 @@ function dead_bots.downgrade_locked_qualities(res_name)
 	return t.from_level[downgraded]
 end
 
+--local DRONE_XY = {}
+--do
+--	local i = 0
+--	for k,v in pairs(const.DRONE_RES_QUALITY_TABLE) do
+--		DRONE_XY[k] = {x=i%5, y=math.floor(i/5)}
+--		i = i + 1
+--	end
+--end
+
 ---@param surface LuaSurface
 ---@param position MapPosition
 ---@param res_name string
@@ -39,6 +48,10 @@ function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
 	
 	res_name = dead_bots.downgrade_locked_qualities(res_name)
 	
+	--local grid_size = 5
+	--local xy = DRONE_XY[res_name]
+	--position.x = math.floor(position.x/grid_size)*grid_size + xy.x
+	--position.y = math.floor(position.y/grid_size)*grid_size + xy.y
 	local resource = surface.find_entity(res_name, position)
 	if resource then
 		-- existing resource, increase amount
@@ -129,6 +142,8 @@ function dead_bots.update_queued_drill_connections(event)
 					--local p = drill.position
 					--rendering.draw_rectangle{left_top={p.x-2.5, p.y-2.5}, right_bottom={p.x+2.5, p.y+2.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=30}
 					drill.update_connections()
+					--drill.disabled_by_script = false
+					--drill.disabled_by_script = true
 					
 					already_updated[id] = true
 				end
@@ -230,20 +245,17 @@ function dead_bots.poll_for_decay(event)
 	
 	local cur_tick = event.tick
 	
-	local list_size
-	local invalid
-	local max_idx
-	if const.DEBUG and (event.tick%60)==0 then
-		list_size = table_size(s.resources)
-		invalid = 0
-		max_idx = 0
-		for idx,res in pairs(s.resources) do
-			if not res.entity.valid then invalid = invalid + 1 end
-			max_idx = math.max(max_idx, idx)
-		end
-		
-		log(dbg_print(string.format("decay resource: current #resources %d invalid %d max_idx %d", list_size, invalid, max_idx)))
-	end
+	--if const.DEBUG and (event.tick%60)==0 then
+	--	local list_size = table_size(s.resources)
+	--	local invalid = 0
+	--	local max_idx = 0
+	--	for idx,res in pairs(s.resources) do
+	--		if not res.entity.valid then invalid = invalid + 1 end
+	--		max_idx = math.max(max_idx, idx)
+	--	end
+	--	
+	--	log(dbg_print(string.format("decay resource: current #resources %d invalid %d max_idx %d", list_size, invalid, max_idx)))
+	--end
 	
 	local restarted = myutil.stagger_tick(s.poll, s.resources, 10*60,
 		---@param idx integer
