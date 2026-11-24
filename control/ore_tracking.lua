@@ -477,6 +477,7 @@ end
 local VIS_DRAIN = false
 if const.DEBUG and VIS_DRAIN then
 	-- on_nth_tick(1) in control/events.lua, nil when off
+	---@param event NthTickEventData
 	function ore.debug_vis_drain(event)
 		local player = game.get_player(1) ---@cast player -nil
 		for _,vault in pairs(player.surface.find_entities_filtered{name=const.VAULT_NAME, position=player.position, radius=40}) do

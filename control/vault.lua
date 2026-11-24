@@ -142,6 +142,8 @@ function Vault:on_destroyed()
 	-- bots will die on their own, and are safe to orphan
 	-- targets are not bound to vault, and can be forgotten as well
 	
+	-- TODO: reset target military state?
+	
 	storage.vaults[self.id] = nil
 	storage.active_vaults[self.id] = nil
 end

@@ -91,6 +91,8 @@ function movement.update(vault)
 	--local j = 1
 	local target = nil
 	
+	---@param id integer
+	---@param bot LuaEntity
 	local function try_leave(id, bot)
 		bot.combat_robot_owner = vault_e
 		

@@ -85,6 +85,13 @@ data:extend({
 		maximum_value = 60,
 	},
 	{
+		type = "bool-setting",
+		name = MOD_NAME.."-decay-dead-bot-resource",
+		order = "d5",
+		setting_type = "runtime-global",
+		default_value = true,
+	},
+	{
 		-- misc: lets drills be pre-built where drone wrecks will land (turns require_resources_to_place off for all solid drills, prototypes/misc.lua)
 		type = "bool-setting",
 		name = MOD_NAME.."-drills-without-ore",

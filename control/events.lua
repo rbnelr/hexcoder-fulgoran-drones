@@ -45,6 +45,7 @@ local function on_object_destroyed(event)
 	end
 end
 
+---@param event EventData.on_built_entity|EventData.on_robot_built_entity|EventData.on_space_platform_built_entity|EventData.script_raised_built|EventData.script_raised_revive|EventData.on_entity_cloned
 local function on_entity_create(event)
 	init()
 	local entity = event.entity or event.destination --[[@as LuaEntity]] ---@diagnostic disable-line
@@ -154,17 +155,27 @@ local function on_tick(event)
 	
 	if storage.settings_changed then
 		storage.settings_changed = nil
+		
 		local fulgora = game.surfaces["fulgora"]
+		
 		if fulgora then
 			depth_scaling.update_quality_for_all_vaults(fulgora)
 		end
+		
+		dead_bots.init_decay(fulgora)
 	end
 	
-	myutil.stagger_tick(storage.poll_vaults, storage.vaults, const.ORE_POLL_PERIOD, function(vault)
-		if vault.entity.valid then
-			vault:update_waves()
+	myutil.stagger_tick(storage.poll_vaults, storage.vaults, const.ORE_POLL_PERIOD,
+		---@param id obj_id
+		---@param vault Vault
+		function(id, vault)
+			if vault.entity.valid then
+				vault:update_waves()
+			end
 		end
-	end)
+	)
+	
+	dead_bots.poll_for_decay(event)
 	
 	dmg.on_tick(event)
 	

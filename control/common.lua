@@ -26,6 +26,7 @@ function common.update_runtime_settings(event)
 		common.WAVE_FREQ_MULT    = g[const.MOD_NAME.."-wave-freq"].value --[[@as double]]
 		common.WAVE_SIZE_MULT    = g[const.MOD_NAME.."-wave-size"].value --[[@as double]]
 		common.WAVE_MAX_TIME     = g[const.MOD_NAME.."-wave-max-time"].value --[[@as double]]
+		common.DECAY_HARVESTABLE_BOTS = g[const.MOD_NAME.."-decay-dead-bot-resource"].value --[[@as boolean]]
 	end
 end
 -- get each load, then update in on_runtime_mod_setting_changed
@@ -193,7 +194,17 @@ function common.rand_variation_int(x, range, rng)
 	-- hard to explain in a comment how this works
 	rng = rng or math.random()
 	local w = math.max(1, myutil.round(2 * range))
-	return myutil.round(x + (rng - 0.5) * w)
+	--return myutil.round(x + (rng - 0.5) * w)
+	return math.floor(x + (rng - 0.5) * w + 0.5)
+end
+
+-- round to integer without biasing average, ie. 5.1 round to 5 90% of the time and to 6 10% of the time
+---@param x number 
+---@param rng number? must be 0-1
+---@return integer result floor(x) or floor(x)+1 weighted by fract(x)
+function common.rand_rounding(x, rng)
+	rng = rng or math.random()
+	return math.floor(x + rng)
 end
 
 ---@param at number

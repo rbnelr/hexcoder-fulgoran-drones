@@ -21,6 +21,8 @@ local dead_bots = require("control.dead_bots")
 ---@field poll_repaired Damaged[]
 ---@field poll_prev unit_number?
 ---
+---@field poll_decay PollDecay?
+---
 ---@field render_objs table<player_index, LuaRenderObject[]>
 ---
 ---@field friend_end_tick integer?
@@ -76,8 +78,6 @@ function init(convert_scrap)
 			log(dbg_print("Doing mod init"))
 		end
 		
-		dead_bots.update_unlocked_qualities()
-		
 		local surface = game.get_surface("fulgora")
 		if surface then
 			if convert_scrap ~= false then
@@ -97,6 +97,9 @@ function init(convert_scrap)
 			--	end
 			--end
 		end
+		
+		dead_bots.update_unlocked_qualities()
+		dead_bots.init_decay(surface)
 	end
 end
 

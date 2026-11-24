@@ -46,8 +46,8 @@ function dmg.building_fully_damaged(id, e, force)
 	
 	-- workaround to stop drones getting stuck attacking this target
 	-- make drone force non-hostile
-	force.set_friend("player", true) -- set_cease_fire instead?
-	storage.friend_end_tick = game.tick + 2 -- 1 tick not enough
+	--force.set_friend("player", true) -- set_cease_fire instead?
+	--storage.friend_end_tick = game.tick + 2 -- 1 tick not enough
 	
 	-- start polling disabled building for repairs due to lack of on_entity_repaired API
 	local poll = storage.poll_repaired
@@ -156,6 +156,7 @@ for _,type in pairs(const.TARGETS) do
 	table.insert(dmg.filter_targets_on_dmg, {filter="final-health", value=1, comparison="<=", mode="and"})
 end
 
+---@param event EventData.on_entity_damaged
 function dmg.on_entity_damaged(event)
 	init()
 	--game.print("on_entity_damaged: ".. serpent.line(event))
@@ -184,10 +185,10 @@ end
 ---@param event EventData.on_tick
 function dmg.on_tick(event)
 	-- reset drone hostility (workaround)
-	if storage.friend_end_tick ~= nil and event.tick >= storage.friend_end_tick then
-		game.forces[const.DRONE_FORCE].set_friend("player", false)
-		storage.friend_end_tick = nil
-	end
+	--if storage.friend_end_tick ~= nil and event.tick >= storage.friend_end_tick then
+	--	game.forces[const.DRONE_FORCE].set_friend("player", false)
+	--	storage.friend_end_tick = nil
+	--end
 	
 	local id = storage.poll_prev
 	for i = 1,const.REPAIR_POLL_LIMIT do

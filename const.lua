@@ -159,6 +159,11 @@ if prototypes then -- only in control
 	quality_levels(const.DRONE_RES_QUALITY_TABLE, "dead-defender")
 	quality_levels(const.DRONE_RES_QUALITY_TABLE, "dead-distractor")
 	quality_levels(const.DRONE_RES_QUALITY_TABLE, "dead-destroyer")
+	
+	const.DRONE_RES_ALL_NAMES = {}
+	for name,v in pairs(const.DRONE_RES_QUALITY_TABLE) do
+		table.insert(const.DRONE_RES_ALL_NAMES, name)
+	end
 end
 
 const.RETARGET_DIST = 15

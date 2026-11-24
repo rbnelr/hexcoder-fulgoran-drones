@@ -126,6 +126,9 @@ function gui_util.gui_default_frame(name, caption, content)
 	}:add(content)
 end
 
+---@param name string
+---@param style StyleDef?
+---@return GuiDef
 function gui_util.gui_vpane(name, style)
 	local actual_style={base="inside_shallow_frame_with_padding"}
 	if style then
@@ -133,9 +136,13 @@ function gui_util.gui_vpane(name, style)
 	end
 	return GUI{type="frame", name=name, direction="vertical", style=actual_style}
 end
+---@param args {name: string?, style: StyleDef?}
+---@return GuiDef
 function gui_util.gui_hflow(args)
 	return GUI{type="flow", name=args.name, direction="horizontal", style=args.style}
 end
+---@param args {name: string?, style: StyleDef?}
+---@return GuiDef
 function gui_util.gui_vflow(args)
 	return GUI{type="flow", name=args.name, direction="vertical", style=args.style}
 end

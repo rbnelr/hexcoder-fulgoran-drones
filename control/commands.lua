@@ -7,6 +7,8 @@ local ore = require("control.ore_tracking")
 local HOVER_VAULT_MSG = "Run command while hovering a vault ruin"
 
 -- "Prepare for uninstall": storage is empty and must stay so (init() would start the mod again)
+---@param command CustomCommandData
+---@return boolean
 local function paused(command)
 	if common.UNINSTALL then
 		dbg_print("Paused for uninstall (\"Prepare for uninstall\" in map settings)", true, nil, game.get_player(command.player_index))

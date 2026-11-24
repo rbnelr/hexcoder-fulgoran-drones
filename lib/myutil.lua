@@ -43,6 +43,10 @@ end
 --end
 
 -- merge tables (copy of tbl1 with the values of tbl2 appended), used for event filters
+---@generic T
+---@param tbl1 T[]
+---@param tbl2 T[]
+---@return T[]
 function myutil.merge(tbl1, tbl2)
 	local t = util.table.deepcopy(tbl1)
 	for k,v in pairs(tbl2) do
@@ -52,6 +56,8 @@ function myutil.merge(tbl1, tbl2)
 end
 
 -- why is this not in math lib?
+---@param x number
+---@return integer
 function myutil.round(x)
 	return math.floor(x+0.5)
 end
@@ -76,11 +82,18 @@ function myutil.normalized_vector(vec)
 	return { x=x/length, y=y/length }, length
 end
 
+---@param a MapPosition.struct
+---@param b MapPosition.struct
+---@param r number
+---@return boolean
 function myutil.check_distance(a, b, r)
 	local x = a.x - b.x
 	local y = a.y - b.y
 	return x*x + y*y <= r*r
 end
+---@param a MapPosition.struct
+---@param b MapPosition.struct
+---@return number
 function myutil.get_distance(a, b)
 	local x = a.x - b.x
 	local y = a.y - b.y
@@ -92,6 +105,9 @@ end
 --	return x*x + y*y <= r*r
 --end
 
+---@param center MapPosition.struct
+---@param radius MapPosition.struct -- x/y radii
+---@return MapPosition.struct
 function myutil.random_in_ellipse(center, radius)
 	local r = math.sqrt(math.random())
 	local theta = math.random() * 6.2831853 -- 2PI
@@ -99,6 +115,9 @@ function myutil.random_in_ellipse(center, radius)
 	return { x = center.x + radius.x*r * math.cos(theta),
 	         y = center.y + radius.y*r * math.sin(theta) }
 end
+---@param center MapPosition.struct
+---@param radius MapPosition.struct -- x/y radii
+---@return MapPosition.struct
 function myutil.random_in_ellipse_center_bias(center, radius)
 	local r = math.random()
 	local theta = math.random() * 6.28318530 -- 2PI
@@ -106,6 +125,9 @@ function myutil.random_in_ellipse_center_bias(center, radius)
 	return { x = center.x + radius.x*r * math.cos(theta),
 	         y = center.y + radius.y*r * math.sin(theta) }
 end
+---@param center MapPosition.struct
+---@param radius number
+---@return MapPosition.struct
 function myutil.random_in_circle(center, radius)
 	radius = radius * math.sqrt(math.random())
 	local theta = math.random() * 6.2831853 -- 2PI
@@ -173,7 +195,7 @@ end
 ---@param state StaggerTickState
 ---@param items table<K, V>
 ---@param period integer -- ticks per full pass over items
----@param func fun(item: V)
+---@param func fun(key: K, item: V)
 function myutil.stagger_tick(state, items, period, func)
 	local ok, val
 	local key = state.prev_key
@@ -195,7 +217,7 @@ function myutil.stagger_tick(state, items, period, func)
 			count = table_size(items)
 		end
 		if key ~= nil then -- edge case of items being empty but still iterating
-			func(val)
+			func(key, val)
 		end
 		amount = amount - 1
 	end
