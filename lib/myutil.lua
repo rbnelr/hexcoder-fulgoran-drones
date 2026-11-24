@@ -55,6 +55,14 @@ function myutil.merge(tbl1, tbl2)
 	return t
 end
 
+---@param list any[]
+function myutil.shuffle_in_place(list)
+	for i = #list, 2, -1 do
+		local j = math.random(i)
+		list[i], list[j] = list[j], list[i]
+	end
+end
+
 -- why is this not in math lib?
 ---@param x number
 ---@return integer
@@ -196,12 +204,14 @@ end
 ---@param items table<K, V>
 ---@param period integer -- ticks per full pass over items
 ---@param func fun(key: K, item: V)
+---@return boolean restarted
 function myutil.stagger_tick(state, items, period, func)
 	local ok, val
 	local key = state.prev_key
 	local amount = state.amount or 0
 	local count = state.count
-	if count == nil or (count == 0 and next(items) ~= nil) then -- init count and handle edge case of empty items that fill again
+	local restarted = count == nil or (count == 0 and next(items) ~= nil)
+	if restarted then -- init count and handle edge case of empty items that fill again
 		count = table_size(items)
 	end
 	-- update count/period items per tick, effectively update each item once every period tick
@@ -215,6 +225,7 @@ function myutil.stagger_tick(state, items, period, func)
 			key, val = next(items)
 			-- cache count, and only update once per pass, not every tick
 			count = table_size(items)
+			restarted = true
 		end
 		if key ~= nil then -- edge case of items being empty but still iterating
 			func(key, val)
@@ -223,6 +234,7 @@ function myutil.stagger_tick(state, items, period, func)
 	end
 	
 	state.prev_key, state.amount, state.count = key, amount, count
+	return restarted
 end
 
 return myutil

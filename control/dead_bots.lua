@@ -4,6 +4,8 @@ local common = require("control.common")
 local myutil = require("lib.myutil")
 local dead_bots = {}
 
+--#region resource spawning and modification
+
 function dead_bots.update_unlocked_qualities()
 	local highest = 1
 	local player_force = game.forces["player"]
@@ -116,6 +118,10 @@ if const.HARVESTABLE_BOTS then -- was const.HARVEST_BOTS (nil, handler never reg
 	end
 end
 
+--#endregion
+
+--#region dead bot decay
+
 -- Decay dead bot resources via half life (decay half of the amount in DECAY_HALF_LIFE)
 -- When spawned and when mining is detected get a protected duration
 local DECAY_PROTECTED_MINING = 4*60*60
@@ -129,7 +135,7 @@ local DECAY_HALF_LIFE = 60*60
 ---@field tick MapTick -- protected until tick or tick of last check
 
 ---@class PollDecay
----@field resources DeadBotResource[]
+---@field resources table<integer, DeadBotResource> -- array with holes
 ---@field poll StaggerTickState
 
 ---@param resource LuaEntity
@@ -152,25 +158,32 @@ function dead_bots.poll_for_decay(event)
 	
 	local cur_tick = event.tick
 	
-	myutil.stagger_tick(s.poll, s.resources, 10*60,
+	local list_size
+	local invalid
+	local max_idx
+	if const.DEBUG then
+		list_size = table_size(s.resources)
+		invalid = 0
+		max_idx = 0
+		for idx,res in pairs(s.resources) do
+			if not res.entity.valid then invalid = invalid + 1 end
+			max_idx = math.max(max_idx, idx)
+		end
+	end
+	
+	local restarted = myutil.stagger_tick(s.poll, s.resources, 10*60,
 		---@param idx integer
 		---@param res DeadBotResource
 		function(idx, res)
 			local entity = res.entity
 			if not entity.valid then
-				--local last = #s.resources -- delete by replace with last
-				--s.resources[idx] = s.resources[last];
-				--s.resources[last] = nil
+				-- delete by setting to nil, stagger_tick handles this fine
+				-- swap with last is dodgy as it skip polling for once cycle, so with many invalid entries (regular mining drills mining normally)
+				--  we take forever to clear out them out, and most of the table will be invalid entries, so instead just do this and accept holes
+				-- (table.insert will fill holes and table_size gives the correct size)
 				s.resources[idx] = nil
 				return
 			end
-			
-			--do -- randomize polling order (break pattern from init_decay at least)
-			--	local swap = math.random(idx) -- rand in 1 to idx inclusive
-			--	local tmp = s.resources[swap]
-			--	s.resources[swap] = s.resources[idx]; s.resources[idx] = tmp
-			--	idx = swap
-			--end
 			
 			-- track decrease or increase in each 10sec interval
 			local amount = entity.amount
@@ -198,27 +211,32 @@ function dead_bots.poll_for_decay(event)
 			assert(decayed_amount <= amount)
 			
 			if decayed_amount < amount then
-				if const.DEBUG then log(dbg_print(string.format("decay resource: %s %d->%d, current #resources %d", serpent.line(entity), amount, decayed_amount, table_size(s.resources)))) end
+				if const.DEBUG then log(dbg_print(
+					string.format("decay resource: %s %d->%d (current #resources %d invalid %d max_idx %d)", serpent.line(entity), amount, decayed_amount,
+					list_size, invalid, max_idx))) end
 				
 				if decayed_amount > 0 then
 					entity.amount = decayed_amount
 					res.prev_amount = decayed_amount
 				else
-					entity.destroy{raise_destroy=true} -- raise_destroy why not?
+					entity.destroy{raise_destroy=true} -- raise_destroy because why not(?)
 					
-					--local last = #s.resources -- delete by replace with last
-					--s.resources[idx] = s.resources[last]; s.resources[last] = nil
 					s.resources[idx] = nil
 				end
 			end
 		end
 	)
 	
-	if const.DEBUG then
-		local surface = game.surfaces["fulgora"]
-		local resources = surface and surface.find_entities_filtered{type="resource", name=const.DRONE_RES_ALL_NAMES} or {}
-		if #resources ~= table_size(s.resources) then
-			log(dbg_print(string.format("bug! %d %d", #resources, table_size(s.resources))))
+	if restarted then
+		-- compress list, currently holes can really grow it
+		local list = s.resources
+		local j = 1
+		for idx,v in pairs(list) do
+			if idx ~= j then
+				list[j] = v
+				list[idx] = nil
+			end
+			j = j + 1
 		end
 	end
 end
@@ -231,7 +249,6 @@ function dead_bots.init_decay(surface)
 	end
 	
 	if storage.poll_decay then
-		--assert(#resources <= #storage.poll_decay.resources)
 		return
 	end
 	
@@ -242,12 +259,11 @@ function dead_bots.init_decay(surface)
 		dead_bots.register_decay(res, DECAY_PROTECTED_INIT)
 	end
 	
-	-- shuffle list
-	local list = storage.poll_decay.resources
-	for i = #list, 2, -1 do
-		local j = math.random(i)
-		list[i], list[j] = list[j], list[i]
-	end
+	-- shuffle list to avoid visible pattern from find_entities_filtered
+	-- (regular additions from drones dying are practically random)
+	myutil.shuffle_in_place(storage.poll_decay.resources)
 end
+
+--#endregion
 
 return dead_bots
