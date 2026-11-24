@@ -63,7 +63,7 @@ function original_mapgen.delete_all_fake_surfaces()
 end
 
 -- actually delete fake surfaces after multiple requests could use them (unused for some seconds)
--- on_nth_tick(60) in control/events.lua
+-- on_nth_tick(const.DRILL_CONNECTION_UPDATE_PERIOD) in control/events.lua, together with the queued drill reconnects
 ---@param event NthTickEventData
 function original_mapgen.delete_unused_fake_surfaces(event)
 	local fake_surfaces = storage.fake_surfaces

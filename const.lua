@@ -171,6 +171,10 @@ const.RETARGET_DIST = 15
 const.RETURN_TIME = 8*60
 
 const.ORE_POLL_PERIOD = 60*10
+-- on_nth_tick periods, must differ from each other and from the fixed ones (register_all in control/events.lua asserts it)
+const.GUI_UPDATE_PERIOD = 30
+const.GUI_FAST_UPDATE_PERIOD = 4
+const.DRILL_CONNECTION_UPDATE_PERIOD = 5*60 -- also the fake surface cleanup period (control/events.lua)
 const.REPAIR_POLL_LIMIT = 8 -- max per tick
 
 return const

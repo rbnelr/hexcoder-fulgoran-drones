@@ -93,7 +93,7 @@ local PINNED_NAME = WINDOW_NAME.."_pinned"
 local PINNED_CLOSE_NAME = PINNED_NAME.."_close"
 
 -- threats: drones currently out as odometer digits (each in its own slot, leading zeros dimmed, all of them at 0)
--- updated every tick (update_info_gui_fast), the rest of the window in on_nth_tick (events.lua)
+-- updated every GUI_FAST_UPDATE_PERIOD ticks (update_info_gui_fast), the rest of the window every GUI_UPDATE_PERIOD (both on_nth_tick in events.lua)
 local ALIVE_WIDTH = 96
 local ALIVE_DIGITS = 3 -- capped at 999
 -- custom font if defined in data (from="scenario-message-dialog" is IBM Plex Mono, like a terminal), else the largest vanilla one
@@ -344,7 +344,7 @@ local function count_alive(vault)
 	--return count + table_size(vault.emerging_queued) -- queued spawns too
 end
 
--- threat counter, every tick
+-- threat counter, every GUI_FAST_UPDATE_PERIOD ticks
 ---@param vault Vault
 ---@param window LuaGuiElement
 local function update_threats(vault, window)
@@ -518,7 +518,7 @@ local function get_pinned(player)
 	return window, vault
 end
 
--- every tick: threat counters, pinned panel closing
+-- every GUI_FAST_UPDATE_PERIOD ticks: threat counters, pinned panel closing
 ---@param player LuaPlayer
 function gui.update_info_gui_fast(player)
 	local window = player.gui.left[WINDOW_NAME]
@@ -539,7 +539,7 @@ function gui.update_info_gui_fast(player)
 	end
 end
 
--- hover preview of the selected vault, none for the pinned one, every 20 ticks and on selection change
+-- hover preview of the selected vault, none for the pinned one, every GUI_UPDATE_PERIOD ticks and on selection change
 ---@param player LuaPlayer
 function gui.update_info_gui(player)
 	local window = player.gui.left[WINDOW_NAME]

@@ -170,6 +170,11 @@ function myutil.draw_ellipse(target, surface, offset, radius, color)
 	rendering.draw_polygon{target=target, surface=surface, vertices=vertices, color=color, time_to_live=1 }
 end
 
+---@class unit_number : integer
+---@class player_index : integer
+---@class tile_key : integer
+---@class chunk_key : integer
+
 ---@param pos MapPosition
 ---@return tile_key
 function myutil.tile_position_key(pos)
@@ -184,6 +189,14 @@ function myutil.tile_position_key(pos)
 	-- largest +/- is now 838,860,808,388,608 (>2^49 and <2^50) which is outside lua doc range, but inside actual safe range
 	return y * 100000000 + x -- negative x make y part appear smaller
 	--return y * 100000000 + (x + 8388608) -- use this to avoid?
+end
+
+---@param pos MapPosition
+---@return chunk_key
+function myutil.chunk_position_key(pos)
+	local x = math.floor((pos.x or pos[1]) / 32) ---@cast x integer
+	local y = math.floor((pos.y or pos[2]) / 32) ---@cast y integer
+	return y * 10000000 + x
 end
 
 ---@param key tile_key

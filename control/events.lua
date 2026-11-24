@@ -196,11 +196,6 @@ local function on_tick(event)
 		end
 	end
 	
-	-- vault gui threat counter, the rest of the gui is refreshed in on_nth_tick below
-	for _,player in pairs(game.connected_players) do
-		gui.update_info_gui_fast(player)
-	end
-	
 	--prof.stop()
 	--game.print(prof)
 end
@@ -225,14 +220,14 @@ local function poll_viz(event)
 	init()
 	gui.update_all_viz()
 end
-
--- one handler per period, so both nth 60 handlers go through here (looked up at call time, so the profiler's wrappers are used)
+-- vault gui threat counter and pinned panel closing, the rest of the gui in poll_viz
 ---@param event NthTickEventData
-local function on_nth_tick_60(event)
-	dead_bots.update_queued_drill_connections(event)
-	original_mapgen.delete_unused_fake_surfaces(event)
+local function poll_gui_fast(event)
+	init()
+	for _,player in pairs(game.connected_players) do
+		gui.update_info_gui_fast(player)
+	end
 end
-
 ---- Registration
 local function register_all()
 	script.on_event(defines.events.on_object_destroyed, on_object_destroyed)
@@ -263,12 +258,29 @@ local function register_all()
 	script.on_event(const.MOD_NAME.."-pin-vault", gui.on_pin_input)
 	script.on_event(defines.events.on_gui_click, gui.on_gui_click)
 
-	script.on_nth_tick(20, poll_viz)
-	script.on_nth_tick(60, on_nth_tick_60)
-	script.on_nth_tick(10*60, dead_bots.update_unlocked_qualities) -- catch research_all_technologies() etc.
-	if ore.debug_vis_drain then
-		script.on_nth_tick(1, ore.debug_vis_drain)
+	-- one handler per period and mod (a second registration replaces the first), so the configurable periods must not collide
+	-- control/tests.lua registers its own period (10) at runtime, not checked here
+	local nth_periods = {} ---@type table<integer, true>
+	local function on_nth_tick(period, handler)
+		assert(not nth_periods[period], "on_nth_tick period "..period.." registered twice, the second handler would replace the first")
+		nth_periods[period] = true
+		script.on_nth_tick(period, handler)
 	end
+	
+	on_nth_tick(const.DRILL_CONNECTION_UPDATE_PERIOD, function(event)
+		dead_bots.update_queued_drill_connections(event)
+		
+		original_mapgen.delete_unused_fake_surfaces(event)
+	end)
+	
+	on_nth_tick(20*60, dead_bots.update_unlocked_qualities) -- catch research_all_technologies() etc.
+	
+	if ore.debug_vis_drain then
+		on_nth_tick(1, ore.debug_vis_drain)
+	end
+	
+	on_nth_tick(const.GUI_FAST_UPDATE_PERIOD, poll_gui_fast)
+	on_nth_tick(const.GUI_UPDATE_PERIOD, poll_viz)
 end
 
 -- generic, so nothing registered above can be missed (unregistering an unregistered event is fine)

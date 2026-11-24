@@ -31,8 +31,6 @@ local depth_scaling = require("control.depth_scaling")
 ---@field emerging_projectiles table<integer, LuaEntity> -- emerging bots (projectiles that appear like bots that rise out of the vault)
 ---@field active_bots table<integer, LuaEntity> -- active bots
 --- descending bots (projectiles) are currently not tracked and wave counts as inactive if only descending bots remain
----
----@field update_drill_connections boolean?
 
 ---@class (exact) WaveInfo
 ---@field start_tick MapTick

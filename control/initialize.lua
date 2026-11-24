@@ -9,14 +9,13 @@ local original_mapgen = require("control.original_mapgen")
 local dead_bots = require("control.dead_bots")
 
 ---@class obj_id : integer -- register_on_object_destroyed-based id
----@class unit_number : integer
----@class player_index : integer
----@class tile_key : integer
 
 ---@class ModStorage
 ---@field vaults table<obj_id, Vault> -- all registed vaults, should be all since init() and chunkgen register them as soon as they appear
 ---@field poll_vaults StaggerTickState -- stagger_tick state for vaults
 ---@field active_vaults table<obj_id, Vault> -- waves with active waves only
+---
+---@field update_drill_connections table<chunk_key, BoundingBox>
 ---
 ---@field poll_repaired Damaged[]
 ---@field poll_prev unit_number?
@@ -60,9 +59,10 @@ function init(convert_scrap)
 	local init = next(s) == nil
 	
 	if s.vaults == nil then s.vaults = {} end
+	if s.active_vaults == nil then s.active_vaults = {} end
+	if s.update_drill_connections == nil then s.update_drill_connections = {} end
 	if s.poll_vaults == nil then s.poll_vaults = {} end
 	if s.poll_repaired == nil then s.poll_repaired = {} end
-	if s.active_vaults == nil then s.active_vaults = {} end
 	if s.render_objs == nil then s.render_objs = {} end
 	if s.startup_settings == nil then s.startup_settings = get_startup_settings() end
 	

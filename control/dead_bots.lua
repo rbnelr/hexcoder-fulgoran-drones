@@ -58,9 +58,10 @@ function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
 			resource.amount = count
 			
 			--common.update_drill_connections_near(surface, position)
-			for _, vault in pairs(find_nearby_vaults(surface, position)) do
-				vault.update_drill_connections = true
-			end
+			--for _, vault in pairs(find_nearby_vaults(surface, position)) do
+			--	vault.update_drill_connections = true
+			--end
+			dead_bots.queue_drill_update(surface, position)
 			
 			dead_bots.register_decay(resource)
 			
@@ -69,18 +70,72 @@ function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
 		end
 	end
 end
--- registered in control/events.lua (nth 60)
+
+-- chunk based with bounding box optimization
+function dead_bots.queue_drill_update(surface, position)
+	assert(surface.name == "fulgora")
+	
+	local key = myutil.chunk_position_key(position)
+	local update = storage.update_drill_connections[key] or {}
+	
+	update.left_top = update.left_top or { x=math.huge, y=math.huge }
+	update.right_bottom = update.right_bottom or { x=-math.huge, y=-math.huge }
+	
+	update.left_top.x = math.min(update.left_top.x, position.x)
+	update.left_top.y = math.min(update.left_top.y, position.y)
+	update.right_bottom.x = math.max(update.right_bottom.x, position.x)
+	update.right_bottom.y = math.max(update.right_bottom.y, position.y)
+	
+	storage.update_drill_connections[key] = update
+end
+
+-- registered in control/events.lua (nth DRILL_CONNECTION_UPDATE_PERIOD)
 ---@param event NthTickEventData
 function dead_bots.update_queued_drill_connections(event)
-	for _,vault in pairs(storage.vaults) do
-		if vault.update_drill_connections then
-			for _, drill in pairs(vault.mining_drills) do
-				if drill.valid then
+	--for _,vault in pairs(storage.vaults) do
+	--	if vault.update_drill_connections then
+	--		for _, drill in pairs(vault.mining_drills) do
+	--			if drill.valid then
+	--				drill.update_connections()
+	--			end
+	--		end
+	--		vault.update_drill_connections = nil
+	--	end
+	--end
+	
+	local surface = game.surfaces["fulgora"]
+	local updates = storage.update_drill_connections
+	if surface and next(updates) then
+		local already_updated = {}
+		
+		local r = common.max_drill_radius -- square radius!
+		local filter = {
+			type="mining-drill",
+			area = { left_top={}, right_bottom={}}
+		}
+		
+		for chunk_key, update in pairs(updates) do
+			filter.area.left_top.x = update.left_top.x - r
+			filter.area.left_top.y = update.left_top.y - r
+			filter.area.right_bottom.x = update.right_bottom.x + r
+			filter.area.right_bottom.y = update.right_bottom.y + r
+			
+			--rendering.draw_rectangle{left_top=filter.area.left_top, right_bottom=filter.area.right_bottom, surface=surface, filled=false, color={0,1,0}, time_to_live=30}
+			
+			-- this includes collision box of drill, not really what we want, but I would have added 1 to radius to make sure anyway
+			for _,drill in pairs(surface.find_entities_filtered(filter)) do
+				local id = drill.unit_number
+				if not already_updated[id] then
+					--local p = drill.position
+					--rendering.draw_rectangle{left_top={p.x-2.5, p.y-2.5}, right_bottom={p.x+2.5, p.y+2.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=30}
 					drill.update_connections()
+					
+					already_updated[id] = true
 				end
 			end
-			vault.update_drill_connections = nil
 		end
+		
+		storage.update_drill_connections = {}
 	end
 end
 
