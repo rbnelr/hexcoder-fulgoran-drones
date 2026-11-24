@@ -52,7 +52,7 @@ common.INF_SCRAP_DEPLETION_TO_MINING = 1 / INF_SCRAP_PROTO.infinite_depletion_re
 common.WAVE_MIN_TIME = 20/60 -- allow for endless waves, 20 seconds to ensure mining rate is accurate, TODO: could lower
 -- size multiplier limits, apply to variation*mining rate multiplier, applies to bot counts which depend on depth
 common.WAVE_MIN_SIZE = 0.1 -- TODO: tune
-common.WAVE_MAX_SIZE = 5 -- TODO: tune
+common.WAVE_MAX_SIZE = 20 -- TODO: tune
 
 common.BASE_MINING_RATE = 1000 -- 1500 is ~10 big drills, mining below full speed, this can go up to 10k with a more drills and speed modules
 common.BASE_FREQUENCY = 1 / 10

@@ -471,8 +471,8 @@ local function balance()
 		selection_priority = 55, -- make selectable over buildings, was 35, normal buildings are 50, ore is 40
 		
 		--TODO: test separation_force_factor, max_separation_force
-		separation_range = 1.6, -- was 1
-		range_from_player = 2.5, -- was 6
+		separation_range = 1.25, -- was 1
+		range_from_player = 3, -- was 6
 		--friction = 0.016,
 		max_speed = 0.28, -- was nil
 		
@@ -491,14 +491,14 @@ local function balance()
 		resistances = meld.overwrite{
 			{ type = "acid",     percent =  80 }, -- was 80
 			{ type = "fire",     percent =  95 }, -- was 95
-			{ type = "physical", percent =  75, decrease = 3 }, -- was 0 
+			{ type = "physical", percent =  90, decrease = 4 }, -- was 0     eff HP >4000
 			{ type = "laser",    percent =  0 }, -- was 0 
 			{ type = "electric", percent = -50 }, -- was 0 
 			{ type = "explosion", percent = 80  }, -- was 0 -- rockets should miss small fast drones
 		},
 		
 		attack_parameters = {
-			cooldown = 40, -- was 20
+			cooldown = 25, -- was 20
 			cooldown_deviation = 0.1,
 			range = 15, -- was 15, gun turret is 18
 			ammo_type = {
@@ -506,7 +506,7 @@ local function balance()
 					action_delivery = {
 						target_effects = {
 							{},
-							{ damage = { amount = 6, type = "physical"} } -- was 8
+							{ damage = { amount = 4, type = "physical"} } -- was 8
 						}
 					}
 				}
@@ -531,21 +531,21 @@ local function balance()
 			--{ type = "electric", percent = 50 }, -- was 0                eff HP  1100
 			{ type = "acid",      percent =  80 }, -- was 80
 			{ type = "fire",      percent =  95 }, -- was 95
-			{ type = "physical",  percent =  25, decrease = 3 }, -- was 0
-			{ type = "laser",     percent =  80, decrease = 5 }, -- was 0
+			{ type = "physical",  percent =  25, decrease = 4 }, -- was 0
+			{ type = "laser",     percent =  80, decrease = 4 }, -- was 0
 			{ type = "electric",  percent = -10 }, -- was 0
 			{ type = "explosion", percent =  0, decrease = 100 }, -- was 0
 		},
 		
 		attack_parameters = {
-			cooldown = 60, -- was 40
-			cooldown_deviation = 0.2,
-			damage_modifier = 0.75, -- was 0.5
+			cooldown = 80, -- was 40
+			cooldown_deviation = 0.4,
+			damage_modifier = 0.5, -- was 0.5
 			range = 17, -- was 15
 			ammo_type = {
 				action = {
 					action_delivery = {
-						duration = 16, -- was 20 visual only?
+						duration = 20, -- was 20 visual only?
 					}
 				}
 			}
@@ -554,8 +554,8 @@ local function balance()
 	meld(data.raw["combat-robot"]["destroyer"], {
 		selection_priority = 55,
 		
-		separation_range = 2.0, -- was 1.5
-		range_from_player = 2.8, -- was 6
+		separation_range = 1.5, -- was 1.5
+		range_from_player = 3, -- was 6
 		friction = 0.020,
 		max_speed = 0.15, -- was nil
 		
@@ -575,18 +575,18 @@ local function balance()
 			{ type = "acid",      percent =  80 }, -- was 80
 			{ type = "fire",      percent =  95 }, -- was 95
 			--{ type = "physical",  percent =  50, decrease = 5 }, -- was 0, 
-			{ type = "physical",  percent =  65 }, -- was 0, 
-			{ type = "laser",     percent =  90, decrease = 5 }, -- was 0
-			{ type = "electric",  percent =  90, decrease = 10 }, -- was 0
+			{ type = "physical",  percent =  70 }, -- was 0
+			{ type = "laser",     percent =  80, decrease = 10 }, -- was 0  eff HP >7500
+			{ type = "electric",  percent =  80, decrease = 10 }, -- was 0
 			{ type = "explosion", percent =  25, decrease = 100 }, -- was 0
 		},
 		
 		attack_parameters = {
 			--cooldown = 24, -- was 20
-			cooldown = 34, -- was 20
+			cooldown = 25, -- was 20
 			cooldown_deviation = 0.3, -- was 0.2
-			range = 12.5, -- was 20
-			damage_modifier = 1.5, -- was 2
+			range = 15, -- was 20
+			damage_modifier = 2, -- was 2
 			ammo_type = {
 				action = {
 					action_delivery = {

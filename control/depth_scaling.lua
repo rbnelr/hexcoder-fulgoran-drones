@@ -97,6 +97,15 @@ local function progression_curve(depth)
 	depth = math.min(math.max(depth, 0), 1)
 	return depth ^ (1 / common.PROGRESSION_CURVE)
 end
+depth_scaling.progression_curve = progression_curve
+
+-- inverse of progression_curve
+---@param progression number 0-1
+---@return number depth 0-1
+function depth_scaling.depth_for_progression(progression)
+	progression = math.min(math.max(progression, 0), 1)
+	return progression ^ common.PROGRESSION_CURVE
+end
 
 -- Setting is 1-5 (to match quality numbering and dots in icons), also display in gui like that
 -- return as 0-4, or else distance scaling is too strong
