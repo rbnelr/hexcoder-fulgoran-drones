@@ -57,12 +57,29 @@ function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
 		if resource then
 			resource.amount = count
 			
-			common.update_drill_connections_near(surface, position)
+			--common.update_drill_connections_near(surface, position)
+			for _, vault in pairs(find_nearby_vaults(surface, position)) do
+				vault.update_drill_connections = true
+			end
 			
 			dead_bots.register_decay(resource)
 			
 			--local p = position
 			--rendering.draw_rectangle{left_top=area[1], right_bottom=area[2], surface=surface, filled=false, color={0,1,0}, time_to_live=60*5}
+		end
+	end
+end
+-- registered in control/events.lua (nth 60)
+---@param event NthTickEventData
+function dead_bots.update_queued_drill_connections(event)
+	for _,vault in pairs(storage.vaults) do
+		if vault.update_drill_connections then
+			for _, drill in pairs(vault.mining_drills) do
+				if drill.valid then
+					drill.update_connections()
+				end
+			end
+			vault.update_drill_connections = nil
 		end
 	end
 end

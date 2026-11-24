@@ -57,11 +57,11 @@ local function on_entity_create(event)
 	elseif entity.surface.name == "fulgora" then
 		dmg.on_entity_event(entity)
 		
-		for _,vault in pairs(find_nearby_vaults(entity)) do
+		for _,vault in pairs(find_nearby_vaults(entity.surface, entity.position)) do
 			vault:update_targets()
 			if entity.type == "mining-drill" then
-				local e = vault.entity
-				vault.scrap_tracker:on_drill_built(e.surface, e.position, const.VAULT_DEFENSE_RADIUS)
+				local ve = vault.entity
+				vault.scrap_tracker:on_drill_built(ve.surface, ve.position, const.VAULT_DEFENSE_RADIUS)
 			end
 		end
 		if entity.type == "mining-drill" then
@@ -226,6 +226,13 @@ local function poll_viz(event)
 	gui.update_all_viz()
 end
 
+-- one handler per period, so both nth 60 handlers go through here (looked up at call time, so the profiler's wrappers are used)
+---@param event NthTickEventData
+local function on_nth_tick_60(event)
+	dead_bots.update_queued_drill_connections(event)
+	original_mapgen.delete_unused_fake_surfaces(event)
+end
+
 ---- Registration
 local function register_all()
 	script.on_event(defines.events.on_object_destroyed, on_object_destroyed)
@@ -257,7 +264,7 @@ local function register_all()
 	script.on_event(defines.events.on_gui_click, gui.on_gui_click)
 
 	script.on_nth_tick(20, poll_viz)
-	script.on_nth_tick(60, original_mapgen.delete_unused_fake_surfaces)
+	script.on_nth_tick(60, on_nth_tick_60)
 	script.on_nth_tick(10*60, dead_bots.update_unlocked_qualities) -- catch research_all_technologies() etc.
 	if ore.debug_vis_drain then
 		script.on_nth_tick(1, ore.debug_vis_drain)

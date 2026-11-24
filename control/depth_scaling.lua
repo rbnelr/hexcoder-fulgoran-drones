@@ -227,7 +227,7 @@ end
 
 ---@param drill LuaEntity
 function depth_scaling.update_quality_for_single_drill(drill)
-	update_drill_local_quality_effect(drill, find_nearby_vaults(drill))
+	update_drill_local_quality_effect(drill, find_nearby_vaults(drill.surface, drill.position))
 end
 
 -- settings changed (progression curve, max quality), depth itself does not change, so no scans

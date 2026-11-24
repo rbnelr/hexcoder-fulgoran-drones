@@ -31,6 +31,8 @@ local depth_scaling = require("control.depth_scaling")
 ---@field emerging_projectiles table<integer, LuaEntity> -- emerging bots (projectiles that appear like bots that rise out of the vault)
 ---@field active_bots table<integer, LuaEntity> -- active bots
 --- descending bots (projectiles) are currently not tracked and wave counts as inactive if only descending bots remain
+---
+---@field update_drill_connections boolean?
 
 ---@class (exact) WaveInfo
 ---@field start_tick MapTick
@@ -303,12 +305,12 @@ function Vault:delete_waypoints()
 	end
 end
 
----@param target LuaEntity
+---@param surface LuaSurface
+---@param position MapPosition
 ---@return Vault[] nearby_vaults
-function find_nearby_vaults(target)
-	assert(const.IS_TARGET[target.type])
+function find_nearby_vaults(surface, position)
 	local nearby_vaults = {}
-	for _,v in pairs(target.surface.find_entities_filtered{name=const.VAULT_NAME, position=target.position, radius=const.VAULT_DEFENSE_RADIUS}) do
+	for _,v in pairs(surface.find_entities_filtered{name=const.VAULT_NAME, position=position, radius=const.VAULT_DEFENSE_RADIUS}) do
 		local vault = get_or_init_vault(v)
 		table.insert(nearby_vaults, vault)
 	end
@@ -372,8 +374,6 @@ function Vault:update_targets()
 			self.mining_drills[id] = entity
 		end
 	end
-	
-	dmg.fix_all_icons()
 end
 
 -- do alerts not stay until deleted?
