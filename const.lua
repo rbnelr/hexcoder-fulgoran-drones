@@ -85,9 +85,9 @@ end
 
 ----
 const.VAULT_SHAFT_CENTER = {x=-0.25, y=0.25} -- shaft visually is an ellipse and not perfectly centered
-const.VAULT_SHAFT_RADIUS = 4
+const.VAULT_SHAFT_RADIUS = 4.1
 const.VAULT_SPAWN_RADIUS = 3.75
-const.VAULT_SHAFT_ELLIPSE_K = 0.65 -- shaft is an ellipse, due to perspective
+const.VAULT_SHAFT_ELLIPSE_K = 0.7 -- shaft is an ellipse, due to perspective
 
 const.BOT_FLOAT_HEIGHT = 0.9 -- bots are rendererd higher than their actual y position, need to account for when spawning
 

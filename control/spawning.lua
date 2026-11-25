@@ -59,8 +59,8 @@ end
 -- TODO: projectile and or particles and bots have actual z axis, do we need to fake z via y here?
 ---@param vault Vault
 function spawning.update_emerging(vault)
-	--draw_ellipse(vault.entity, vault.entity.surface,
-	--	VAULT_SHAFT_CENTER, {x=VAULT_SHAFT_RADIUS, y=VAULT_SHAFT_RADIUS*VAULT_SHAFT_ELLIPSE_K},
+	--myutil.draw_ellipse(vault.entity, vault.entity.surface,
+	--	const.VAULT_SHAFT_CENTER, {x=const.VAULT_SHAFT_RADIUS, y=const.VAULT_SHAFT_RADIUS*const.VAULT_SHAFT_ELLIPSE_K},
 	--	{1,1,0, 0.3})
 	
 	-- emerging_queued is sorted latest to earliest, pop off end to keep array valid (allow later table.insert and table.sort)

@@ -155,19 +155,31 @@ function myutil.random_in_circle_center_bias(center, radius, min_radius)
 	         y = center.y + radius * math.sin(theta) }
 end
 
+---@return MapPosition.struct
+function myutil.random_dir()
+	local theta = math.random() * 6.2831853 -- 2PI
+	return { x = math.cos(theta),
+	         y = math.sin(theta) }
+end
+
 ---@param target ScriptRenderTarget
 ---@param surface LuaSurface
 ---@param offset Vector
 ---@param radius Vector
-function myutil.draw_ellipse(target, surface, offset, radius, color)
+---@param time_to_live integer?
+function myutil.draw_ellipse(target, surface, offset, radius, color, time_to_live)
 	local vertices = {}
+	local x = offset[1] or offset.x
+	local y = offset[2] or offset.y
+	local rx = radius[1] or radius.x
+	local ry = radius[2] or radius.y
 	for i=1,32 do
 		local theta = (i/32) * 6.28318530 -- 2PI
-		local p = { offset.x + radius.x * math.cos(theta),
-		            offset.y + radius.y * math.sin(theta) }
+		local p = { x + rx * math.cos(theta),
+		            y + ry * math.sin(theta) }
 		table.insert(vertices, p)
 	end
-	rendering.draw_polygon{target=target, surface=surface, vertices=vertices, color=color, time_to_live=1 }
+	rendering.draw_polygon{target=target, surface=surface, vertices=vertices, color=color, time_to_live=time_to_live or 1}
 end
 
 ---@class unit_number : integer

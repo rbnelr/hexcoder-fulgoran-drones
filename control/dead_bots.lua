@@ -39,11 +39,66 @@ end
 --	end
 --end
 
+-- If a bot dies and tries to spawn a resource tile on top of the vault shaft, move it outward
+---@param surface LuaSurface
+---@param position MapPosition
+---@return MapPosition
+function dead_bots.decollide_with_vault(surface, position)
+	local vault = surface.find_entity(const.VAULT_NAME, position)
+	if vault then
+		local vault_pos = vault.position
+		local vault_x = vault_pos.x + const.VAULT_SHAFT_CENTER.x
+		local vault_y = vault_pos.y + const.VAULT_SHAFT_CENTER.y
+		
+		local offset_x = position.x - vault_x
+		local offset_y = position.y - vault_y
+		
+		-- do math in ellipse coords (1=radius)
+		local shaft_r_x = const.VAULT_SHAFT_RADIUS+0.5
+		local shaft_r_y = shaft_r_x * const.VAULT_SHAFT_ELLIPSE_K
+		
+		offset_x = offset_x / shaft_r_x
+		offset_y = offset_y / shaft_r_y
+		
+		local dist_sqr = offset_x*offset_x + offset_y*offset_y
+		if dist_sqr < 1 then
+			local dist = math.sqrt(dist_sqr)
+			local dir_x
+			local dir_y
+			if dist > 0.05 then
+				dir_x = offset_x / dist
+				dir_y = offset_y / dist
+			else
+				local dir = myutil.random_dir()
+				dir_x = dir.x
+				dir_y = dir.y
+			end
+			
+			local shift = 1.2 + math.random() * 0.6 -- 1.2x of ellipse radius up to 1.8x
+			local new_position = {
+				x = vault_x + (dir_x * shift) * shaft_r_x,
+				y = vault_y + (dir_y * shift) * shaft_r_y,
+			}
+			
+			--myutil.draw_ellipse(vault, surface, const.VAULT_SHAFT_CENTER, {shaft_r_x,shaft_r_y}, {1,0,0}, 30)
+			--rendering.draw_line{surface=surface, from=position, to=new_position, width=1, color={0,1,0}, time_to_live=30}
+			--
+			--local snapped = { math.floor(new_position.x)+0.5, math.floor(new_position.y)+0.5 }
+			--rendering.draw_circle{surface=surface, target=snapped, radius=0.5, color={1,1,0}, time_to_live=600}
+			return new_position
+		end
+	end
+	return position
+end
+
 ---@param surface LuaSurface
 ---@param position MapPosition
 ---@param res_name string
 ---@param count integer
 function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
+	-- don't drop dead bots on vault shaft
+	-- TODO: could try to apply this to on_bot_died instead (corpse actually flies such that it happens to land outside)
+	position = dead_bots.decollide_with_vault(surface, position)
 	position = { x=math.floor(position.x)+0.5, y=math.floor(position.y)+0.5 } -- find_entity doesn't seem to work with floored ints, unless rounding to 0.5 centers?
 	
 	res_name = dead_bots.downgrade_locked_qualities(res_name)
@@ -59,10 +114,10 @@ function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
 		
 		--local p = resource.position
 		--rendering.draw_rectangle{left_top={p.x-0.5, p.y-0.5}, right_bottom={p.x+0.5, p.y+0.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
-	--else
+	else
 	-- not really needed resource no longer deletes cliffs due to cliff_removal_probability,
-	-- but probably still don't want to spawn under cliff
-	elseif surface.count_entities_filtered{position=position, collision_mask="cliff"} == 0 then
+	-- but probably still don't want to spawn under cliff (but costs perf, so let's avoid it)
+	--elseif surface.count_entities_filtered{position=position, collision_mask="cliff"} == 0 then
 		resource = surface.create_entity{name=res_name, position=position, snap_to_grid=true,
 			--raise_built=true,
 			preserve_ghosts_and_corpses=true, -- ??
