@@ -1,4 +1,6 @@
 local const = require("const")
+const.set_quality_luts()
+
 local profiling = const.PROFILE and require("control.profiling") or nil
 if profiling then profiling.wrap_script() end -- before control.events registers the handlers
 require("control.initialize")

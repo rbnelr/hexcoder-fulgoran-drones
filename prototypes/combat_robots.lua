@@ -76,15 +76,19 @@ end
 
 --#region Emerge projectiles and hostile copies
 
+local EMERGE_ACCELL = 0.01
+local EMERGE_TURN_SPEED = 0.003
+local DESCEND_ACCELL = 0.0025
+
 -- projectile that looks like a drone
----@param name string vanilla bot name
+---@param name string
 ---@param hostile_name string
 ---@param proj_name string
----@param accell number
+---@param accell number|table<string, number>
 ---@param speeds table<string, number>
 ---@param action table? nil = only visual
-local function drone_projectile(name, hostile_name, proj_name, accell, speeds, action)
-	local bot = data.raw["combat-robot"][name]
+local function drone_projectile(name, hostile_name, proj_name, speeds, accell, turn_speed, action)
+	local bot = data.raw["combat-robot"][hostile_name]
 	local animation = util.table.deepcopy(bot.idle)
 	local animation_shadow = util.table.deepcopy(bot.shadow_idle)
 	local tint = const.DRONE_TINT[hostile_name]
@@ -99,10 +103,16 @@ local function drone_projectile(name, hostile_name, proj_name, accell, speeds, a
 		name = proj_name,
 		flags = { "not-on-map" },
 		hidden = true,
+		
 		acceleration = accell,
-		max_speed = speeds[name] / 60,
-		-- Does this allow me to spawn the projectile with an orientation?
-		-- no, in fact descend projectiles are upside down if set to true
+		max_speed = speeds[hostile_name] / 60,
+		turn_speed = turn_speed,
+		--turning_speed_increases_exponentially_with_projectile_speed = true,
+		
+		-- we'd like to render ascend projectiles with different drone rotations (facing direction), which are animation frames
+		-- but enabling this just makes the projectile sprite rotate in the movement direction
+		-- which for descend projectiles makes them be upside down
+		-- TODO: can we actually it render other animation frames?
 		rotatable = false,
 		action = action,
 		light = circular_lights(DRONE_LIGHTS[name]), -- was { intensity = 0.5, size = 4 }
@@ -120,24 +130,23 @@ end
 --- slow projectiles that look like bots and spawn bots on "hit", used to make it look like bots are ascending before actually being spawned
 local function emerge_projectiles()
 	for name, hostile_name in pairs(const.BOT_NAMES) do -- was pairs(data.raw["combat-robot"]), which asserts on modded combat robots
-		data:extend{
-			drone_projectile(name, hostile_name, "hexcoder-"..name.."-emerge", 0.01, const.EMERGE_SPEEDS, {
-				type = "direct",
-				action_delivery = {
-					type = "instant",
-					target_effects = {
-						{
-							type = "create-entity",
-							entity_name = hostile_name,
-							trigger_created_entity = true,
-						}
+		data:extend{ drone_projectile(name, hostile_name, "hexcoder-"..name.."-emerge", const.EMERGE_SPEEDS, EMERGE_ACCELL, EMERGE_TURN_SPEED, {
+			type = "direct",
+			action_delivery = {
+				type = "instant",
+				target_effects = {
+					{
+						type = "create-entity",
+						entity_name = hostile_name,
+						trigger_created_entity = true,
 					}
 				}
-			}),
-		}
+			}
+		}) }
+		
 		if const.DRONES_TRY_TO_RETURN then
 			-- reverse of emerge: returning bot is destroy()ed by script and replaced by this, ends hidden behind the vault's front wall
-			data:extend{ drone_projectile(name, hostile_name, "hexcoder-"..name.."-descend", 0.01, const.DESCEND_SPEEDS, nil) } 
+			data:extend{ drone_projectile(name, hostile_name, "hexcoder-"..name.."-descend", const.DESCEND_SPEEDS, DESCEND_ACCELL, 0, nil) } 
 		end
 	end
 end
@@ -177,7 +186,7 @@ end
 
 -- Add hostile versions of combat bot entities to be able to color them individually instead of one color per force
 -- and to allow hostile ones to spawn resource and player ones not
-local function hostile_copies()
+local function hostile_bot_copies()
 	for name, hostile_name in pairs(const.BOT_NAMES) do
 		local hostile_bot = table.deepcopy(data.raw["combat-robot"][name])
 		hostile_bot.name = hostile_name
@@ -433,14 +442,15 @@ local function harvestable_drones_quality_resource()
 		--  (if so only spawn on fulgora?)
 		local base_dying_particle = data.raw["optimized-particle"][name.."-dying-particle"]
 		
-		local Q = data.raw["quality"]["normal"]
-		while Q do
-			local Qres_name = res_name
-			if Q.name ~= "normal" then
-				Qres_name = res_name.."-"..Q.name
+		for i,Qname in ipairs(const.QUALITY_IDS) do
+			-- names from the same LUTs control uses (dead_bots), normal is res_name itself
+			local Qres_name = const.DRONE_RES_QUALITY_TABLE[res_name].from_level[i]
+			if i > 1 then
+				local Q = data.raw["quality"][Qname]
+
 				local Qres = meld(table.deepcopy(normal_resource), {
 					name = Qres_name,
-					localised_name = {"", {"entity-name."..res_name}, " (", {"quality-name."..Q.name}, ")"},
+					localised_name = {"", {"entity-name."..res_name}, " (", {"quality-name."..Qname}, ")"},
 					icons = {
 						{ icon = normal_resource.icon, icon_size = 64, scale = .5 },
 						{ icon = Q.icon, icon_size = 64, scale = .25, shift = {-10, 10} },
@@ -451,7 +461,7 @@ local function harvestable_drones_quality_resource()
 					
 					minable = {
 						results = {{
-							quality_min = Q.name, quality_max = Q.name,
+							quality_min = Qname, quality_max = Qname,
 						}},
 					},
 				})
@@ -475,7 +485,7 @@ local function harvestable_drones_quality_resource()
 			-- variants of dying particle for each quality, as particle don't seem to track quality
 			do
 				local dp = table.deepcopy(base_dying_particle)
-				dp.name = hostile_name.."-dying-particle-"..Q.name
+				dp.name = const.DRONE_DYING_PARTICLE[hostile_name][Qname]
 				tint_particle(dp, tint)
 				-- render_layer set on the vanilla particle in set_render_layers
 				
@@ -488,8 +498,6 @@ local function harvestable_drones_quality_resource()
 				}
 				data:extend{dp}
 			end
-			
-			Q = data.raw["quality"][Q.next]
 		end
 	end
 end
@@ -502,8 +510,8 @@ end
 -- adjust friction and max_speed to prevent drones moving at unlimited speeds, make movements a bit more visually followable
 -- separation_range/range_from_player adjust distance from target and each other
 -- both both player and enemy versions for now
-local function balance()
-	meld(data.raw["combat-robot"]["defender"], {
+local function balance_hostile_bots()
+	meld(data.raw["combat-robot"]["fulgoran-defender"], {
 		selection_priority = 55, -- make selectable over buildings, was 35, normal buildings are 50, ore is 40
 		
 		--TODO: test separation_force_factor, max_separation_force
@@ -549,7 +557,7 @@ local function balance()
 			}
 		}
 	})
-	meld(data.raw["combat-robot"]["distractor"], {
+	meld(data.raw["combat-robot"]["fulgoran-distractor"], {
 		selection_priority = 54,
 		
 		-- want to avoid seperation force from distractors around vault, but this likely does not work
@@ -587,7 +595,7 @@ local function balance()
 			}
 		}
 	})
-	meld(data.raw["combat-robot"]["destroyer"], {
+	meld(data.raw["combat-robot"]["fulgoran-destroyer"], {
 		selection_priority = 55,
 		
 		separation_range = 1.5, -- was 1.5
@@ -678,7 +686,7 @@ local function capsule_recipes()
 end
 --#endregion
 
---#region Recycling and stage entry points
+--#region Recycling
 
 -- dead-<bot>-recycling: copy of the capsule recycling with capsules swapped for wrecks
 -- must run after the recycler generated the recycling recipes (its data-updates)
@@ -704,24 +712,6 @@ local function dead_bot_recycling()
 			end
 		end
 		data.raw["recipe"]["dead-"..name.."-recycling"] = dead_recyc
-	end
-end
-
-function combat_robots.data()
-	emerge_projectiles()
-	if const.BUFFED_DRONES then
-		balance()
-	end
-	hostile_copies()
-	if const.HARVESTABLE_BOTS then
-		capsule_recipes()
-		harvestable_drones()
-	end
-end
-
-function combat_robots.data_updates()
-	if const.HARVESTABLE_BOTS then
-		dead_bot_recycling()
 	end
 end
 --#endregion
@@ -814,6 +804,26 @@ local function add_bullet_trails()
 	end
 end
 
+--#endregion
+
+function combat_robots.data()
+	hostile_bot_copies()
+	emerge_projectiles()
+	--if const.BUFFED_DRONES then
+		balance_hostile_bots()
+	--end
+	if const.HARVESTABLE_BOTS then
+		capsule_recipes()
+		harvestable_drones()
+	end
+end
+
+function combat_robots.data_updates()
+	if const.HARVESTABLE_BOTS then
+		dead_bot_recycling()
+	end
+end
+
 function combat_robots.final_fixes()
 	add_bullet_trails()
 	set_render_layers()
@@ -821,6 +831,5 @@ function combat_robots.final_fixes()
 		harvestable_drones_quality_resource()
 	end
 end
---#endregion
 
 return combat_robots

@@ -13,8 +13,8 @@ local function spawn_position()
 	local spawn_r_x = const.VAULT_SPAWN_RADIUS
 	local spawn_r_y = spawn_r_x * const.VAULT_SHAFT_ELLIPSE_K
 	
-	--return random_in_ellipse_center_bias({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
-	return myutil.random_in_ellipse({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
+	return myutil.random_in_ellipse_center_bias({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
+	--return myutil.random_in_ellipse({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
 end
 -- project x onto bottom of ellipse, where bot (projectile) can spawn hidden behind the vault's front wall (drawn by the vault itself, prototypes/vault_ruin.lua)
 ---@param x number
@@ -32,7 +32,6 @@ end
 ---@param delay number
 ---@param duration number
 local function queue_spawn_drones(vault, wave, bot_type, quality_tier, count, delay, duration)
-	local name = const.EMERGE_PARTICLES[bot_type]
 	for i = 1,count do
 		local quality_level = depth_scaling.roll_bot_quality_from_tier(quality_tier)
 		local quality_name = const.QUALITY_IDS[quality_level]
@@ -41,7 +40,7 @@ local function queue_spawn_drones(vault, wave, bot_type, quality_tier, count, de
 		local emerging = {
 			tick = game.tick + math.floor((delay + math.random() * duration) * 60),
 			--id = id,
-			name = name,
+			name = bot_type,
 			quality = quality_name,
 			final_pos = spawn_position(),
 		}
@@ -74,21 +73,35 @@ function spawning.update_emerging(vault)
 		repeat
 			local emerging = queued[count]
 			
-			local x = center.x + emerging.final_pos.x
-			local y = center.y + emerging.final_pos.y
-			local sy = center.y + emerging_obscured_y_pos(emerging.final_pos.x) + const.BOT_FLOAT_HEIGHT
+			--local outward_fac = emerging.name == "fulgoran-distractor" and 1 or 2.5
+			local outward_fac = emerging.name == "fulgoran-distractor" and 1 or 1.8
 			
-			--rendering.draw_line{from={x,sy}, to={x,y}, width=1, surface=vault.entity.surface, time_to_live=30, color={1,1,0.5}}
+			local x0 = center.x + emerging.final_pos.x
+			local y0 = center.y + emerging_obscured_y_pos(emerging.final_pos.x) + const.BOT_FLOAT_HEIGHT
+			local x1 = x0
+			local y1 = center.y + emerging.final_pos.y
+			local tx = center.x + emerging.final_pos.x * outward_fac
+			local ty = y1
 			
+			local max_dist = math.abs(ty-y0) --math.abs(tx-x0) + math.abs(ty-y0)
+
+			rendering.draw_line{from={x0,y0}, to={x1,y1}, width=1, surface=vault.entity.surface, time_to_live=30, color={1,1,0.5}}
+			rendering.draw_line{from={x1,y1}, to={tx,ty}, width=1, surface=vault.entity.surface, time_to_live=30, color={0.5,1,0}}
+
 			local projectile = vault.entity.surface.create_entity{
-				name=emerging.name,
-				position = {x=x, y=sy}, target = {x=x, y=y}, snap_to_grid = false,
+				name=const.EMERGE_PROJECTILES[emerging.name],
+				position = {x=x0, y=y0}, target = {x=tx, y=ty}, snap_to_grid = false,
 				force=const.DRONE_FORCE,
 				source = vault.entity, -- track which vault this came from
 				preserve_ghosts_and_corpses = true, -- ??
-				quality = emerging.quality -- projectile can take quality
+				quality = emerging.quality, -- projectile can take quality
+				
+				speed = const.EMERGE_SPEEDS[emerging.name]/60,
+				max_range = max_dist, -- avoid circling forever if made to turn
 			} ---@cast projectile - nil
-			
+			--projectile.speed = 0
+			projectile.orientation = 0
+
 			-- projectiles have no unit_number!
 			--local proj_id = script.register_on_object_destroyed(projectile)
 			--vault.emerging_projectiles[proj_id] = projectile
@@ -133,8 +146,9 @@ function spawning.descend_bot(vault, bot)
 		name = name,
 		position = pos, target = {x=center.x + x, y=sy}, snap_to_grid = false,
 		force = const.DRONE_FORCE,
-		quality = bot.quality -- for good measure
+		quality = bot.quality, -- for good measure
 		--speed = myutil.vector_length(bot.get_movement()), -- not sure if this does anything
+		speed = 1/60,
 	}
 
 	bot.destroy()
@@ -159,6 +173,7 @@ function spawning.on_trigger_created_entity(event)
 		-- set force again, already set on projectile and _should_ have spawned bot with correct force, but does not
 		-- force is neutral for some reason, possibly because source==vault (simple-entity) can't actually have a force?
 		bot.force = const.DRONE_FORCE
+		bot.set_movement({1,0}, 2/60)
 
 		local variation = (vault and vault.testing) and 1 or common.rand_variation(1, 0.1)
 		bot.time_to_live = bot.time_to_live * variation

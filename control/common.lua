@@ -113,7 +113,9 @@ function common.clamp_inf_scrap(initial, amount)
 	return initial, amount
 end
 
--- This is super dodgy, if there are modded drills with high radius we may miss to update them (they won't mine the newly added bot resource)
+-- Need to check drill radius for drill update_connections() to make it actually mine spawned dead bot resource
+-- this should handle modded drills with large resource, but if drill with large radius exists we may get heavily performance degradation since update_connections() can be extremely slow
+-- 
 common.max_drill_radius = 0
 for _,drill in pairs(prototypes.get_entity_filtered{{filter="type", type="mining-drill"}}) do
 	for quality,_ in pairs(prototypes.quality) do
@@ -121,16 +123,6 @@ for _,drill in pairs(prototypes.get_entity_filtered{{filter="type", type="mining
 		if radius > common.max_drill_radius then common.max_drill_radius = radius end
 	end
 end
-
-const.QUALITY_IDS = {[1]="normal"}
-do
-	local q = prototypes.quality["normal"]
-	while q.next do
-		q = q.next
-		table.insert(const.QUALITY_IDS, q.name)
-	end
-end
-const.MAX_QUALITY_ID = #const.QUALITY_IDS
 
 -- update drills which touch tile at position, or in position+square radius (for vault)
 ---@param surface LuaSurface

@@ -355,7 +355,7 @@ function dead_bots.poll_for_decay(event)
 			assert(decayed_amount <= amount)
 			
 			if decayed_amount < amount then
-				if const.DEBUG then log(dbg_print(string.format("decay resource: %s %d->%d", serpent.line(entity), amount, decayed_amount))) end
+				--if const.DEBUG then log(dbg_print(string.format("decay resource: %s %d->%d", serpent.line(entity), amount, decayed_amount))) end
 				
 				if decayed_amount > 0 then
 					entity.amount = decayed_amount
