@@ -74,7 +74,10 @@ function dead_bots.decollide_with_vault(surface, position)
 				dir_y = dir.y
 			end
 			
-			local shift = 1.2 + math.random() * 0.6 -- 1.2x of ellipse radius up to 1.8x
+			-- shift_min* of ellipse radius up to shift_max*
+			local shift_min = 1.25
+			local shift_max = 1.9
+			local shift = shift_min + math.random() * (shift_max - shift_min)
 			local new_position = {
 				x = vault_x + (dir_x * shift) * shaft_r_x,
 				y = vault_y + (dir_y * shift) * shaft_r_y,

@@ -13,7 +13,7 @@ const.PROFILE = true -- time every mod function and event handler, /vaults-profi
 const.VAULT_DEFENSE_RADIUS = settings.startup[const.MOD_NAME.."-vault-defense-radius"].value --[[@as number]]
 const.INF_SCRAP_ENABLED = settings.startup[const.MOD_NAME.."-inf-scrap"].value --[[@as boolean]]
 const.HARVESTABLE_BOTS = settings.startup[const.MOD_NAME.."-dead-bot-resource"].value --[[@as boolean]]
-const.BUFFED_DRONES = settings.startup[const.MOD_NAME.."-buff-drones"].value --[[@as boolean]]
+--const.BUFFED_DRONES = settings.startup[const.MOD_NAME.."-buff-drones"].value --[[@as boolean]]
 const.NERF_TURRETS = settings.startup[const.MOD_NAME.."-nerf-turret-turn"].value --[[@as boolean]]
 const.ALLOW_DRILLS_WITHOUT_ORE = settings.startup[const.MOD_NAME.."-drills-without-ore"].value --[[@as boolean]]
 
