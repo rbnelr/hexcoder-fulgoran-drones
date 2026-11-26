@@ -76,54 +76,6 @@ function dead_bots.decollide_with_vault(surface, position)
 	return position
 end
 
----@param surface LuaSurface
----@param position MapPosition
----@param res_name string
----@param count integer
-function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
-	-- don't drop dead bots on vault shaft
-	-- TODO: could try to apply this to on_bot_died instead (corpse actually flies such that it happens to land outside)
-	position = dead_bots.decollide_with_vault(surface, position)
-	position = { x=math.floor(position.x)+0.5, y=math.floor(position.y)+0.5 } -- find_entity doesn't seem to work with floored ints, unless rounding to 0.5 centers?
-	
-	res_name = dead_bots.downgrade_locked_qualities(res_name)
-	
-	--local grid_size = 5
-	--local xy = DRONE_XY[res_name]
-	--position.x = math.floor(position.x/grid_size)*grid_size + xy.x
-	--position.y = math.floor(position.y/grid_size)*grid_size + xy.y
-	local resource = surface.find_entity(res_name, position)
-	if resource then
-		-- existing resource, increase amount
-		resource.amount = resource.amount + count
-		
-		--local p = resource.position
-		--rendering.draw_rectangle{left_top={p.x-0.5, p.y-0.5}, right_bottom={p.x+0.5, p.y+0.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
-	else
-	-- not really needed resource no longer deletes cliffs due to cliff_removal_probability,
-	-- but probably still don't want to spawn under cliff (but costs perf, so let's avoid it)
-	--elseif surface.count_entities_filtered{position=position, collision_mask="cliff"} == 0 then
-		resource = surface.create_entity{name=res_name, position=position, snap_to_grid=true,
-			--raise_built=true,
-			preserve_ghosts_and_corpses=true, -- ??
-		}
-		if resource then
-			resource.amount = count
-			
-			--common.update_drill_connections_near(surface, position)
-			--for _, vault in pairs(find_nearby_vaults(surface, position)) do
-			--	vault.update_drill_connections = true
-			--end
-			dead_bots.queue_drill_update(surface, position)
-			
-			dead_bots.register_decay(resource)
-			
-			--local p = position
-			--rendering.draw_rectangle{left_top=area[1], right_bottom=area[2], surface=surface, filled=false, color={0,1,0}, time_to_live=60*5}
-		end
-	end
-end
-
 -- chunk based with bounding box optimization
 function dead_bots.queue_drill_update(surface, position)
 	assert(surface.name == "fulgora")
@@ -194,8 +146,110 @@ function dead_bots.update_queued_drill_connections(event)
 	end
 end
 
--- custom event handlers, registered in control/events.lua
-if const.HARVESTABLE_BOTS then -- was const.HARVEST_BOTS (nil, handler never registered)
+if const.HARVESTABLE_BOTS then
+	
+	-- max amount per resource tile (more tiles = drill mines them more often, helping avoid buildup)
+	local RES_ENTITY_SPLIT = 25
+	-- max amount of overlapping tiles (drones will be lost), to avoid performance or other issues
+	local RES_ENTITY_CAP = 10 -- this is per bot prototype (type and quality combo), so can be 150 per tile in theory
+	
+	function dead_bots.split_existing_bot_resources(surface)
+		-- should only be needed for existing games, only when migrating or when adjusting split
+		-- ingores cap for simplicity
+		for _,resource in pairs(surface.find_entities_filtered{type="resource", name=const.DRONE_RES_ALL_NAMES}) do
+			while resource.amount > RES_ENTITY_SPLIT do
+				local split = math.min(resource.amount - RES_ENTITY_SPLIT, RES_ENTITY_SPLIT)
+				resource.amount = resource.amount - split
+				
+				local new_resource = surface.create_entity{name=resource.name, position=resource.position, snap_to_grid=true,
+					--raise_built=true,
+					preserve_ghosts_and_corpses=true, -- ??
+				}
+				if new_resource then
+					new_resource.amount = split
+					
+					dead_bots.queue_drill_update(surface, new_resource.position)
+					
+					dead_bots.register_decay(new_resource)
+				end
+			end
+		end
+	end
+
+	---@param surface LuaSurface
+	---@param position MapPosition
+	---@param res_name string
+	---@param count integer
+	function dead_bots.add_dead_bot_resource(surface, position, res_name, count)
+		-- don't drop dead bots on vault shaft
+		-- TODO: could try to apply this to on_bot_died instead (corpse actually flies such that it happens to land outside)
+		position = dead_bots.decollide_with_vault(surface, position)
+		position = { x=math.floor(position.x)+0.5, y=math.floor(position.y)+0.5 } -- find_entity doesn't seem to work with floored ints, unless rounding to 0.5 centers?
+		
+		res_name = dead_bots.downgrade_locked_qualities(res_name)
+		
+		-- test to see if it helps perf to merge more tiles
+		--local grid_size = 5
+		--local xy = DRONE_XY[res_name]
+		--position.x = math.floor(position.x/grid_size)*grid_size + xy.x
+		--position.y = math.floor(position.y/grid_size)*grid_size + xy.y
+		
+		--local resource = surface.find_entity(res_name, position)
+		local resources = surface.find_entities_filtered{name=res_name, position=position} -- TODO: could be slower than find_entity, consider doing find_entity, then running find_entities_filtered only if no space_left?
+		
+		for _,resource in pairs(resources) do
+			local amount = resource.amount
+			if amount and amount < RES_ENTITY_SPLIT then
+				if const.DEBUG then
+					local p = resource.position
+					rendering.draw_rectangle{left_top={p.x-0.5, p.y-0.5}, right_bottom={p.x+0.5, p.y+0.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
+				end
+				
+				local space_left = RES_ENTITY_SPLIT - amount
+				
+				if count <= space_left then
+					-- existing resource, increase amount
+					resource.amount = amount + count
+					return
+				end
+				
+				-- keep filling other resource until all of them are full, then fallthrough to create_entity
+				resource.amount = amount + space_left
+				count = count - space_left
+				if count == 0 then
+					return
+				end
+			end
+		end
+		assert(count > 0)
+		if #resources >= RES_ENTITY_CAP then
+			return -- count drones are lost
+		end
+		
+		-- not really needed resource no longer deletes cliffs due to cliff_removal_probability,
+		-- but probably still don't want to spawn under cliff (but costs perf, so let's avoid it)
+		--if surface.count_entities_filtered{position=position, collision_mask="cliff"} == 0 then
+		
+		local resource = surface.create_entity{name=res_name, position=position, snap_to_grid=true,
+			--raise_built=true,
+			preserve_ghosts_and_corpses=true, -- ??
+		}
+		if resource then
+			resource.amount = count
+			
+			--common.update_drill_connections_near(surface, position)
+			--for _, vault in pairs(find_nearby_vaults(surface, position)) do
+			--	vault.update_drill_connections = true
+			--end
+			dead_bots.queue_drill_update(surface, position)
+			
+			dead_bots.register_decay(resource)
+			
+			--local p = position
+			--rendering.draw_rectangle{left_top=area[1], right_bottom=area[2], surface=surface, filled=false, color={0,1,0}, time_to_live=60*5}
+		end
+	end
+
 	-- triggers on custom dying particle landing on land (on oil ocean it creates a splash and does not create a remnant)
 	-- manually spawn bit resource that looks like remnant instead of letting engine spawn actual remnant
 	---@param event EventData.on_script_trigger_effect

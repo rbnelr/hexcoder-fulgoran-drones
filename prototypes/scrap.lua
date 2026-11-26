@@ -26,6 +26,10 @@ function scrap.data_updates()
 				{ icon = data.raw["simple-entity"][const.VAULT_NAME].icon,
 				  icon_size = 64, scale = .25, shift = {5, 10} },
 			},
+			-- signal for inf-scrap already shows up in drill filter
+			-- but does not show up in combinator, but drill has no "set filter" from circuit feature anyway, so that's why
+			--flags = meld.append{ "always-show" }, -- does not make signal show up in CC
+			
 			--minable = {
 			--	mining_time = 1.25, -- was 0.5
 			--	result = meld.delete(),

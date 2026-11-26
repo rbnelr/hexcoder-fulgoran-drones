@@ -474,7 +474,7 @@ end
 --#endregion
 
 --#region Debug drain visualisation
-local VIS_DRAIN = false
+local VIS_DRAIN = true
 if const.DEBUG and VIS_DRAIN then
 	-- on_nth_tick(1) in control/events.lua, nil when off
 	---@param event NthTickEventData
@@ -486,14 +486,23 @@ if const.DEBUG and VIS_DRAIN then
 				local amount = active_ore and active_ore.amount
 				
 				if active_ore then
-					local yield = amount / INF_SCRAP_NORMAL
-					local color = yield > 1 and {0,1,0} or {1,1,0}
+					if active_ore.prototype.infinite_resource then
+						local yield = amount / INF_SCRAP_NORMAL
+						local color = yield > 1 and {0,1,0} or {1,1,0}
+						
+						rendering.draw_circle{surface=active_ore.surface, target=active_ore, radius=0.5, color=color, time_to_live=1}
+						rendering.draw_text{text=string.format("%d", amount),
+							surface=active_ore.surface, target=active_ore, color=color, time_to_live=1}
+						rendering.draw_text{text=string.format("%d%%", yield * 100),
+							surface=active_ore.surface, target={type="entity", entity=active_ore, offset={0,-.4}}, color=color, time_to_live=1}
+					else
+						local color = {0,0,1}
+						
+						rendering.draw_circle{surface=active_ore.surface, target=active_ore, radius=0.5, color=color, time_to_live=1}
+						rendering.draw_text{text=string.format("%d", amount),
+							surface=active_ore.surface, target=active_ore, color=color, time_to_live=1}
+					end
 					
-					rendering.draw_circle{surface=active_ore.surface, target=active_ore, radius=0.5, color=color, time_to_live=1}
-					rendering.draw_text{text=string.format("%d", amount),
-						surface=active_ore.surface, target=active_ore, color=color, time_to_live=1}
-					rendering.draw_text{text=string.format("%d%%", yield * 100),
-						surface=active_ore.surface, target={type="entity", entity=active_ore, offset={0,-.4}}, color=color, time_to_live=1}
 				end
 			end
 		end

@@ -336,6 +336,9 @@ local function harvestable_drones()
 			name = resource_name, -- same name as item, shows up as (Entity/item)
 			icon = wreck_icon,
 			--flags = {"placeable-neutral"},
+			
+			-- _does_ make signal show up in drill filter
+			flags = meld.append{ "always-show" },
 
 			subgroup = corpse.subgroup,
 			order = robot.order,
@@ -352,7 +355,7 @@ local function harvestable_drones()
 			autoplace = meld.delete(),
 			
 			minable = meld.overwrite{
-				mining_time = 0.25, -- 0.4
+				mining_time = 0.2, -- needs to be fast or else drones don't get cleared out fast enough, since we can't force drills to prioritize
 				results = {{
 					type="item",
 					name=item.name,
@@ -457,7 +460,12 @@ local function harvestable_drones_quality_resource()
 					},
 					icon = meld.delete(),
 					order = normal_resource.order.."-"..Q.order,
-					hidden = true,
+					
+					-- don't hide it to make signal show up in drill filter
+					--hidden = true,
+					hidden_from_player_crafting = true,
+					hidden_from_factoriopedia = true, -- still shows up in factoriopedia, maybe because always-show flag?
+					hidden = false,
 					
 					minable = {
 						results = {{

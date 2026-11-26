@@ -96,6 +96,10 @@ function init(convert_scrap)
 			--		end
 			--	end
 			--end
+			
+			if const.HARVESTABLE_BOTS then
+				dead_bots.split_existing_bot_resources(surface)
+			end
 		end
 		
 		dead_bots.update_unlocked_qualities()
