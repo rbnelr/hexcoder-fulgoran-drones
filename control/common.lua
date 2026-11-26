@@ -55,7 +55,7 @@ common.WAVE_MIN_TIME = 10/60 -- allow for endless waves, 10 sec ensure mining ra
 common.WAVE_MIN_SIZE = 0.05 -- TODO: tune
 common.WAVE_MAX_SIZE = 20 -- 20x with SPAWN_DURATION_EXP=0.3 means 8.1x spawn duration, at 15sec this is ~2min, so pushing this higher is probably a bad idea, instead decrease mining rate->size factor and increase bot counts
 
-common.BASE_MINING_RATE = 1000 -- 1500 is ~10 big drills, mining below full speed, this can go up to 10k with a more drills and speed modules
+common.BASE_MINING_RATE = 1200 -- 1500 is ~10 big drills, mining below full speed, this can go up to 10k with a more drills and speed modules
 common.BASE_FREQUENCY = 1 / 10
 
 ---@alias AnimCurve {depth:number, val:number}[]
@@ -77,9 +77,9 @@ common.DEPTH_FREQ_CURVE = {{depth=0, val=0.5}, {depth=1, val=4}} -- TODO: tune
 common.BOT_COUNTS_CURVE = { -- TODO: tune
 	-- avoid code deriving bot counts from ratios, but still choose to specify them as ratio*total_count/threat here for now
 	-- be careful that bot counts don't lower with depth, like we want destroyers to slowly get more common at higher depth, but defenders should not decrease
-	["fulgoran-defender"  ] = {{depth=0, val=0.75*25/ 1}, {depth=0.3, val=0.50*62.5/ 1}, {depth=0.7, val=0.30*112.5/1 }, {depth=1, val=0.20*150/ 1}},
-	["fulgoran-distractor"] = {{depth=0, val=0.25*25/ 6}, {depth=0.3, val=0.30*62.5/ 6}, {depth=0.7, val=0.35*112.5/6 }, {depth=1, val=0.40*150/ 6}},
-	["fulgoran-destroyer" ] = {{depth=0, val=0.00*25/12}, {depth=0.3, val=0.20*62.5/12}, {depth=0.7, val=0.35*112.5/12}, {depth=1, val=0.40*150/12}},
+	["fulgoran-defender"  ] = {{depth=0, val=0.75*25/ 1}, {depth=0.3, val=0.60*40/ 1}, {depth=0.7, val=0.30*100/1 }, {depth=1, val=0.20*200/ 1}},
+	["fulgoran-distractor"] = {{depth=0, val=0.25*25/ 7}, {depth=0.3, val=0.30*40/ 7}, {depth=0.7, val=0.45*100/7 }, {depth=1, val=0.40*200/ 7}},
+	["fulgoran-destroyer" ] = {{depth=0, val=0.00*25/10}, {depth=0.3, val=0.10*40/10}, {depth=0.7, val=0.25*100/10}, {depth=1, val=0.40*200/10}},
 }
 
 -- bot resistances are "rock-paper-scissors", so it's hard to say, but "threat" is the approximate HP and DPS of drones
@@ -87,8 +87,8 @@ common.BOT_COUNTS_CURVE = { -- TODO: tune
 -- summed threat is displayed in gui with one threat==1%, 100% should be a wave a basic "reasonable" defense setup usually manages
 common.THREAT_PER_BOT = { -- TODO: tune
 	["fulgoran-defender"] = 1,
-	["fulgoran-distractor"] = 6,
-	["fulgoran-destroyer"] = 12,
+	["fulgoran-distractor"] = 7,
+	["fulgoran-destroyer"] = 10,
 }
 
 local _threat_curve = {}
