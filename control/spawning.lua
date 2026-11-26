@@ -74,20 +74,26 @@ function spawning.update_emerging(vault)
 			local emerging = queued[count]
 			
 			--local outward_fac = emerging.name == "fulgoran-distractor" and 1 or 2.5
-			local outward_fac = emerging.name == "fulgoran-distractor" and 1 or 1.8
+			--local outward_fac = emerging.name == "fulgoran-distractor" and 1 or 1.8
+			--
+			--local x0 = center.x + emerging.final_pos.x
+			--local y0 = center.y + emerging_obscured_y_pos(emerging.final_pos.x) + const.BOT_FLOAT_HEIGHT
+			--local x1 = x0
+			--local y1 = center.y + emerging.final_pos.y
+			--local tx = center.x + emerging.final_pos.x * outward_fac
+			--local ty = y1
+			
+			--local max_dist = math.abs(ty-y0) --math.abs(tx-x0) + math.abs(ty-y0)
+
+			--rendering.draw_line{from={x0,y0}, to={x1,y1}, width=1, surface=vault.entity.surface, time_to_live=30, color={1,1,0.5}}
+			--rendering.draw_line{from={x1,y1}, to={tx,ty}, width=1, surface=vault.entity.surface, time_to_live=30, color={0.5,1,0}}
 			
 			local x0 = center.x + emerging.final_pos.x
 			local y0 = center.y + emerging_obscured_y_pos(emerging.final_pos.x) + const.BOT_FLOAT_HEIGHT
-			local x1 = x0
-			local y1 = center.y + emerging.final_pos.y
-			local tx = center.x + emerging.final_pos.x * outward_fac
-			local ty = y1
+			local ty = center.y + emerging.final_pos.y
+			local tx = x0
+			local max_dist = 10
 			
-			local max_dist = math.abs(ty-y0) --math.abs(tx-x0) + math.abs(ty-y0)
-
-			rendering.draw_line{from={x0,y0}, to={x1,y1}, width=1, surface=vault.entity.surface, time_to_live=30, color={1,1,0.5}}
-			rendering.draw_line{from={x1,y1}, to={tx,ty}, width=1, surface=vault.entity.surface, time_to_live=30, color={0.5,1,0}}
-
 			local projectile = vault.entity.surface.create_entity{
 				name=const.EMERGE_PROJECTILES[emerging.name],
 				position = {x=x0, y=y0}, target = {x=tx, y=ty}, snap_to_grid = false,
@@ -96,7 +102,7 @@ function spawning.update_emerging(vault)
 				preserve_ghosts_and_corpses = true, -- ??
 				quality = emerging.quality, -- projectile can take quality
 				
-				speed = const.EMERGE_SPEEDS[emerging.name]/60,
+				speed = const.EMERGE_TOP_SPEEDS[emerging.name]/60, -- speed up to EMERGE_TOP_SPEEDS (hopefully with turn speed increasing so that most of the turning is at the end)
 				max_range = max_dist, -- avoid circling forever if made to turn
 			} ---@cast projectile - nil
 			--projectile.speed = 0
@@ -148,7 +154,7 @@ function spawning.descend_bot(vault, bot)
 		force = const.DRONE_FORCE,
 		quality = bot.quality, -- for good measure
 		--speed = myutil.vector_length(bot.get_movement()), -- not sure if this does anything
-		speed = 1/60,
+		speed = 1/60, -- have them accelerate downwards up to DECEND_TOP_SPEEDS
 	}
 
 	bot.destroy()
@@ -173,8 +179,21 @@ function spawning.on_trigger_created_entity(event)
 		-- set force again, already set on projectile and _should_ have spawned bot with correct force, but does not
 		-- force is neutral for some reason, possibly because source==vault (simple-entity) can't actually have a force?
 		bot.force = const.DRONE_FORCE
-		bot.set_movement({1,0}, 2/60)
+		--bot.set_movement({1,0}, 2/60)
 
+		-- keep moving like the projectile did: outward from the shaft center (same direction as dead_bots.decollide_with_vault) at its end speed
+		local pos = bot.position
+		local source_pos = source.position
+		local offset_x = pos.x - (source_pos.x + const.VAULT_SHAFT_CENTER.x)
+		local offset_y = pos.y - (source_pos.y + const.VAULT_SHAFT_CENTER.y)
+		local r_x = const.VAULT_SHAFT_RADIUS
+		local r_y = r_x * const.VAULT_SHAFT_ELLIPSE_K
+		local dir_x, dir_y = myutil.ellipse_outward_dir(offset_x, offset_y, r_x, r_y)
+		-- ellipse coords back to world space (squashed in y like the shaft), set_movement normalizes it
+		if bot.name ~= "fulgoran-distractor" then
+			bot.set_movement({dir_x * r_x, dir_y * r_y}, const.EMERGE_TOP_SPEEDS[bot.name]/60)
+		end
+		
 		local variation = (vault and vault.testing) and 1 or common.rand_variation(1, 0.1)
 		bot.time_to_live = bot.time_to_live * variation
 		

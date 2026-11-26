@@ -50,30 +50,12 @@ function dead_bots.decollide_with_vault(surface, position)
 		local vault_x = vault_pos.x + const.VAULT_SHAFT_CENTER.x
 		local vault_y = vault_pos.y + const.VAULT_SHAFT_CENTER.y
 		
-		local offset_x = position.x - vault_x
-		local offset_y = position.y - vault_y
-		
 		-- do math in ellipse coords (1=radius)
 		local shaft_r_x = const.VAULT_SHAFT_RADIUS+0.5
 		local shaft_r_y = shaft_r_x * const.VAULT_SHAFT_ELLIPSE_K
-		
-		offset_x = offset_x / shaft_r_x
-		offset_y = offset_y / shaft_r_y
-		
-		local dist_sqr = offset_x*offset_x + offset_y*offset_y
-		if dist_sqr < 1 then
-			local dist = math.sqrt(dist_sqr)
-			local dir_x
-			local dir_y
-			if dist > 0.05 then
-				dir_x = offset_x / dist
-				dir_y = offset_y / dist
-			else
-				local dir = myutil.random_dir()
-				dir_x = dir.x
-				dir_y = dir.y
-			end
-			
+
+		local dir_x, dir_y, dist = myutil.ellipse_outward_dir(position.x - vault_x, position.y - vault_y, shaft_r_x, shaft_r_y)
+		if dist < 1 then
 			-- shift_min* of ellipse radius up to shift_max*
 			local shift_min = 1.25
 			local shift_max = 1.9

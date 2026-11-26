@@ -76,8 +76,8 @@ end
 
 --#region Emerge projectiles and hostile copies
 
-local EMERGE_ACCELL = 0.01
-local EMERGE_TURN_SPEED = 0.003
+const.EMERGE_ACCELL = 0.001
+local EMERGE_TURN_SPEED = 0.001
 local DESCEND_ACCELL = 0.0025
 
 -- projectile that looks like a drone
@@ -130,7 +130,7 @@ end
 --- slow projectiles that look like bots and spawn bots on "hit", used to make it look like bots are ascending before actually being spawned
 local function emerge_projectiles()
 	for name, hostile_name in pairs(const.BOT_NAMES) do -- was pairs(data.raw["combat-robot"]), which asserts on modded combat robots
-		data:extend{ drone_projectile(name, hostile_name, "hexcoder-"..name.."-emerge", const.EMERGE_SPEEDS, EMERGE_ACCELL, EMERGE_TURN_SPEED, {
+		data:extend{ drone_projectile(name, hostile_name, "hexcoder-"..name.."-emerge", const.EMERGE_TOP_SPEEDS, const.EMERGE_ACCELL, EMERGE_TURN_SPEED, {
 			type = "direct",
 			action_delivery = {
 				type = "instant",
@@ -146,7 +146,7 @@ local function emerge_projectiles()
 		
 		if const.DRONES_TRY_TO_RETURN then
 			-- reverse of emerge: returning bot is destroy()ed by script and replaced by this, ends hidden behind the vault's front wall
-			data:extend{ drone_projectile(name, hostile_name, "hexcoder-"..name.."-descend", const.DESCEND_SPEEDS, DESCEND_ACCELL, 0, nil) } 
+			data:extend{ drone_projectile(name, hostile_name, "hexcoder-"..name.."-descend", const.DESCEND_TOP_SPEEDS, DESCEND_ACCELL, 0, nil) } 
 		end
 	end
 end

@@ -162,6 +162,26 @@ function myutil.random_dir()
 	         y = math.sin(theta) }
 end
 
+-- direction from an ellipse's center outward through offset, in ellipse coords (1=radius), scale by the radii for world space
+-- random direction near the center, where the direction is unstable
+---@param offset_x number relative to the ellipse center
+---@param offset_y number
+---@param radius_x number
+---@param radius_y number
+---@return number dir_x unit length in ellipse coords
+---@return number dir_y
+---@return number dist distance in radii, < 1 inside the ellipse
+function myutil.ellipse_outward_dir(offset_x, offset_y, radius_x, radius_y)
+	offset_x = offset_x / radius_x
+	offset_y = offset_y / radius_y
+	local dist = math.sqrt(offset_x*offset_x + offset_y*offset_y)
+	if dist > 0.05 then
+		return offset_x / dist, offset_y / dist, dist
+	end
+	local dir = myutil.random_dir()
+	return dir.x, dir.y, dist
+end
+
 ---@param target ScriptRenderTarget
 ---@param surface LuaSurface
 ---@param offset Vector

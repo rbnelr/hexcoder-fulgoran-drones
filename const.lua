@@ -119,12 +119,12 @@ if const.DRONES_TRY_TO_RETURN then
 	}
 end
 
-const.EMERGE_SPEEDS = {
+const.EMERGE_TOP_SPEEDS = {
 	["fulgoran-defender"] = 5,
 	["fulgoran-distractor"] = 2.5,
 	["fulgoran-destroyer"] = 3.0,
 }
-const.DESCEND_SPEEDS = {
+const.DESCEND_TOP_SPEEDS = {
 	["fulgoran-defender"] = 4.5*1.5,
 	["fulgoran-distractor"] = 2.5*1.5,
 	["fulgoran-destroyer"] = 3.0*1.5,
