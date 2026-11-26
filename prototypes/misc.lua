@@ -26,6 +26,7 @@ function misc.data_updates()
 		for _,drill in pairs(data.raw["mining-drill"]) do
 			if myutil.list_contains(drill.resource_categories, "basic-solid") then -- not pumpjack
 				drill.require_resources_to_place = false
+				drill.filter_count = 5 -- TODO: test, could fix our bots not getting mined fast enough problem
 			end
 		end
 	end

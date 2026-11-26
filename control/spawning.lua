@@ -7,7 +7,7 @@ local round = myutil.round
 -- functions take the vault instead of being Vault methods, so this file doesn't require control.vault (vault.lua requires it)
 local spawning = {}
 
---#region bot spawn code
+--#region wave spawn logic (wave size, frequency and depth-scaled bot counts and spawn timings)
 
 local function spawn_position()
 	local spawn_r_x = const.VAULT_SPAWN_RADIUS
@@ -16,12 +16,47 @@ local function spawn_position()
 	return myutil.random_in_ellipse_center_bias({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
 	--return myutil.random_in_ellipse({x=0,y=0}, { x=spawn_r_x, y=spawn_r_y })
 end
--- project x onto bottom of ellipse, where bot (projectile) can spawn hidden behind the vault's front wall (drawn by the vault itself, prototypes/vault_ruin.lua)
----@param x number
----@return number y
-local function emerging_obscured_y_pos(x)
-	local r = const.VAULT_SHAFT_RADIUS
-	return const.VAULT_SHAFT_ELLIPSE_K * math.sqrt(r*r - x*x)
+
+---@param wave_size number multiplier
+---@param depth number
+---@param variation_range number
+---@param rng number? -- 0-1, 0.5 = plain rounding without variation
+---@return table<string, integer> counts
+---@return number threat
+function spawning.roll_bot_counts(wave_size, depth, variation_range, rng)
+	local threat = 0
+	local counts = {}
+	for _,type in pairs(const.BOT_NAMES) do
+		local avg_count = common.eval_curve(common.BOT_COUNTS_CURVE[type], depth)
+		avg_count = avg_count * wave_size
+		local count = common.rand_variation_int(avg_count, avg_count*variation_range, rng)
+		
+		counts[type] = count
+		-- TODO: take into account bot quality scaling?
+		threat = threat + count * common.THREAT_PER_BOT[type]
+	end
+	if threat == 0 then -- avoid 0 bot waves incase they are even possible
+		counts["fulgoran-defender"] = 1
+		threat = threat + 1 * common.THREAT_PER_BOT["fulgoran-defender"]
+	end
+	return counts, threat
+end
+---@param wave_size number multiplier
+---@param depth number
+---@return table<string, number> counts
+---@return number threat
+function spawning.estimate_bot_counts(wave_size, depth)
+	local threat = 0
+	local counts = {}
+	for _,type in pairs(const.BOT_NAMES) do
+		local avg_count = common.eval_curve(common.BOT_COUNTS_CURVE[type], depth)
+		avg_count = avg_count * wave_size
+		
+		counts[type] = avg_count
+		-- TODO: take into account bot quality scaling?
+		threat = threat + avg_count * common.THREAT_PER_BOT[type]
+	end
+	return counts, threat
 end
 
 ---@param vault Vault
@@ -38,7 +73,7 @@ local function queue_spawn_drones(vault, wave, bot_type, quality_tier, count, de
 		
 		---@type Emerging
 		local emerging = {
-			tick = game.tick + math.floor((delay + math.random() * duration) * 60),
+			tick = game.tick + math.floor((delay + math.random() * duration) * 60), -- uniform random in duration
 			--id = id,
 			name = bot_type,
 			quality = quality_name,
@@ -51,6 +86,169 @@ local function queue_spawn_drones(vault, wave, bot_type, quality_tier, count, de
 	if count > 0 then
 		wave.bot_types[bot_type] = (wave.bot_types[bot_type] or 0) + count
 	end
+end
+
+-- trigger wave to spawn based on size multiplier and bot quality tier
+-- also takes freq to remember so alerts and gui could display them
+-- no defaults, Vault:start_wave fills them in
+---@param vault Vault
+---@param size number
+---@param freq number
+---@param bot_quality_tier number -- 0-(MAX_BOT_QUALITY-1)
+---@param depth number -- 0-1
+---@return WaveInfo wave
+function spawning.spawn_wave_bots(vault, size, freq, bot_quality_tier, depth)
+
+	local dur_var = vault.testing and 0 or 0.3
+	
+	local counts, threat = spawning.roll_bot_counts(size, depth, 0.3, vault.testing and 0.5 or nil)
+	local n1 = counts["fulgoran-defender"]
+	local n2 = counts["fulgoran-distractor"]
+	local n3 = counts["fulgoran-destroyer"]
+	
+	-- TODO: need to depend on bot counts as well in some way, or else higher depth has higher bot rate but same time (maybe that's fine?)
+	local dur_exp = common.SPAWN_DURATION_EXP
+	local dur1 = common.rand_variation(size, size*dur_var) ^ dur_exp
+	local dur2 = common.rand_variation(size, size*dur_var) ^ dur_exp
+	local dur3 = common.rand_variation(size, size*dur_var) ^ dur_exp
+
+	local delay = 2
+
+	---@type WaveInfo
+	local wave = {
+		start_tick = game.tick,
+		end_tick = nil,
+		size = size,
+		freq = freq,
+		threat = threat,
+		bot_quality_tier = bot_quality_tier,
+		bot_types = {},
+		bot_qualities = {},
+	}
+	
+	-- distractors spawn first, other types delayed
+	-- TODO: more dynamic spawn timing, instead of uniform, clustered (bursts), and maybe traling off at end
+	-- TODO: 15, 9, 10 seconds made sense at the start, but with large sizes there's probably too much of a stretch in time with just defenders spawning
+	-- address this in spawn timing rewrite
+	queue_spawn_drones(vault, wave, "fulgoran-defender", bot_quality_tier, n1, delay+1.5, 15*dur1)
+	queue_spawn_drones(vault, wave, "fulgoran-distractor", bot_quality_tier, n2, delay+0, 9*dur2)
+	queue_spawn_drones(vault, wave, "fulgoran-destroyer", bot_quality_tier, n3, delay+3.5, 10*dur3)
+	
+	table.sort(vault.emerging_queued, function(a, b) return a.tick > b.tick end) -- sort latest to earliest so update_emerging can pop items off the end
+	
+	--log(dbg_print{"_spawn_wave_bots ", serpent.block(wave)})
+	assert(wave.threat > 0)
+	return wave
+end
+
+--function Vault:_start_fake_wave_without_spawns()
+--	return {
+--		start_tick = game.tick,
+--		end_tick = nil,
+--		size = 0,
+--		freq = 0,
+--		bot_quality_tier = 0,
+--		bot_types = {},
+--		bot_qualities = {},
+--	}
+--end
+
+-- size and frequency of the next automatic wave from the current mining rate and depth, the caller starts it (update_waves)
+-- also used for previews (gui, /vaults-start-wave defaults), the variation rng stays the same until a wave starts
+-- early_out: return false right away if less than the min time passed, before scanning (update_waves), false: always compute size etc.
+---@param vault Vault
+---@param early_out boolean
+---@return boolean trigger_wave, number? size, number? freq, number? eta
+function spawning.should_spawn_wave(vault, early_out)
+	local time_since_last = (game.tick - vault.wave_timer_start) / 3600 -- minutes since the last wave start
+	--local time_between = (game.tick - vault.wave_end_tick) / 3600
+	
+	-- allow calling should_spawn_wave(), and getting same variation rng each time until set to nil
+	vault.cur_rng = vault.cur_rng or math.random()
+	vault.cur_rng2 = vault.cur_rng2 or math.random()
+	local rng1, rng2 = vault.cur_rng, vault.cur_rng2
+	if vault.testing then rng1, rng2 = 0.5, 0.5 end -- no variation
+	local variation = common.rand_variation(1, 0.3, rng1) -- percent variation eg 0.2 => 0.8-1.2
+	local variation2 = common.rand_variation(1, 0.3, rng2)
+	
+	local min_time = common.WAVE_MIN_TIME * variation -- very small min time, keep variation to remove potential patterns
+	if time_since_last < min_time and early_out then
+		return false -- not enough time has elapsed, no wave
+	end
+	
+	-- mined since the last wave start, scans if needed
+	local mining_rate, depth = vault:find_current_mining_rate_and_depth()
+	
+	-- weird code I came up with to make attacks more dynamic than 'attack every 10k ore mined'
+	-- both size and frequency of attacks increase with higher mining rate, though rate is determined by mined amount since last wave
+	-- so if stopped mining, the rate is not 0 but actually decreases over time, the attack will happen later and at lower size
+	
+	-- exp=0.5: at 4x the mining rate: 2x as often and 2x as big, at 9x the rate 3x as often
+	-- meaning the number of bots over time is proportional to mining rate
+	-- could increase so size and frequency would be exponential to mining rate
+	local freq_exp = 1.1 -- was 0.5
+	local size_exp = 1.1 -- was 0.5
+	
+	local max_time       = common.WAVE_MAX_TIME * variation
+	local wave_frequency = common.WAVE_FREQ_MULT / variation * common.BASE_FREQUENCY
+	-- use a second rng to make size and frequency non-correlated
+	local wave_size      = common.WAVE_SIZE_MULT * variation2
+	
+	local factor = mining_rate / common.BASE_MINING_RATE
+	local depth_freq_factor = common.eval_curve(common.DEPTH_FREQ_CURVE, depth)
+	
+	wave_frequency = wave_frequency * depth_freq_factor * (factor ^ freq_exp)
+	wave_size = wave_size * (factor ^ size_exp)
+	
+	wave_size = math.max(wave_size, common.WAVE_MIN_SIZE)
+	wave_size = math.min(wave_size, common.WAVE_MAX_SIZE)
+	
+	wave_frequency = math.max(wave_frequency, 1/max_time) -- 1/max_time==min_freq could also be added instead of max'ed
+	wave_frequency = math.min(wave_frequency, 1/min_time)
+	
+	local target_period = 1/wave_frequency
+	local eta = math.max(target_period - time_since_last, 0)
+	
+	local trigger_wave = time_since_last >= target_period
+	return trigger_wave, wave_size, wave_frequency, eta
+end
+
+--#endregion
+
+--#region bot spawn implementation (ascend projectile trick)
+
+---@param vault Vault
+---@param drop_loot boolean?
+function spawning.kill_all_bots(vault, drop_loot)
+	vault.emerging_queued = {}
+	
+	for id,e in pairs(vault.emerging_projectiles) do
+		if e.valid then
+			-- don't drop loot?
+			e.destroy() -- would .die work?
+		end
+	end
+	vault.emerging_projectiles = {}
+	
+	for id,e in pairs(vault.active_bots) do
+		if e.valid then
+			if drop_loot then
+				-- should drop loot
+				e.die() -- force=neutral, cause=nothing
+			else
+				e.destroy()
+			end
+		end
+	end
+	vault.active_bots = {}
+end
+
+-- project x onto bottom of ellipse, where bot (projectile) can spawn hidden behind the vault's front wall (drawn by the vault itself, prototypes/vault_ruin.lua)
+---@param x number
+---@return number y
+local function emerging_obscured_y_pos(x)
+	local r = const.VAULT_SHAFT_RADIUS
+	return const.VAULT_SHAFT_ELLIPSE_K * math.sqrt(r*r - x*x)
 end
 
 -- emerging bots: spawn projectile that looks like bot mostly hidden behind the vault's front wall
@@ -202,193 +400,6 @@ function spawning.on_trigger_created_entity(event)
 			--emerging projectile cleared in update_emerging
 		end
 	end
-end
-
----@param vault Vault
----@param drop_loot boolean?
-function spawning.kill_all_bots(vault, drop_loot)
-	vault.emerging_queued = {}
-	
-	for id,e in pairs(vault.emerging_projectiles) do
-		if e.valid then
-			-- don't drop loot?
-			e.destroy() -- would .die work?
-		end
-	end
-	vault.emerging_projectiles = {}
-	
-	for id,e in pairs(vault.active_bots) do
-		if e.valid then
-			if drop_loot then
-				-- should drop loot
-				e.die() -- force=neutral, cause=nothing
-			else
-				e.destroy()
-			end
-		end
-	end
-	vault.active_bots = {}
-end
-
---#endregion
-
---#region wave spawn scaling (wave size, frequency and depth-scaled bot counts)
-
----@param wave_size number multiplier
----@param depth number
----@param variation_range number
----@param rng number? -- 0-1, 0.5 = plain rounding without variation
----@return table<string, integer> counts
----@return number threat
-function spawning.roll_bot_counts(wave_size, depth, variation_range, rng)
-	local threat = 0
-	local counts = {}
-	for _,type in pairs(const.BOT_NAMES) do
-		local avg_count = common.eval_curve(common.BOT_COUNTS_CURVE[type], depth)
-		avg_count = avg_count * wave_size
-		local count = common.rand_variation_int(avg_count, avg_count*variation_range, rng)
-		
-		counts[type] = count
-		-- TODO: take into account bot quality scaling?
-		threat = threat + count * common.THREAT_PER_BOT[type]
-	end
-	return counts, threat
-end
----@param wave_size number multiplier
----@param depth number
----@return table<string, number> counts
----@return number threat
-function spawning.estimate_bot_counts(wave_size, depth)
-	local threat = 0
-	local counts = {}
-	for _,type in pairs(const.BOT_NAMES) do
-		local avg_count = common.eval_curve(common.BOT_COUNTS_CURVE[type], depth)
-		avg_count = avg_count * wave_size
-		
-		counts[type] = avg_count
-		-- TODO: take into account bot quality scaling?
-		threat = threat + avg_count * common.THREAT_PER_BOT[type]
-	end
-	return counts, threat
-end
-
--- trigger wave to spawn based on size multiplier and bot quality tier
--- also takes freq to remember so alerts and gui could display them
--- no defaults, Vault:start_wave fills them in
----@param vault Vault
----@param size number
----@param freq number
----@param bot_quality_tier number -- 0-(MAX_BOT_QUALITY-1)
----@param depth number -- 0-1
----@return WaveInfo wave
-function spawning.spawn_wave_bots(vault, size, freq, bot_quality_tier, depth)
-
-	local counts, threat = spawning.roll_bot_counts(size, depth, 0.3, vault.testing and 0.5 or nil)
-	local n1 = counts["fulgoran-defender"]
-	local n2 = counts["fulgoran-distractor"]
-	local n3 = counts["fulgoran-destroyer"]
-	
-	-- TODO: need to depend on bot counts as well in some way, or else higher depth has higher bot rate but same time
-	local dur_var = vault.testing and 0 or 0.3
-	local dur1 = common.rand_variation(size, size*dur_var) ^ 0.3
-	local dur2 = common.rand_variation(size, size*dur_var) ^ 0.3
-	local dur3 = common.rand_variation(size, size*dur_var) ^ 0.3
-
-	local delay = 2
-
-	---@type WaveInfo
-	local wave = {
-		start_tick = game.tick,
-		end_tick = nil,
-		size = size,
-		freq = freq,
-		threat = threat,
-		bot_quality_tier = bot_quality_tier,
-		bot_types = {},
-		bot_qualities = {},
-	}
-	
-	-- distractors spawn first, other types delayed
-	queue_spawn_drones(vault, wave, "fulgoran-defender", bot_quality_tier, n1, delay+1.5, 15*dur1)
-	queue_spawn_drones(vault, wave, "fulgoran-distractor", bot_quality_tier, n2, delay+0, 9*dur2)
-	queue_spawn_drones(vault, wave, "fulgoran-destroyer", bot_quality_tier, n3, delay+3.5, 10*dur3)
-	
-	table.sort(vault.emerging_queued, function(a, b) return a.tick > b.tick end) -- sort latest to earliest so update_emerging can pop items off the end
-	
-	--log(dbg_print{"_spawn_wave_bots ", serpent.block(wave)})
-	return wave
-end
-
---function Vault:_start_fake_wave_without_spawns()
---	return {
---		start_tick = game.tick,
---		end_tick = nil,
---		size = 0,
---		freq = 0,
---		bot_quality_tier = 0,
---		bot_types = {},
---		bot_qualities = {},
---	}
---end
-
--- size and frequency of the next automatic wave from the current mining rate and depth, the caller starts it (update_waves)
--- also used for previews (gui, /vaults-start-wave defaults), the variation rng stays the same until a wave starts
--- early_out: return false right away if less than the min time passed, before scanning (update_waves), false: always compute size etc.
----@param vault Vault
----@param early_out boolean
----@return boolean trigger_wave, number? size, number? freq, number? eta
-function spawning.should_spawn_wave(vault, early_out)
-	local time_since_last = (game.tick - vault.wave_timer_start) / 3600 -- minutes since the last wave start
-	--local time_between = (game.tick - vault.wave_end_tick) / 3600
-	
-	-- allow calling should_spawn_wave(), and getting same variation rng each time until set to nil
-	vault.cur_rng = vault.cur_rng or math.random()
-	vault.cur_rng2 = vault.cur_rng2 or math.random()
-	local rng1, rng2 = vault.cur_rng, vault.cur_rng2
-	if vault.testing then rng1, rng2 = 0.5, 0.5 end -- no variation
-	local variation = common.rand_variation(1, 0.3, rng1) -- percent variation eg 0.2 => 0.8-1.2
-	local variation2 = common.rand_variation(1, 0.3, rng2)
-	
-	local min_time = common.WAVE_MIN_TIME * variation -- very small min time, keep variation to remove potential patterns
-	if time_since_last < min_time and early_out then
-		return false -- not enough time has elapsed, no wave
-	end
-	
-	-- mined since the last wave start, scans if needed
-	local mining_rate, depth = vault:find_current_mining_rate_and_depth()
-	
-	-- weird code I came up with to make attacks more dynamic than 'attack every 10k ore mined'
-	-- both size and frequency of attacks increase with higher mining rate, though rate is determined by mined amount since last wave
-	-- so if stopped mining, the rate is not 0 but actually decreases over time, the attack will happen later and at lower size
-	
-	-- exp=0.5: at 4x the mining rate: 2x as often and 2x as big, at 9x the rate 3x as often
-	-- meaning the number of bots over time is proportional to mining rate
-	-- could increase so size and frequency would be exponential to mining rate
-	local freq_exp = 1.0 -- was 0.5
-	local size_exp = 1.1 -- was 0.5
-	
-	local max_time       = common.WAVE_MAX_TIME * variation
-	local wave_frequency = common.WAVE_FREQ_MULT / variation * common.BASE_FREQUENCY
-	-- use a second rng to make size and frequency non-correlated
-	local wave_size      = common.WAVE_SIZE_MULT * variation2
-	
-	local factor = mining_rate / common.BASE_MINING_RATE
-	local depth_freq_factor = common.eval_curve(common.DEPTH_FREQ_CURVE, depth)
-	
-	wave_frequency = wave_frequency * depth_freq_factor * (factor ^ freq_exp)
-	wave_size = wave_size * (factor ^ size_exp)
-	
-	wave_size = math.max(wave_size, common.WAVE_MIN_SIZE)
-	wave_size = math.min(wave_size, common.WAVE_MAX_SIZE)
-	
-	wave_frequency = math.max(wave_frequency, 1/max_time) -- 1/max_time==min_freq could also be added instead of max'ed
-	wave_frequency = math.min(wave_frequency, 1/min_time)
-	
-	local target_period = 1/wave_frequency
-	local eta = math.max(target_period - time_since_last, 0)
-	
-	local trigger_wave = time_since_last >= target_period
-	return trigger_wave, wave_size, wave_frequency, eta
 end
 
 --#endregion

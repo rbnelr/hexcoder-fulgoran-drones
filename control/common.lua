@@ -50,32 +50,45 @@ common.INF_SCRAP_DEPLETED_BUMP_AMOUNT = math.max(math.floor(INF_SCRAP_PROTO.norm
 -- we drain faster so inf scrap does not last 100h until it reaches minimum, this does not change yield (other than reducing yield faster)
 common.INF_SCRAP_DEPLETION_TO_MINING = 1 / INF_SCRAP_PROTO.infinite_depletion_resource_amount -- == const.INF_DEPLETION_RATE
 
-common.WAVE_MIN_TIME = 20/60 -- allow for endless waves, 20 seconds to ensure mining rate is accurate, TODO: could lower
+common.WAVE_MIN_TIME = 10/60 -- allow for endless waves, 10 sec ensure mining rate is accurate
 -- size multiplier limits, apply to variation*mining rate multiplier, applies to bot counts which depend on depth
-common.WAVE_MIN_SIZE = 0.1 -- TODO: tune
-common.WAVE_MAX_SIZE = 20 -- TODO: tune
+common.WAVE_MIN_SIZE = 0.05 -- TODO: tune
+common.WAVE_MAX_SIZE = 20 -- 20x with SPAWN_DURATION_EXP=0.3 means 8.1x spawn duration, at 15sec this is ~2min, so pushing this higher is probably a bad idea, instead decrease mining rate->size factor and increase bot counts
 
 common.BASE_MINING_RATE = 1000 -- 1500 is ~10 big drills, mining below full speed, this can go up to 10k with a more drills and speed modules
 common.BASE_FREQUENCY = 1 / 10
 
 ---@alias AnimCurve {depth:number, val:number}[]
 
----@type AnimCurve
-common.DEPTH_FREQ_CURVE = {{depth=0, val=0.5}, {depth=1, val=3}} -- TODO: tune
+-- wave size and frequency scale off mining rate
 
+-- bot spawn rate determines bot HP / sec, so how much turret DPS is needed
+-- if turret DPS < bot spawn rate * bot HP, you will likely lose
+-- 0=>duration fixed, so 2x size == 2x bot spawn rate, 1=>duration prop. to size, so DPS need only increases with depth bot scaling
+common.SPAWN_DURATION_EXP = 0.3 -- 2x size => 1.23x longer => 2/1.23=1.62x rate, 10x size => 5x rate for 2x longer
+
+-- wave frequency additionally scales with depth
+---@type AnimCurve
+common.DEPTH_FREQ_CURVE = {{depth=0, val=0.5}, {depth=1, val=4}} -- TODO: tune
+
+-- Bot count "evolution" over depth, will still be scaled by size (based on mining rate), these numbers are at size==100%
+-- This is easier to tune than defining bot ratio curves and costs and deriving bot counts from ratio cost and size(budget) (kinda like vanilla biter spawns)
 ---@type table<string, AnimCurve>
-common.BOT_COUNTS_CURVE = { -- TODO: tune, depth curve was 25% to 150% of whatever size was
-	["fulgoran-defender"  ] = {{depth=0, val=0.75*25}, {depth=0.3, val=0.45*62.5}, {depth=0.7, val=0.20*112.5}, {depth=1, val=30}},
-	["fulgoran-distractor"] = {{depth=0, val=0.25*25/6}, {depth=0.3, val=0.35*62.5/6}, {depth=0.7, val=0.45*112.5/6}, {depth=1, val=0.50*150/6}},
-	["fulgoran-destroyer" ] = {{depth=0, val=0.00*25/10}, {depth=0.3, val=0.20*62.5/10}, {depth=0.7, val=0.35*112.5/10}, {depth=1, val=0.40*150/10}},
+common.BOT_COUNTS_CURVE = { -- TODO: tune
+	-- avoid code deriving bot counts from ratios, but still choose to specify them as ratio*total_count/threat here for now
+	-- be careful that bot counts don't lower with depth, like we want destroyers to slowly get more common at higher depth, but defenders should not decrease
+	["fulgoran-defender"  ] = {{depth=0, val=0.75*25/ 1}, {depth=0.3, val=0.50*62.5/ 1}, {depth=0.7, val=0.30*112.5/1 }, {depth=1, val=0.20*150/ 1}},
+	["fulgoran-distractor"] = {{depth=0, val=0.25*25/ 6}, {depth=0.3, val=0.30*62.5/ 6}, {depth=0.7, val=0.35*112.5/6 }, {depth=1, val=0.40*150/ 6}},
+	["fulgoran-destroyer" ] = {{depth=0, val=0.00*25/12}, {depth=0.3, val=0.20*62.5/12}, {depth=0.7, val=0.35*112.5/12}, {depth=1, val=0.40*150/12}},
 }
 
--- wave threat interpreted as %, 100% is a wave a basic "reasonable" defense setup usually manages
--- later game setups
+-- bot resistances are "rock-paper-scissors", so it's hard to say, but "threat" is the approximate HP and DPS of drones
+-- not used to actually decide bot spawns, but BOT_COUNTS_CURVE should ideally match threat ratio for bot ratios (on average, eg. high depth wants bias towards destroyers)
+-- summed threat is displayed in gui with one threat==1%, 100% should be a wave a basic "reasonable" defense setup usually manages
 common.THREAT_PER_BOT = { -- TODO: tune
 	["fulgoran-defender"] = 1,
 	["fulgoran-distractor"] = 6,
-	["fulgoran-destroyer"] = 10,
+	["fulgoran-destroyer"] = 12,
 }
 
 local _threat_curve = {}

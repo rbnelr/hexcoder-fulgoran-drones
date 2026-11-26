@@ -22,7 +22,7 @@ const.ALLOW_DRILLS_WITHOUT_ORE = settings.startup[const.MOD_NAME.."-drills-witho
 -- expired drones (time_to_live ran out, destroy_action) leave dead-<bot> wrecks like killed ones (dying_trigger_effect)
 -- off: expired drones drop the vanilla remnants, wrecks only pile up where drones were actually killed
 -- you have to kill them, this avoids bot buildup on vaults without turrets
-const.EXPIRED_DRONES_HARVESTABLE = true -- false
+const.EXPIRED_DRONES_HARVESTABLE = false
 -- drones fly back into the vault shaft before their time_to_live runs out, so they don't expire
 const.DRONES_TRY_TO_RETURN = true
 
