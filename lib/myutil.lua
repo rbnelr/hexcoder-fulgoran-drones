@@ -154,6 +154,19 @@ function myutil.random_in_circle_center_bias(center, radius, min_radius)
 	return { x = center.x + radius * math.cos(theta),
 	         y = center.y + radius * math.sin(theta) }
 end
+---@param center MapPosition
+---@param radius number
+---@param min_radius number
+---@param circum_t number -- [0,1) but looping
+---@param rad_t number -- [0,1)
+function myutil.coords_to_circle(center, radius, min_radius, circum_t, rad_t)
+	local radius_range = radius - min_radius
+	local r = radius_range * rad_t + min_radius
+	local theta = circum_t * 6.2831853 -- 2PI
+	
+	return { x = center.x + r * math.cos(theta),
+	         y = center.y + r * math.sin(theta) }
+end
 
 ---@return MapPosition.struct
 function myutil.random_dir()

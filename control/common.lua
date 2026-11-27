@@ -52,11 +52,13 @@ common.INF_SCRAP_DEPLETION_TO_MINING = 1 / INF_SCRAP_PROTO.infinite_depletion_re
 
 common.WAVE_MIN_TIME = 10/60 -- allow for endless waves, 10 sec ensure mining rate is accurate
 -- size multiplier limits, apply to variation*mining rate multiplier, applies to bot counts which depend on depth
-common.WAVE_MIN_SIZE = 0.05 -- TODO: tune
-common.WAVE_MAX_SIZE = 20 -- 20x with SPAWN_DURATION_EXP=0.3 means 8.1x spawn duration, at 15sec this is ~2min, so pushing this higher is probably a bad idea, instead decrease mining rate->size factor and increase bot counts
+common.WAVE_MIN_SIZE = 0.1 -- ~2.25 defenders, ~0.75 distractors for automatic waves
 
-common.BASE_MINING_RATE = 1200 -- 1500 is ~10 big drills, mining below full speed, this can go up to 10k with a more drills and speed modules
-common.BASE_FREQUENCY = 1 / 10
+-- 20x with SPAWN_DURATION_EXP=0.3 means 8.1x spawn duration, at 15sec this is ~2min, so pushing this higher is probably a bad idea, instead decrease mining rate->size factor and increase bot counts
+common.WAVE_MAX_SIZE = 20
+
+common.BASE_MINING_RATE = 1500 -- mining rate/min for 100% size, 1500 is ~10 big drills, mining below full speed, this can go up to 10k with a more drills and speed modules
+common.BASE_FREQUENCY = 1 / 10 -- 1 wave every 10 min at BASE_MINING_RATE, more at higher depth
 
 ---@alias AnimCurve {depth:number, val:number}[]
 
@@ -77,9 +79,9 @@ common.DEPTH_FREQ_CURVE = {{depth=0, val=0.5}, {depth=1, val=4}} -- TODO: tune
 common.BOT_COUNTS_CURVE = { -- TODO: tune
 	-- avoid code deriving bot counts from ratios, but still choose to specify them as ratio*total_count/threat here for now
 	-- be careful that bot counts don't lower with depth, like we want destroyers to slowly get more common at higher depth, but defenders should not decrease
-	["fulgoran-defender"  ] = {{depth=0, val=0.75*25/ 1}, {depth=0.3, val=0.60*40/ 1}, {depth=0.7, val=0.30*100/1 }, {depth=1, val=0.20*200/ 1}},
-	["fulgoran-distractor"] = {{depth=0, val=0.25*25/ 7}, {depth=0.3, val=0.30*40/ 7}, {depth=0.7, val=0.45*100/7 }, {depth=1, val=0.40*200/ 7}},
-	["fulgoran-destroyer" ] = {{depth=0, val=0.00*25/10}, {depth=0.3, val=0.10*40/10}, {depth=0.7, val=0.25*100/10}, {depth=1, val=0.40*200/10}},
+	["fulgoran-defender"  ] = {{depth=0, val=0.75*30/ 1}, {depth=0.3, val=0.60*50/ 1}, {depth=0.7, val=0.30*125/1 }, {depth=1, val=0.20*250/ 1}},
+	["fulgoran-distractor"] = {{depth=0, val=0.25*30/ 7}, {depth=0.3, val=0.30*50/ 7}, {depth=0.7, val=0.45*125/7 }, {depth=1, val=0.40*250/ 7}},
+	["fulgoran-destroyer" ] = {{depth=0, val=0.00*30/10}, {depth=0.3, val=0.10*50/10}, {depth=0.7, val=0.25*125/10}, {depth=1, val=0.40*250/10}},
 }
 
 -- bot resistances are "rock-paper-scissors", so it's hard to say, but "threat" is the approximate HP and DPS of drones
@@ -181,11 +183,11 @@ end
 -- returns uniform random in x-range to x+range
 ---@param x number
 ---@param range number absolute variation, for relative call like rand_variation(x, x*0.3)
----@param rng number? must be 0-1
+---@param rnd number? must be 0-1
 ---@return number result uniform in x +- range
-function common.rand_variation(x, range, rng)
-	rng = rng or math.random()
-	return x + (rng*2-1) * range
+function common.rand_variation(x, range, rnd)
+	rnd = rnd or math.random()
+	return x + (rnd*2-1) * range
 end
 
 -- varies a number x randomly by +- number*range
@@ -193,23 +195,23 @@ end
 -- (rand_variation followed by floor or rand would bias the results)
 ---@param x number 
 ---@param range number absolute variation, for relative call like rand_variation_int(x, x*0.3)
----@param rng number? must be 0-1
+---@param rnd number? must be 0-1
 ---@return integer result uniform in x +- range, but integer
-function common.rand_variation_int(x, range, rng)
+function common.rand_variation_int(x, range, rnd)
 	-- hard to explain in a comment how this works
-	rng = rng or math.random()
+	rnd = rnd or math.random()
 	local w = math.max(1, myutil.round(2 * range))
-	--return myutil.round(x + (rng - 0.5) * w)
-	return math.floor(x + (rng - 0.5) * w + 0.5)
+	--return myutil.round(x + (rnd - 0.5) * w)
+	return math.floor(x + (rnd - 0.5) * w + 0.5)
 end
 
 -- round to integer without biasing average, ie. 5.1 round to 5 90% of the time and to 6 10% of the time
 ---@param x number 
----@param rng number? must be 0-1
+---@param rnd number? must be 0-1
 ---@return integer result floor(x) or floor(x)+1 weighted by fract(x)
-function common.rand_rounding(x, rng)
-	rng = rng or math.random()
-	return math.floor(x + rng)
+function common.rand_rounding(x, rnd)
+	rnd = rnd or math.random()
+	return math.floor(x + rnd)
 end
 
 ---@param at number

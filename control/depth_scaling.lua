@@ -157,10 +157,10 @@ function depth_scaling.roll_bot_quality_from_tier(bot_tier)
 	
 	-- TODO: handle modded quality chances (the 10% can be an arbitary number
 	-- could store in array next to QUALITY_IDS (quality prototype next_probability/chain_probability)
-	local rng = math.random()
+	local rnd = math.random()
 	-- decrease chance each iteration, don't test when we reach max
 	tier = tier + 1
-	while tier < const.MAX_QUALITY_ID and rng < chance do
+	while tier < const.MAX_QUALITY_ID and rnd < chance do
 		tier = tier + 1
 		chance = chance*0.1
 	end

@@ -200,10 +200,10 @@ if const.HARVESTABLE_BOTS then
 		for _,resource in pairs(resources) do
 			local amount = resource.amount
 			if amount and amount < RES_ENTITY_SPLIT then
-				if const.DEBUG then
-					local p = resource.position
-					rendering.draw_rectangle{left_top={p.x-0.5, p.y-0.5}, right_bottom={p.x+0.5, p.y+0.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
-				end
+				--if const.DEBUG then
+				--	local p = resource.position
+				--	rendering.draw_rectangle{left_top={p.x-0.5, p.y-0.5}, right_bottom={p.x+0.5, p.y+0.5}, surface=surface, filled=false, color={0,0,1}, time_to_live=60*5}
+				--end
 				
 				local space_left = RES_ENTITY_SPLIT - amount
 				
@@ -266,7 +266,7 @@ if const.HARVESTABLE_BOTS then
 	-- manually spawn correct dying particle quality variant since engine does not support quality here
 	-- (otherwise this would happen automatically via dying_trigger_effect/destroy_action)
 	---@param event EventData.on_script_trigger_effect
-	function dead_bots.on_bot_died(event)
+	function dead_bots.on_bot_died_trigger(event)
 		local surface = game.get_surface(event.surface_index)
 		if surface and surface.name == "fulgora" then
 			--init()

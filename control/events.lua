@@ -20,12 +20,15 @@ local drills_without_ore = require("control.drills_without_ore")
 
 local deathrattles = { ---@type function(EventData.on_object_destroyed)[]
 	[defines.target_type.entity] = function(event)
-		if storage.vaults ~= nil then
+		--if storage.vaults ~= nil then
 			local vault = storage.vaults[event.registration_number]
 			if vault ~= nil then
 				vault:on_destroyed()
+			--else
+			--	storage.bot_vaults[event.useful_id] = nil -- combat robot
 			end
-		end
+		--end
+		
 		-- TODO: also update_targets for vaults or is this fine?
 		-- entities should basically never die anyway, and polling and bot movement handles invalid entities, I think
 	end,
@@ -70,10 +73,18 @@ local function on_entity_create(event)
 	end
 end
 
+local drone_filter = {}
+for name,_ in pairs(const.IS_DRONE) do
+	table.insert(drone_filter, {filter="type", type="combat-robot"})
+	table.insert(drone_filter, {filter="name", name=name})
+end
+
 local built_filter = myutil.merge(dmg.filter_targets, {
 	{filter="type", type="simple-entity"},
 	{filter="name", name=const.VAULT_NAME, mode="and"}
 })
+--local died_filter = myutil.merge(dmg.filter_targets, drone_filter)
+local died_filter = dmg.filter_targets
 
 -- player builds additionally check drills (and drill ghosts) without ore away from vaults, when the setting allows placing them everywhere
 local player_built_filter = built_filter
@@ -96,6 +107,8 @@ local function on_entity_died(event)
 			-- currently entities are prevented from dying to enemies (but player could kill them)
 			-- except Vault:update_targets handles military target state, this even might be useless
 			dmg.on_entity_event(event.entity)
+		--elseif const.IS_DRONE[event.entity.name] then
+		--	dead_bots.on_bot_died(event)
 		end
 		--remove_alert(event)
 	end
@@ -240,7 +253,7 @@ local function register_all()
 	script.on_event(defines.events.script_raised_revive, on_entity_create, built_filter)
 	script.on_event(defines.events.on_entity_cloned, on_entity_create, built_filter) -- source to destination
 
-	script.on_event(defines.events.on_entity_died, on_entity_died, dmg.filter_targets)
+	script.on_event(defines.events.on_entity_died, on_entity_died, died_filter)
 	script.on_event(defines.events.on_entity_damaged, dmg.on_entity_damaged, dmg.filter_targets_on_dmg)
 	script.on_event(defines.events.on_chunk_generated, on_chunk_generated)
 	script.on_event(defines.events.on_trigger_created_entity, spawning.on_trigger_created_entity)
@@ -250,7 +263,7 @@ local function register_all()
 	script.on_event(defines.events.on_research_reversed, dead_bots.update_unlocked_qualities) -- unresearched from editor
 	if const.HARVESTABLE_BOTS then
 		script.on_event(const.MOD_NAME.."-on-create-combat-bot-remnant", dead_bots.on_create_remnant)
-		script.on_event(const.MOD_NAME.."-on-combat-bot-died", dead_bots.on_bot_died)
+		script.on_event(const.MOD_NAME.."-on-combat-bot-died-trigger", dead_bots.on_bot_died_trigger)
 	end
 
 	script.on_event(defines.events.on_tick, on_tick)
@@ -294,7 +307,7 @@ local function unregister_all()
 	script.on_event(const.MOD_NAME.."-pin-vault", nil)
 	if const.HARVESTABLE_BOTS then -- custom events only exist with the setting
 		script.on_event(const.MOD_NAME.."-on-create-combat-bot-remnant", nil)
-		script.on_event(const.MOD_NAME.."-on-combat-bot-died", nil)
+		script.on_event(const.MOD_NAME.."-on-combat-bot-died-trigger", nil)
 	end
 end
 

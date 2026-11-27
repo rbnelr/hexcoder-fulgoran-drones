@@ -20,7 +20,10 @@ end
 local function _add_or_assign(list, values, key_fn)
 	local index = {}
 	for i,v in pairs(list) do
-		index[key_fn(v)] = i
+		local key = key_fn(v)
+		if index[key] == nil then -- assign to first match only
+			index[key] = i
+		end
 	end
 
 	for _,v in pairs(values) do
@@ -39,7 +42,7 @@ end
 local function _remove(list, values, key_fn)
 	local index = {}
 	for _,v in pairs(values) do
-		index[key_fn(v)] = true
+		index[key_fn(v)] = true -- remove all matches
 	end
 
 	-- iterate backwards, table.remove shifts the following entries down

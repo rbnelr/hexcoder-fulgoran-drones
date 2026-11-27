@@ -5,11 +5,13 @@ local ore = require("control.ore_tracking")
 -- spawning and depth_scaling must not require this file (require cycle)
 local spawning = require("control.spawning")
 local depth_scaling = require("control.depth_scaling")
+local movement = require("control.bot_movement")
 
 ---@class Vault
 ---@field id obj_id
 ---@field entity LuaEntity
 ---@field waypoints LuaEntity[]
+---@field inner_waypoints LuaEntity[]
 ---
 ---@field scrap_tracker OreTracker
 -- target lists are rebuilt by update_targets (every poll and targets add themselves on build), entries can turn invalid before next rebuild, entities can be in two vaults' lists
@@ -18,8 +20,8 @@ local depth_scaling = require("control.depth_scaling")
 ---@field mining_drills table<unit_number, LuaEntity> -- drills in radius, ore is only scanned while there are any
 ---
 --- Waves
----@field cur_rng number? -- roll the same size/freq variations until wave actually starts, then reset
----@field cur_rng2 number?
+---@field cur_rnd number? -- roll the same size/freq variations until wave actually starts, then reset
+---@field cur_rnd2 number?
 ---@field testing boolean? -- set by /vaults-test wave: no automatic waves, waves (counts, durations, size/freq, drone lifetime) without random variation
 ---@field wave_timer_start MapTick -- vault init or last wave start (we can't default to 0 or first wave never starts), independent of active/prev_wave (wave infos may be nil)
 ---@field active_wave WaveInfo?
@@ -79,6 +81,7 @@ function get_or_init_vault(entity, source_event)
 		id = id,
 		entity = entity,
 		waypoints={},
+		inner_waypoints={},
 		
 		--scrap_tracker, after update_targets() (needs has_drills)
 		
@@ -131,7 +134,7 @@ end
 function Vault:on_destroyed()
 	--self:end_wave() -- deletes waypoints too
 	
-	self:delete_waypoints()
+	movement.delete_waypoints(self)
 	
 	self:update_alert()
 
@@ -155,11 +158,11 @@ function Vault:bots_active()
 end
 -- offially start wave and spawn it with given parameters
 -- either called automatically by update_waves or forced by console command
--- nil parameters default to what update_waves would do now (size/freq from should_spawn_wave with the current rng, depth from the tracker, quality tier from depth)
----@param size number? -- multiplier on the depth bot counts
----@param freq number?
----@param bot_quality_tier number? -- 0-(MAX_BOT_QUALITY-1)
----@param depth number? -- 0-1, for bot counts and default quality tier
+-- nil parameters default to what update_waves would do now (size/freq from should_spawn_wave with the current rnd, depth from the tracker, quality tier from depth)
+---@param size? number -- multiplier on the depth bot counts
+---@param freq? number
+---@param bot_quality_tier? number -- 0-(MAX_BOT_QUALITY-1)
+---@param depth? number -- 0-1, for bot counts and default quality tier
 ---@return WaveInfo
 function Vault:start_wave(size, freq, bot_quality_tier, depth)
 	-- end active wave if still active
@@ -176,6 +179,8 @@ function Vault:start_wave(size, freq, bot_quality_tier, depth)
 		size = size or def_size
 		freq = freq or def_freq
 	end
+	---@cast size number
+	---@cast freq number
 	bot_quality_tier = bot_quality_tier or depth_scaling.bot_tier(depth)
 	
 	-- mining rate is measured since the last wave start, scans if needed (not again this tick)
@@ -184,11 +189,11 @@ function Vault:start_wave(size, freq, bot_quality_tier, depth)
 	self.wave_timer_start = game.tick
 
 	-- every wave gets new random variation for time and size
-	self.cur_rng = nil
-	self.cur_rng2 = nil
+	self.cur_rnd = nil
+	self.cur_rnd2 = nil
 
 	-- create new waypoints every attack, ends up more random (and previously handled radius changes)
-	self:create_waypoints()
+	movement.create_waypoints(self)
 
 	local new_wave = spawning.spawn_wave_bots(self, size, freq, bot_quality_tier, depth)
 	
@@ -240,7 +245,7 @@ function Vault:end_wave(kill_bots, repair_buildings)
 	if self.active_wave then
 		self.active_wave.end_tick = game.tick
 		
-		-- rng reset in start_wave
+		-- rnd reset in start_wave
 	
 		-- active_wave becomes prev_wave
 		-- never set prev_wave to nil
@@ -264,43 +269,13 @@ function Vault:end_wave(kill_bots, repair_buildings)
 
 	if not self:bots_active() then
 		-- reduce entity count, waypoints only while wave active
-		self:delete_waypoints()
+		movement.delete_waypoints(self)
 		
 		-- stop updating bots
 		storage.active_vaults[self.id] = nil
 	end
 	
 	self:update_alert()
-end
-
--- create random invisible waypoints to act as drone movement targets
--- because drones cannot be instructed to move to arbitrary positions
-function Vault:create_waypoints()
-	self:delete_waypoints()
-	
-	local count = 42 -- 30
-	local R = const.VAULT_DEFENSE_RADIUS*0.8
-	local minR = const.VAULT_SHAFT_RADIUS + 4
-	
-	self.waypoints = {}
-	for i=1,count do
-		local waypoint = self.entity.surface.create_entity{
-			name=const.WAYPOINT,
-			position = myutil.random_in_circle_center_bias(self.entity.position, R, minR), -- random_in_circle
-			preserve_ghosts_and_corpses = true, -- ??
-		}
-		waypoint.destructible = false
-		
-		table.insert(self.waypoints, waypoint)
-	end
-end
-function Vault:delete_waypoints()
-	if self.waypoints then
-		for id,e in pairs(self.waypoints) do
-			e.destroy()
-		end
-		self.waypoints = {}
-	end
 end
 
 ---@param surface LuaSurface

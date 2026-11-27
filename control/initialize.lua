@@ -118,7 +118,7 @@ end
 -- reset buildings disabled by drones, important or else disabled machines would get stuck
 --   (reset disabled_by_script, is_military_target, custom_status message and disabled icon)
 -- storage forgets about vaults, but they will be found and initialized again by init()
---  (and restored to identical state other than the active wave and rng)
+--  (and restored to identical state other than the active wave and rnd)
 -- leaves the world as if the mod did not exist (also the uninstall), except the dead-<bot> wrecks (deleted with their prototypes on removal)
 ---@param convert_scrap boolean? -- infinite-scrap -> scrap (uninstall, inf scrap setting changed)
 ---@param reason string? -- logged, from describe_config_changes

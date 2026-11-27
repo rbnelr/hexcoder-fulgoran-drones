@@ -235,7 +235,7 @@ end
 local function harvestable_drones()
 	data:extend{
 		{ type = "custom-event", name = const.MOD_NAME.."-on-create-combat-bot-remnant" },
-		{ type = "custom-event", name = const.MOD_NAME.."-on-combat-bot-died" }
+		{ type = "custom-event", name = const.MOD_NAME.."-on-combat-bot-died-trigger" }
 	}
 
 	local order = {
@@ -280,7 +280,7 @@ local function harvestable_drones()
 		local spawn_quality_dying_particle_trigger = {
 			type = "script",
 			effect_id = hostile_name,
-			custom_event = const.MOD_NAME.."-on-combat-bot-died", -- spawn particle with correct quality manually
+			custom_event = const.MOD_NAME.."-on-combat-bot-died-trigger", -- spawn particle with correct quality manually
 		}
 		
 		-- killed (dying_trigger_effect) and expired (destroy_action) are separate
@@ -514,36 +514,41 @@ end
 --#region Balance and capsule recipes
 
 -- buff HP and resistances by a lot, otherwise very few turret completely defeat even huge swarms
--- lengthen time to live
--- adjust friction and max_speed to prevent drones moving at unlimited speeds, make movements a bit more visually followable
--- separation_range/range_from_player adjust distance from target and each other
--- both both player and enemy versions for now
+-- Resistances chosen as rock paper scissors balancing
+--  defenders are small and fast, low HP medium DPS, resistant to gun turrets and rockets (simulating them being hard to hit), weak to laser and very weak to electric
+--  distractors are tanky, very high HP low DPS, resistant to laser, weak to electric and normal to gun turrets and rockets
+--  destroyers are big and a bit tanky, high HP high DPS, resistant to laser and electric and normal to gun turrets and rockets
+--
+-- keep acid/fire resistance from vanilla, it shouldn't matter for enemy bots (flamethrower turrets are trivial with heavy oil ocean on fulgora, but they nuke your own buildings)
+-- I think speed only affect logi/construction bots, combat robots spawned by script (without combat_robot_owner) drift slowly to the right, so speed for combat robots seems to be the init speed?
+--
+-- I believe combat bots move by moving to their owner via a "magnetic" force if follows_player and further away than range_from_player
+-- range_from_player because player is normally combat_robot_owner, which we set to the target to get robots to move
+--
+-- giving a max_speed and higher friction seem to help bots not zip around at crazy speed when moving to a far away combat_robot_owner
+-- separation force is to push combat bots away from each other
+--
 local function balance_hostile_bots()
 	meld(data.raw["combat-robot"]["fulgoran-defender"], {
 		selection_priority = 55, -- make selectable over buildings, was 35, normal buildings are 50, ore is 40
 		
-		--TODO: test separation_force_factor, max_separation_force
-		separation_range = 1.25, -- was 1
-		range_from_player = 3, -- was 6
-		--friction = 0.016,
-		max_speed = 0.28, -- was nil
+		follows_player = true, -- was true
+		speed = 0.01, -- was 0.01
+		max_speed = 0.26, -- was <max>
+		friction = 0.02, -- was 0.01
 		
-		--time_to_live = 65*60, -- was 45sec
-		time_to_live = 60*60,
+		separation_range = 1, -- was 1
+		range_from_player = 4, -- was 6
+		max_separation_force = 0.01*0.75, -- was 0.01
+		separation_force_factor = 0.01*0.5, -- was 0.01
 		
-		--max_health = 200, -- was 60
-		--resistances = meld.overwrite{
-		--	{ type = "acid",     percent = 50 }, -- was 80 eff HP  400
-		--	{ type = "fire",     percent = 90 }, -- was 95 eff HP 2000
-		--	{ type = "physical", percent = 70 }, -- was 0  eff HP  667
-		--	{ type = "laser",    percent = 80 }, -- was 0  eff HP 1000
-		--	{ type = "electric", percent = 50 }, -- was 0  eff HP  400
-		--},
-		max_health = 400, -- was 60
+		time_to_live = 60*60, -- was 45sec
+		
+		max_health = 500, -- was 60
 		resistances = meld.overwrite{
 			{ type = "acid",     percent =  80 }, -- was 80
 			{ type = "fire",     percent =  95 }, -- was 95
-			{ type = "physical", percent =  90, decrease = 4 }, -- was 0     eff HP >4000
+			{ type = "physical", percent =  90, decrease = 4 }, -- was 0     eff HP >5500
 			{ type = "laser",    percent =  0 }, -- was 0 
 			{ type = "electric", percent = -50 }, -- was 0 
 			{ type = "explosion", percent = 80  }, -- was 0 -- rockets should miss small fast drones
@@ -556,10 +561,13 @@ local function balance_hostile_bots()
 			ammo_type = {
 				action = {
 					action_delivery = {
-						target_effects = {
-							{},
-							{ damage = { amount = 4, type = "physical"} } -- was 8
-						}
+						-- {explosion entity, damage, <explosion (bullet trails mod)>}
+						target_effects = meld_helper.add_or_assign({
+							{
+								type = "damage",
+								damage = { amount = 4, type = "physical"} -- was 8
+							}
+						}),
 					}
 				}
 			}
@@ -568,31 +576,33 @@ local function balance_hostile_bots()
 	meld(data.raw["combat-robot"]["fulgoran-distractor"], {
 		selection_priority = 54,
 		
-		-- want to avoid seperation force from distractors around vault, but this likely does not work
-		separation_range = 0,
-		range_from_player = 0,
+		follows_player = true, -- was false, make them move too
+		speed = 0.01, -- was 0
+		max_speed = 0.12, -- was nil
+		friction = 0.2, -- was 0.01
+		
+		separation_range = 1,
+		range_from_player = 1, -- was 0
+		max_separation_force = 0.01*0.3, -- was 0
+		separation_force_factor = 0.01*0.15, -- was 0
 		
 		--time_to_live = 125*60, -- was 90sec
+		time_to_live = 90*60, -- was 90sec
 		
-		max_health = 1800, -- was 180
+		max_health = 2000, -- was 180
 		resistances = meld.overwrite{
-			--{ type = "acid",     percent = 50 }, -- was 80               eff HP  1100
-			--{ type = "fire",     percent = 90 }, -- was 95               eff HP  5500
-			--{ type = "physical", percent = 70 }, -- was 0                eff HP  1833
-			--{ type = "laser",    percent = 80, decrease = 5 }, -- was 0  eff HP ~2750
-			--{ type = "electric", percent = 50 }, -- was 0                eff HP  1100
 			{ type = "acid",      percent =  80 }, -- was 80
 			{ type = "fire",      percent =  95 }, -- was 95
 			{ type = "physical",  percent =  25, decrease = 4 }, -- was 0
-			{ type = "laser",     percent =  80, decrease = 4 }, -- was 0
+			{ type = "laser",     percent =  80, decrease = 4 }, -- was 0     eff HP >10000
 			{ type = "electric",  percent = -10 }, -- was 0
 			{ type = "explosion", percent =  0, decrease = 100 }, -- was 0
 		},
 		
 		attack_parameters = {
-			cooldown = 80, -- was 40
+			cooldown = 60, -- was 40
 			cooldown_deviation = 0.4,
-			damage_modifier = 0.5, -- was 0.5
+			damage_modifier = 0.3, -- was 0.5
 			range = 17, -- was 15
 			ammo_type = {
 				action = {
@@ -606,23 +616,18 @@ local function balance_hostile_bots()
 	meld(data.raw["combat-robot"]["fulgoran-destroyer"], {
 		selection_priority = 55,
 		
+		follows_player = true, -- was true
+		max_speed = 0.14, -- was <max>
+		friction = 0.04, -- was 0.01
+		
 		separation_range = 1.5, -- was 1.5
 		range_from_player = 3, -- was 6
-		friction = 0.020,
-		max_speed = 0.15, -- was nil
+		max_separation_force = 0.01*0.25, -- was 0.01
+		separation_force_factor = 0.01*0.15, -- was 0.01
 		
-		--time_to_live = 120*60, -- was 120sec
-		time_to_live = 85*60,
+		time_to_live = 85*60, -- was 120sec
 		
-		--max_health = 400, -- was 60, now same as a turret
-		--resistances = meld.overwrite{
-		--	{ type = "acid",     percent = 50 }, -- was 80                eff HP   800
-		--	{ type = "fire",     percent = 90 }, -- was 95                eff HP  4000
-		--	{ type = "physical", percent = 85, decrease = 5 }, -- was 0   eff HP ~2667
-		--	{ type = "laser",    percent = 80, decrease = 3 }, -- was 0   eff HP ~2000
-		--	{ type = "electric", percent = 90, decrease = 20 }, -- was 0  eff HP ~4000
-		--},
-		max_health = 1500, -- was 60, now same as a turret
+		max_health = 1750, -- was 60, now same as a turret
 		resistances = meld.overwrite{
 			{ type = "acid",      percent =  80 }, -- was 80
 			{ type = "fire",      percent =  95 }, -- was 95
@@ -634,7 +639,6 @@ local function balance_hostile_bots()
 		},
 		
 		attack_parameters = {
-			--cooldown = 24, -- was 20
 			cooldown = 25, -- was 20
 			cooldown_deviation = 0.3, -- was 0.2
 			range = 15, -- was 20

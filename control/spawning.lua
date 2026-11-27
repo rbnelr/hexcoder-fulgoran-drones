@@ -20,16 +20,16 @@ end
 ---@param wave_size number multiplier
 ---@param depth number
 ---@param variation_range number
----@param rng number? -- 0-1, 0.5 = plain rounding without variation
+---@param rnd number? -- 0-1, 0.5 = plain rounding without variation
 ---@return table<string, integer> counts
 ---@return number threat
-function spawning.roll_bot_counts(wave_size, depth, variation_range, rng)
+function spawning.roll_bot_counts(wave_size, depth, variation_range, rnd)
 	local threat = 0
 	local counts = {}
 	for _,type in pairs(const.BOT_NAMES) do
 		local avg_count = common.eval_curve(common.BOT_COUNTS_CURVE[type], depth)
 		avg_count = avg_count * wave_size
-		local count = common.rand_variation_int(avg_count, avg_count*variation_range, rng)
+		local count = common.rand_variation_int(avg_count, avg_count*variation_range, rnd)
 		
 		counts[type] = count
 		-- TODO: take into account bot quality scaling?
@@ -154,7 +154,7 @@ end
 --end
 
 -- size and frequency of the next automatic wave from the current mining rate and depth, the caller starts it (update_waves)
--- also used for previews (gui, /vaults-start-wave defaults), the variation rng stays the same until a wave starts
+-- also used for previews (gui, /vaults-start-wave defaults), the variation rnd stays the same until a wave starts
 -- early_out: return false right away if less than the min time passed, before scanning (update_waves), false: always compute size etc.
 ---@param vault Vault
 ---@param early_out boolean
@@ -163,13 +163,13 @@ function spawning.should_spawn_wave(vault, early_out)
 	local time_since_last = (game.tick - vault.wave_timer_start) / 3600 -- minutes since the last wave start
 	--local time_between = (game.tick - vault.wave_end_tick) / 3600
 	
-	-- allow calling should_spawn_wave(), and getting same variation rng each time until set to nil
-	vault.cur_rng = vault.cur_rng or math.random()
-	vault.cur_rng2 = vault.cur_rng2 or math.random()
-	local rng1, rng2 = vault.cur_rng, vault.cur_rng2
-	if vault.testing then rng1, rng2 = 0.5, 0.5 end -- no variation
-	local variation = common.rand_variation(1, 0.3, rng1) -- percent variation eg 0.2 => 0.8-1.2
-	local variation2 = common.rand_variation(1, 0.3, rng2)
+	-- allow calling should_spawn_wave(), and getting same variation rnd each time until set to nil
+	vault.cur_rnd = vault.cur_rnd or math.random()
+	vault.cur_rnd2 = vault.cur_rnd2 or math.random()
+	local rnd1, rnd2 = vault.cur_rnd, vault.cur_rnd2
+	if vault.testing then rnd1, rnd2 = 0.5, 0.5 end -- no variation
+	local variation = common.rand_variation(1, 0.3, rnd1) -- percent variation eg 0.2 => 0.8-1.2
+	local variation2 = common.rand_variation(1, 0.3, rnd2)
 	
 	local min_time = common.WAVE_MIN_TIME * variation -- very small min time, keep variation to remove potential patterns
 	if time_since_last < min_time and early_out then
@@ -191,7 +191,7 @@ function spawning.should_spawn_wave(vault, early_out)
 	
 	local max_time       = common.WAVE_MAX_TIME * variation
 	local wave_frequency = common.WAVE_FREQ_MULT / variation * common.BASE_FREQUENCY
-	-- use a second rng to make size and frequency non-correlated
+	-- use a second rnd to make size and frequency non-correlated
 	local wave_size      = common.WAVE_SIZE_MULT * variation2
 	
 	local factor = mining_rate / common.BASE_MINING_RATE
@@ -222,7 +222,7 @@ end
 function spawning.kill_all_bots(vault, drop_loot)
 	vault.emerging_queued = {}
 	
-	for id,e in pairs(vault.emerging_projectiles) do
+	for idx,e in pairs(vault.emerging_projectiles) do
 		if e.valid then
 			-- don't drop loot?
 			e.destroy() -- would .die work?
@@ -230,7 +230,7 @@ function spawning.kill_all_bots(vault, drop_loot)
 	end
 	vault.emerging_projectiles = {}
 	
-	for id,e in pairs(vault.active_bots) do
+	for idx,e in pairs(vault.active_bots) do
 		if e.valid then
 			if drop_loot then
 				-- should drop loot
@@ -322,9 +322,9 @@ function spawning.update_emerging(vault)
 	--- can't actually do this in on_trigger_created_entity, without also getting id via register_on_object_destroyed?
 	-- clear them here instead of in on_trigger_created_entity to handle deleted before it finishes?
 	if (cur_tick % 10) == 0 then -- makes bots_active() wrong for a few ticks
-		for i,entity in pairs(vault.emerging_projectiles) do
+		for idx,entity in pairs(vault.emerging_projectiles) do
 			if not entity.valid then
-				vault.emerging_projectiles[i] = nil
+				vault.emerging_projectiles[idx] = nil
 			end
 		end
 	end
@@ -370,9 +370,13 @@ function spawning.on_trigger_created_entity(event)
 	if bot.type == "combat-robot" and source and source.valid and source.name == const.VAULT_NAME then
 		init()
 		
-		bot.combat_robot_owner = source -- source is vault entity
+		-- Drift before movement update kicks in?
+		--bot.combat_robot_owner = source -- source is vault entity
 		
 		local vault = get_vault(source)
+		
+		--script.register_on_object_destroyed(bot) -- Is this bad for performance?
+		--storage.bot_vaults[bot.unit_number] = vault
 		
 		-- set force again, already set on projectile and _should_ have spawned bot with correct force, but does not
 		-- force is neutral for some reason, possibly because source==vault (simple-entity) can't actually have a force?
@@ -388,9 +392,9 @@ function spawning.on_trigger_created_entity(event)
 		local r_y = r_x * const.VAULT_SHAFT_ELLIPSE_K
 		local dir_x, dir_y = myutil.ellipse_outward_dir(offset_x, offset_y, r_x, r_y)
 		-- ellipse coords back to world space (squashed in y like the shaft), set_movement normalizes it
-		if bot.name ~= "fulgoran-distractor" then
+		--if bot.name ~= "fulgoran-distractor" then
 			bot.set_movement({dir_x * r_x, dir_y * r_y}, const.EMERGE_TOP_SPEEDS[bot.name]/60)
-		end
+		--end
 		
 		local variation = (vault and vault.testing) and 1 or common.rand_variation(1, 0.1)
 		bot.time_to_live = bot.time_to_live * variation

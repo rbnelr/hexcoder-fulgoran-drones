@@ -63,7 +63,7 @@ function vault_ruin.data_updates()
 
 	-- preventing other ruins from spawning sometimes makes the vault spawn
 	-- despite the order giving the vault priority!?
-	-- maybe just bad luck due to rng changing?
+	-- maybe just bad luck due to rnd changing?
 	--local ruins = {
 	--	"fulgoran-ruin-small",
 	--	"fulgoran-ruin-medium",

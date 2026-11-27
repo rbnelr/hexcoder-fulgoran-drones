@@ -41,7 +41,7 @@ if const.DEBUG then
 		if sel and sel.valid and sel.name == const.VAULT_NAME then
 			local vault = get_or_init_vault(sel)
 			--vault:end_wave(true) -- true: kill bots
-			local wave = vault:start_wave(args.size, nil, args.quality, args.depth)
+			local wave = vault:start_wave(args.size, 1, args.quality, args.depth)
 			
 			dbg_print(string.format("Started wave: size %.0f%%, threat %.0f%%, quality tier %.2f, depth %.0fm",
 					wave.size * 100, wave.threat or 0, wave.bot_quality_tier + 1,

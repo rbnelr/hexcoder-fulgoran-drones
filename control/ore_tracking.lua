@@ -474,7 +474,7 @@ end
 --#endregion
 
 --#region Debug drain visualisation
-local VIS_DRAIN = true
+local VIS_DRAIN = false
 if const.DEBUG and VIS_DRAIN then
 	-- on_nth_tick(1) in control/events.lua, nil when off
 	---@param event NthTickEventData
